@@ -918,7 +918,7 @@ useEffect(() => {
         }
     
         // Navigation Logic: Return to Lobby if logged in and online game, else Main Menu
-        if (gameMode === 'online_playing') {
+        if (gameMode === 'online_playing' || gameMode === 'online_spectating') {
              setGameMode('online_lobby');
         } else {
              setGameMode('menu');
