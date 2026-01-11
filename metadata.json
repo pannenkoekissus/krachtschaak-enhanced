@@ -1,0 +1,6 @@
+{
+  "_comment": "DO NOT MODIFY THIS FILE UNLESS INSTRUCTED TO DO SO",
+  "name": "Krachtschaak Online copy",
+  "description": "Play the exciting chess variant Krachtschaak (Power Chess) locally. Capture your opponent's pieces to temporarily gain their movement abilities. Win by checkmating or capturing the king!",
+  "requestFramePermissions": []
+}
