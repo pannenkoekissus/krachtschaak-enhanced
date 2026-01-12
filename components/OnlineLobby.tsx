@@ -198,6 +198,18 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
     
     const previousGameStatuses = useRef<Record<string, GameStatus>>({});
     const mountTime = useRef(Date.now());
+    const [filters, setFilters] = useState<Record<string, boolean>>({
+    hyperbullet: true,
+    bullet: true,
+    blitz: true,
+    rapid: true,
+    classical: true,
+    daily: true,
+    unlimited: true
+});
+const toggleFilter = (category: string) => {
+    setFilters(prev => ({ ...prev, [category]: !prev[category] }));
+};
 
     //spectate effect
 
@@ -222,6 +234,7 @@ useEffect(() => {
 
                 // LOGICA VOOR LIVE GAMES (NIEUW)
                 if (game.status === 'playing') {
+                    console.log(`Data voor game ${gameId}:`, game.timerSettings);
                     const whiteUid = game.playerColors?.white;
                     const blackUid = game.playerColors?.black;
                     const whiteName = whiteUid ? game.players[whiteUid]?.displayName : 'Unknown';
@@ -820,6 +833,15 @@ useEffect(() => {
     };
 
     const isActionInProgress = isCreatingGame || isJoiningGame !== null;
+
+const filteredLiveGames = useMemo(() => {
+    return liveGames.filter(game => {
+        const cat = game.ratingCategory.toLowerCase();
+        // Als de categorie in onze filters staat, check of hij op 'true' staat
+        return filters[cat] !== false; 
+    });
+}, [liveGames, filters]);
+
     const filteredUsers = useMemo(() => {
         if (!searchText) return allUsers.filter(u => u.uid !== userUid);
         return allUsers.filter(u => u.uid !== userUid && u.displayName.toLowerCase().includes(searchText.toLowerCase()));
@@ -961,6 +983,83 @@ useEffect(() => {
                         </div>
                     </div>
                  )}
+
+                 {currentLobbyTab === 'live' && (
+    <div className="flex flex-col w-full max-w-3xl space-y-4 animate-fadeIn">
+        
+        {/* 1. Filter Knoppen */}
+        <div className="flex flex-wrap gap-2 justify-center bg-gray-800/50 p-3 rounded-lg border border-gray-700">
+            <span className="text-sm text-gray-400 w-full text-center mb-1 font-medium">Filter op tijdcontrole:</span>
+            {['hyperbullet', 'bullet', 'blitz', 'rapid', 'daily', 'unlimited'].map((cat) => (
+                <button
+                    key={cat}
+                    onClick={() => toggleFilter(cat)}
+                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all duration-200 ${
+                        filters[cat] 
+                        ? 'bg-teal-600 text-white shadow-[0_0_10px_rgba(20,184,166,0.4)] border border-teal-400' 
+                        : 'bg-gray-800 text-gray-500 border border-gray-700 hover:border-gray-500'
+                    }`}
+                >
+                    {cat.toUpperCase()}
+                </button>
+            ))}
+        </div>
+
+        {/* 2. De Lijst met Partijen */}
+        <div className="bg-gray-900/80 border border-gray-700 rounded-xl p-4 min-h-[400px] max-h-[600px] overflow-y-auto custom-scrollbar">
+            {filteredLiveGames.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full py-20 text-gray-500">
+                    <span className="text-4xl mb-2">👁️‍🗨️</span>
+                    <p>Geen live partijen gevonden voor deze filters.</p>
+                </div>
+            ) : (
+                <div className="grid gap-3">
+                    {filteredLiveGames.map(game => (
+                        <div key={game.gameId} className="bg-gray-800 hover:bg-gray-750 p-4 rounded-lg flex justify-between items-center border border-gray-700 transition-colors shadow-sm">
+                            <div className="flex flex-col">
+                                <div className="flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                                    <p className="font-semibold text-gray-100">{game.creatorName}</p>
+                                </div>
+                                <div className="flex gap-3 mt-1 text-xs text-gray-400">
+                                    <span className="flex items-center gap-1">⏱️ {(() => {
+        const settings = game.timerSettings;
+        if (!settings) return '⏱️ ?';
+
+        // 1. Check op Unlimited
+        if (game.ratingCategory?.toLowerCase() === 'unlimited' || settings.isUnlimited) {
+            return '⏱️ Unlimited';
+        }
+
+        // 2. Check op Daily (Dagen)
+        // We kijken of 'daysPerMove' bestaat (of hoe dat veld in jouw types heet)
+        if (game.ratingCategory?.toLowerCase() === 'daily') {
+            const days = settings.daysPerMove || settings.initialTime; // Pas aan naar jouw veldnaam
+            return `⏱️ ${days} days`;
+        }
+
+        // 3. Standaard minuten (Bullet/Blitz/Rapid)
+        const mins = settings.initialTime/60 || settings.minutes;
+        const inc = settings.increment ?? 0;
+        return `⏱️ ${mins}m + ${inc}s`;
+    })()}</span>
+                                    <span className="flex items-center gap-1">🏆 {game.ratingCategory}</span>
+                                    {game.isRated && <span className="text-teal-400 font-bold">RATED</span>}
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => onSpectate(game.gameId)} 
+                                className="bg-teal-600 hover:bg-teal-500 text-white px-6 py-2 rounded-lg font-bold transition-transform active:scale-95 flex items-center gap-2 shadow-lg"
+                            >
+                                <span>👁️</span> Watch
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    </div>
+)}
 
                  {currentLobbyTab === 'current_games' && (
                     <div className="w-full max-w-3xl p-4 border border-gray-600 rounded-lg flex flex-col">
