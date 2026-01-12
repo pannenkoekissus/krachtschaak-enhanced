@@ -893,7 +893,6 @@ useEffect(() => {
     
     const handleBackToMenu = useCallback(async () => {
         const localStatus = statusRef.current;
-    
         if (currentUser && gameMode === 'online_playing' && localStatus === 'playing' && gameRef) {
             const isExempt = ratingCategory === RatingCategory.Daily || ratingCategory === RatingCategory.Unlimited;
             if (!isExempt) {
@@ -1042,7 +1041,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
     setGameRef(ref);
     
     setGameMode('online_spectating'); // Nieuwe modus!
-    setMyOnlineColor(null); // Belangrijk: je bent geen wit of zwart
+    setMyOnlineColor('white'); // Belangrijk: je bent geen wit of zwart
     
     // Reset states
     setRematchOffer(null);
@@ -1319,7 +1318,16 @@ const handleOnlineSpectate = useCallback((id: string) => {
         if (premoveOptions.isPremove) {
             // DIRECTLY set the premove without confirmation dialog, per latest request
             if (gameRef && myOnlineColor) {
-               gameRef.child('premoves').child(myOnlineColor).set({ from, to, isForcePower: useForcePower });
+                const premoveRef = gameRef.child('premoves').child(myOnlineColor);
+               premoveRef.transaction(currentPremoveData => {
+                if (!currentPremoveData) return currentPremoveData;
+                if (gameRef.child(turn) === myOnlineColor) return;
+                 return { 
+    from, 
+    to, 
+    isForcePower: useForcePower 
+  };
+});
             }
             return;
         }
@@ -1588,7 +1596,11 @@ const handleOnlineSpectate = useCallback((id: string) => {
              setPendingCommitState(null);
              setPreCommitState(null);
         } else if (pendingPremove && gameRef && myOnlineColor) {
-             gameRef.child('premoves').child(myOnlineColor).set(pendingPremove);
+             gameRef.child('premoves').child(myOnlineColor).transaction(currentPremoveData => {
+                if (!currentPremoveData) return currentPremoveData;
+                if (gameRef.child(turn) === myOnlineColor) return;
+                return pendingPremove;
+             });
              setPendingPremove(null);
         }
         setShowConfirmation(null);
@@ -2056,7 +2068,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
         }
 
         
-        const isFlipped = gameMode === 'online_playing' ? myOnlineColor === Color.Black : turn === Color.Black;
+        const isFlipped = (gameMode === 'online_playing' ? myOnlineColor === Color.Black : turn === Color.Black) && (gameMode !== 'online_spectating');
 
         const whitePlayerUid = playerColors?.white;
         const blackPlayerUid = playerColors?.black;

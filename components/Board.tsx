@@ -37,7 +37,7 @@ const Board: React.FC<BoardProps> = ({
     };
 
     // In local mode, flip for black's turn. In online mode, flip if player is black.
-    const isFlipped = gameMode === 'online_playing' ? playerColor === Color.Black : turn === Color.Black;
+        const isFlipped = (gameMode === 'online_playing' ? playerColor === Color.Black : turn === Color.Black) && (gameMode !== 'online_spectating');
 
     const renderSquare = (row: number, col: number) => {
         const piece = board[row][col];
