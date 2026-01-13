@@ -989,7 +989,7 @@ const filteredLiveGames = useMemo(() => {
         
         {/* 1. Filter Knoppen */}
         <div className="flex flex-wrap gap-2 justify-center bg-gray-800/50 p-3 rounded-lg border border-gray-700">
-            <span className="text-sm text-gray-400 w-full text-center mb-1 font-medium">Filter op tijdcontrole:</span>
+            <span className="text-sm text-gray-400 w-full text-center mb-1 font-medium">Filter by time control:</span>
             {['hyperbullet', 'bullet', 'blitz', 'rapid', 'daily', 'unlimited'].map((cat) => (
                 <button
                     key={cat}
