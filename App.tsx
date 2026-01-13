@@ -434,7 +434,6 @@ const App: React.FC = () => {
         setRatingChange(state.ratingChange || null);
         setChallengedPlayerInfo(state.challengedPlayerInfo || null);
         setPremoves(state.premoves || {});
-        setPlayersLeft(state.playersLeft || {});
         setLastMove(state.lastMove || null);
         setMoveHistory(state.moveHistory || []);
         setChatMessages(state.chat || []);
@@ -1093,7 +1092,6 @@ const handleOnlineSpectate = useCallback((id: string) => {
                  if (statusRef.current !== 'opponent_disconnected' && statusRef.current !== 'kingCaptured' && statusRef.current !== 'checkmate' && myOnlineColor) {
                    const winnerName = myOnlineColor.charAt(0).toUpperCase() + myOnlineColor.slice(1);
                    if (gameStateRef.current) {
-                        handleGameOver(gameStateRef.current, 'opponent_disconnected', winnerName);
                    }
                 }
             }
@@ -1140,12 +1138,10 @@ const handleOnlineSpectate = useCallback((id: string) => {
 
             if (timeLeftToRejoin <= 0) {
                 if (gameStateRef.current) {
-                    handleGameOver(gameStateRef.current, 'opponent_disconnected', myOnlineColor.charAt(0).toUpperCase() + myOnlineColor.slice(1));
                 }
             } else {
                 rejoinTimerRef.current = window.setTimeout(() => {
                      if (gameStateRef.current && statusRef.current === 'playing') {
-                        handleGameOver(gameStateRef.current, 'opponent_disconnected', myOnlineColor.charAt(0).toUpperCase() + myOnlineColor.slice(1));
                     }
                 }, timeLeftToRejoin * 1000);
             }
@@ -1320,7 +1316,6 @@ const handleOnlineSpectate = useCallback((id: string) => {
             if (gameRef && myOnlineColor) {
                 const premoveRef = gameRef.child('premoves').child(myOnlineColor);
                premoveRef.transaction(currentPremoveData => {
-                if (!currentPremoveData) return currentPremoveData;
                 if (gameRef.child(turn) === myOnlineColor) return;
                  return { 
     from, 
@@ -1597,7 +1592,6 @@ const handleOnlineSpectate = useCallback((id: string) => {
              setPreCommitState(null);
         } else if (pendingPremove && gameRef && myOnlineColor) {
              gameRef.child('premoves').child(myOnlineColor).transaction(currentPremoveData => {
-                if (!currentPremoveData) return currentPremoveData;
                 if (gameRef.child(turn) === myOnlineColor) return;
                 return pendingPremove;
              });
