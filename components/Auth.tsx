@@ -45,6 +45,9 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
 
         try {
             if (authView === 'signUp') {
+                if (displayName.includes("@")) {
+                    throw new Error("Display name must not contain @");
+                }
                 const trimmedName = displayName.trim();
                 if (trimmedName.length < 3) {
                     throw new Error("Display name must be at least 3 characters.");
@@ -60,8 +63,10 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
                 const userCredential = await auth.createUserWithEmailAndPassword(email, password);
                 await userCredential.user.updateProfile({ displayName: trimmedName });
                 
-                // Reserve username
+                // Reserve username with UID
                 await usernameRef.set(userCredential.user.uid);
+                // Store email in users section
+                await db.ref(`users/${userCredential.user.uid}/email`).set(email);
 
                 await userCredential.user.sendEmailVerification();
                 
@@ -71,8 +76,23 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
                 setAuthView('signIn');
 
             } else { // 'signIn'
-                const userCredential = await auth.signInWithEmailAndPassword(email, password);
-                
+                let loginEmail = email;
+                if (!email.includes("@")) {
+                    const usernameSnapshot = await db.ref(`usernames/${email.toLowerCase().trim()}`).get();
+                    if (usernameSnapshot.exists()) {
+                        const userUid = usernameSnapshot.val();
+                        const userEmailSnapshot = await db.ref(`users/${userUid}/email`).get();
+                        if (userEmailSnapshot.exists()) {
+                            loginEmail = userEmailSnapshot.val();
+                            setEmail(loginEmail);
+                        } else {
+                            throw new Error("Username not found.");
+                        }
+                    } else {
+                        throw new Error("Username not found.");
+                    }
+                }
+                const userCredential = await auth.signInWithEmailAndPassword(loginEmail, password);
                 if (!userCredential.user.emailVerified) {
                     // Credentials were correct, but email is not verified.
                     await userCredential.user.sendEmailVerification();
@@ -171,8 +191,8 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
     const renderSignIn = () => (
         <form onSubmit={handleAuthAction}>
             <div className="mb-4">
-                <label className="block mb-1 text-md font-medium text-gray-300">Email</label>
-                <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); clearState(); }} required className="w-full p-2 bg-gray-700 text-white rounded-lg border-2 border-gray-600 focus:outline-none focus:border-green-500" />
+                <label className="block mb-1 text-md font-medium text-gray-300">Email or Username</label>
+                <input type="text" value={email} onChange={(e) => { setEmail(e.target.value); clearState(); }} required className="w-full p-2 bg-gray-700 text-white rounded-lg border-2 border-gray-600 focus:outline-none focus:border-green-500" />
             </div>
             <div className="mb-2">
                 <label className="block mb-1 text-md font-medium text-gray-300">Password</label>
