@@ -556,8 +556,8 @@ const App: React.FC = () => {
             }
             
             let whiteScore = 0.5;
-            if (newWinner === 'White') whiteScore = 1;
-            if (newWinner === 'Black') whiteScore = 0;
+            if (newWinner === 'White' || newWinner === 'white') whiteScore = 1;
+            if (newWinner === 'Black' || newWinner === 'black') whiteScore = 0;
             const blackScore = 1 - whiteScore;
     
             const newWhiteRating = calculateElo(whiteRating, blackRating, whiteScore);
@@ -790,7 +790,7 @@ useEffect(() => {
                      // Check timeout even if opponent is disconnected
                      if (gameMode !== 'online_playing' || turn === myOnlineColor || statusRef.current === 'playing') {
                         if (timerRef.current) clearInterval(timerRef.current);
-                        const winnerColor = turn === Color.White ? Color.Black : Color.White;
+                        const winnerColor = turn.toLowerCase() === Color.White.toLowerCase() ? Color.Black : Color.White;
                         if (gameStateRef.current) {
                             const finalPlayerTimes = { ...(gameStateRef.current.playerTimes!), [turn]: 0 };
                             const timeOutState = { ...gameStateRef.current, playerTimes: finalPlayerTimes };
@@ -810,7 +810,7 @@ useEffect(() => {
                 if (Date.now() > moveDeadline) {
                     if (gameMode !== 'online_playing' || turn === myOnlineColor || statusRef.current === 'playing') {
                         if (timerRef.current) clearInterval(timerRef.current);
-                        const winnerColor = turn === Color.White ? Color.Black : Color.White;
+                        const winnerColor = turn.toLowerCase() === Color.White.toLowerCase() ? Color.Black : Color.White;
                         if (gameStateRef.current) {
                             handleGameOver(gameStateRef.current, 'timeout', winnerColor.charAt(0).toUpperCase() + winnerColor.slice(1));
                         }
@@ -1230,7 +1230,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
     const confirmResign = () => {
         if (status === 'playing') {
             const resigningPlayer = gameMode === 'online_playing' ? myOnlineColor! : turn;
-            const winnerColor = resigningPlayer === Color.White ? Color.Black : Color.White;
+            const winnerColor = resigningPlayer.toLowerCase() === Color.White.toLowerCase() ? Color.Black : Color.White;
             handleGameOver(currentGameState, 'resignation', winnerColor.charAt(0).toUpperCase() + winnerColor.slice(1));
         }
         setShowConfirmation(null);
