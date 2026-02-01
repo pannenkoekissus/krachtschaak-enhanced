@@ -87,7 +87,7 @@ const PlayerRatingsModal: React.FC<{
 const ChallengeConfigModal: React.FC<{
     opponent: UserInfo;
     onCancel: () => void;
-    onSend: (settings: TimerSettings, isRated: boolean) => void;
+    onSend: (settings: TimerSettings, isRated: boolean, challengeColor: string) => void;
 }> = ({ opponent, onCancel, onSend }) => {
     const [isRated, setIsRated] = useState(true);
     const [type, setType] = useState<'realtime' | 'correspondence'>('realtime');
@@ -95,6 +95,7 @@ const ChallengeConfigModal: React.FC<{
     const [baseMin, setBaseMin] = useState('10');
     const [inc, setInc] = useState('5');
     const [days, setDays] = useState('2');
+    const [challengeColor, setchallengeColor] = useState('random');
 
     const handleSubmit = () => {
         let settings: TimerSettings = null;
@@ -103,7 +104,7 @@ const ChallengeConfigModal: React.FC<{
         } else if (corrType === 'daily') {
             settings = { daysPerMove: parseInt(days) };
         }
-        onSend(settings, isRated);
+        onSend(settings, isRated, challengeColor);
     };
 
     return (
@@ -119,6 +120,11 @@ const ChallengeConfigModal: React.FC<{
                 <div className="flex bg-gray-700 rounded-lg p-1 mb-4">
                     <button onClick={() => setType('realtime')} className={`flex-1 py-1 text-sm rounded ${type === 'realtime' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}>Real-Time</button>
                     <button onClick={() => setType('correspondence')} className={`flex-1 py-1 text-sm rounded ${type === 'correspondence' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}>Correspondence</button>
+                </div>
+                <div className="flex bg-gray-700 rounded-lg p-1 mb-4">
+                    <button onClick={() => setchallengeColor('white')} className={`flex-1 py-1 text-sm rounded ${challengeColor === 'white' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}>Play as white</button>
+                    <button onClick={() => setchallengeColor('random')} className={`flex-1 py-1 text-sm rounded ${challengeColor === 'random' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}>Play as random color</button>
+                    <button onClick={() => setchallengeColor('black')} className={`flex-1 py-1 text-sm rounded ${challengeColor === 'black' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}>Play as black</button>
                 </div>
 
                 {type === 'realtime' ? (
@@ -384,7 +390,8 @@ useEffect(() => {
                         timerSettings: val.timerSettings || val.TimerSettings || null,
                         ratingCategory: val.ratingCategory,
                         isRated: typeof val.isRated === 'boolean' ? val.isRated : (val.IsRated ?? true),
-                        timestamp: val.timestamp
+                        timestamp: val.timestamp,
+                        challengeColor: val.challengeColor
                     };
                 });
                 setIncomingChallenges(challenges.sort((a, b) => b.timestamp - a.timestamp));
@@ -549,7 +556,7 @@ useEffect(() => {
 
     // --- CHALLENGE ACTIONS ---
 
-    const handleSendChallenge = async (settings: TimerSettings, isRated: boolean) => {
+    const handleSendChallenge = async (settings: TimerSettings, isRated: boolean, challengeColor: string) => {
         if (!challengeTarget || !myRatings) return;
         
         const category = getRatingCategory(settings);
@@ -563,7 +570,8 @@ useEffect(() => {
             timerSettings: settings,
             ratingCategory: category,
             isRated: isRated,
-            timestamp: window.firebase.database.ServerValue.TIMESTAMP
+            timestamp: window.firebase.database.ServerValue.TIMESTAMP,
+            challengeColor: challengeColor
         };
 
         const newChallengeRef = db.ref(`challenges/${targetUid}`).push();
@@ -578,7 +586,8 @@ useEffect(() => {
             isRealtime: isRealtime,
             timerSettings: settings,
             ratingCategory: category,
-            isRated: isRated
+            isRated: isRated,
+            challengeColor: challengeColor
         });
         
         setChallengeTarget(null); // Close Modal
@@ -599,8 +608,10 @@ useEffect(() => {
         const newGameRef = db.ref('games').push();
         const gameId = newGameRef.key;
         if (!gameId) return;
-
-        const isCreatorWhite = Math.random() < 0.5;
+        
+        var isCreatorWhite = Math.random() < 0.5;
+        if (challenge.challengeColor === 'white') isCreatorWhite = true;
+        if (challenge.challengeColor === 'black') isCreatorWhite = false;
         const myColor = isCreatorWhite ? Color.Black : Color.White;
         const opponentColor = isCreatorWhite ? Color.White : Color.Black;
 
@@ -951,6 +962,7 @@ const filteredLiveGames = useMemo(() => {
                                             <div>
                                                 <p className="font-bold text-white text-lg">{c.fromName} ({c.fromRating})</p>
                                                 <p className="text-indigo-200 text-sm">{renderTimerSetting(c.timerSettings)} • {c.isRated ? 'Rated' : 'Unrated'} {c.ratingCategory}</p>
+                                                <p className="font-bold text-white text-lg">{"Opponent plays as: " + c.challengeColor}</p>
                                             </div>
                                             <div className="flex gap-3">
                                                 <button onClick={() => handleAcceptChallenge(c)} className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded font-bold transition-colors">Accept</button>
@@ -974,6 +986,7 @@ const filteredLiveGames = useMemo(() => {
                                                 <p className="font-semibold text-gray-300">To: <span className="text-white">{c.targetName}</span></p>
                                                 <p className="text-xs text-gray-400">Sent: {new Date(c.timestamp).toLocaleString()}</p>
                                                 <p className="text-xs text-blue-300 mt-1">{renderTimerSetting(c.timerSettings)} • {c.isRated ? 'Rated' : 'Unrated'} ({c.ratingCategory})</p>
+                                                <p className="text-xs text-blue-300 mt-1">{"you play as: " + c.challengeColor}</p>
                                             </div>
                                             <button onClick={() => handleCancelSentChallenge(c)} className="px-3 py-1 bg-red-600 hover:bg-red-500 rounded text-sm font-semibold text-white transition-colors">Cancel</button>
                                         </div>
