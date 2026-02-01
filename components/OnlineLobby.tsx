@@ -1023,7 +1023,7 @@ const filteredLiveGames = useMemo(() => {
             {filteredLiveGames.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full py-20 text-gray-500">
                     <span className="text-4xl mb-2">👁️‍🗨️</span>
-                    <p>Geen live partijen gevonden voor deze filters.</p>
+                    <p>No live games found with these filters.</p>
                 </div>
             ) : (
                 <div className="grid gap-3">
