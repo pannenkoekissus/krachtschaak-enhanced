@@ -25,12 +25,13 @@ interface BoardProps {
     onBoardMouseDown: (e: React.MouseEvent, row: number, col: number) => void;
     onBoardMouseUp: (e: React.MouseEvent, row: number, col: number) => void;
     onBoardContextMenu: (e: React.MouseEvent) => void;
+    showPowerPieces?: boolean;
 }
 
 const Board: React.FC<BoardProps> = ({ 
     board, selectedPiece, validMoves, onSquareClick, turn, playerColor, gameMode, isInteractionDisabled,
     onPieceDragStart, onPieceDragEnd, onSquareDrop, draggedPiece, premove,
-    lastMove, highlightedSquares, arrows, onBoardMouseDown, onBoardMouseUp, onBoardContextMenu
+    lastMove, highlightedSquares, arrows, onBoardMouseDown, onBoardMouseUp, onBoardContextMenu, showPowerPieces = true
 }) => {
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault(); // This is necessary to allow dropping
@@ -93,6 +94,7 @@ const Board: React.FC<BoardProps> = ({
                         onDragStart={(e) => !isInteractionDisabled && onPieceDragStart(e, row, col)}
                         onDragEnd={onPieceDragEnd}
                         isBeingDragged={isBeingDragged}
+                        showPowerPieces={showPowerPieces}
                     />}
             </div>
         );

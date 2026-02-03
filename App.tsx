@@ -110,6 +110,7 @@ const App: React.FC = () => {
     const [moveConfirmationEnabled, _setMoveConfirmationEnabled] = useState(true);
     const [drawConfirmationEnabled, _setDrawConfirmationEnabled] = useState(true);
     const [resignConfirmationEnabled, _setResignConfirmationEnabled] = useState(true);
+    const [showPowerPieces, _setShowPowerPieces] = useState(true);
     const [premoves, setPremoves] = useState<GameState['premoves']>({});
     
     // Commit confirmation interception state
@@ -228,6 +229,12 @@ const App: React.FC = () => {
             db.ref(`userSettings/${currentUser.uid}/resignConfirmationEnabled`).set(enabled);
         }
     };
+    const setShowPowerPieces = (enabled: boolean) => {
+        _setShowPowerPieces(enabled);
+        if (currentUser && isFirebaseConfigured) {
+            db.ref(`userSettings/${currentUser.uid}/showPowerPieces`).set(enabled);
+        }
+    };
     const updateSettings = (key: string, value: boolean) => {
         if (currentUser && isFirebaseConfigured) {
             db.ref(`userSettings/${currentUser.uid}/${key}`).set(value);
@@ -245,6 +252,7 @@ const App: React.FC = () => {
                     if (val.moveConfirmationEnabled !== undefined) _setMoveConfirmationEnabled(val.moveConfirmationEnabled);
                     if (val.drawConfirmationEnabled !== undefined) _setDrawConfirmationEnabled(val.drawConfirmationEnabled);
                     if (val.resignConfirmationEnabled !== undefined) _setResignConfirmationEnabled(val.resignConfirmationEnabled);
+                    if (val.showPowerPieces !== undefined) _setShowPowerPieces(val.showPowerPieces);
                 }
             });
         }
@@ -1040,7 +1048,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
     setGameRef(ref);
     
     setGameMode('online_spectating'); // Nieuwe modus!
-    setMyOnlineColor('white'); // Belangrijk: je bent geen wit of zwart
+    setMyOnlineColor(null); // Belangrijk: je bent geen wit of zwart
     
     // Reset states
     setRematchOffer(null);
@@ -2161,6 +2169,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
                             onBoardMouseDown={handleBoardMouseDown}
                             onBoardMouseUp={handleBoardMouseUp}
                             onBoardContextMenu={handleBoardContextMenu}
+                            showPowerPieces={showPowerPieces}
                         />
                     </div>
                      {/* Bottom Player Info (Mobile) */}
@@ -2556,6 +2565,8 @@ const handleOnlineSpectate = useCallback((id: string) => {
                             setDrawConfirmationEnabled={setDrawConfirmationEnabled}
                             resignConfirmationEnabled={resignConfirmationEnabled}
                             setResignConfirmationEnabled={setResignConfirmationEnabled}
+                            showPowerPieces={showPowerPieces}
+                            setShowPowerPieces={setShowPowerPieces}
                         />
                     )}
                 </div>

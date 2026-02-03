@@ -36,10 +36,11 @@ interface PieceComponentProps {
     onDragStart?: (e: React.DragEvent) => void;
     onDragEnd?: (e: React.DragEvent) => void;
     isBeingDragged?: boolean;
+    showPowerPieces?: boolean;
 }
 
 
-const Piece: React.FC<PieceComponentProps> = ({ piece, onDragStart, onDragEnd, isBeingDragged }) => {
+const Piece: React.FC<PieceComponentProps> = ({ piece, onDragStart, onDragEnd, isBeingDragged, showPowerPieces = true }) => {
     const powerRingClass = piece.power ? `ring-4 ${powerColors[piece.power]}` : '';
     const dragClass = isBeingDragged ? 'opacity-50' : 'opacity-100';
 
@@ -55,6 +56,15 @@ const Piece: React.FC<PieceComponentProps> = ({ piece, onDragStart, onDragEnd, i
                 alt={`${piece.color} ${piece.type}`}
                 className={`w-full h-full object-contain drop-shadow-lg ${powerRingClass} rounded-full`}
             />
+            {piece.power && showPowerPieces && (
+                <div className="absolute bottom-0 right-0 w-8 h-8 rounded-full border border-white shadow-lg bg-opacity-90" style={{ background: 'rgba(0, 0, 0, 0.8)' }}>
+                    <img 
+                        src={svgs[Color.White][piece.power]}
+                        alt={`${piece.power} power`}
+                        className="w-full h-full object-contain opacity-80"
+                    />
+                </div>
+            )}
         </div>
     );
 };

@@ -11,6 +11,8 @@ interface SettingsModalProps {
     setDrawConfirmationEnabled: (enabled: boolean) => void;
     resignConfirmationEnabled: boolean;
     setResignConfirmationEnabled: (enabled: boolean) => void;
+    showPowerPieces: boolean;
+    setShowPowerPieces: (enabled: boolean) => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ 
@@ -22,7 +24,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     drawConfirmationEnabled,
     setDrawConfirmationEnabled,
     resignConfirmationEnabled,
-    setResignConfirmationEnabled
+    setResignConfirmationEnabled,
+    showPowerPieces,
+    setShowPowerPieces
 }) => {
     return (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50" onClick={onClose}>
@@ -94,6 +98,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 className="sr-only peer" 
                                 checked={resignConfirmationEnabled}
                                 onChange={(e) => setResignConfirmationEnabled(e.target.checked)}
+                            />
+                            <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                    </div>
+
+                    {/* Show Power Pieces Toggle */}
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="font-semibold text-white">Show Power Pieces</p>
+                            <p className="text-xs text-gray-400">Display piece icons for powers</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input 
+                                type="checkbox" 
+                                className="sr-only peer" 
+                                checked={showPowerPieces}
+                                onChange={(e) => setShowPowerPieces(e.target.checked)}
                             />
                             <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                         </label>
