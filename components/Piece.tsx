@@ -57,7 +57,7 @@ const Piece: React.FC<PieceComponentProps> = ({ piece, onDragStart, onDragEnd, i
                 className={`w-full h-full object-contain drop-shadow-lg ${powerRingClass} rounded-full`}
             />
             {piece.power && showPowerPieces && (
-                <div className="absolute bottom-0 right-0 w-8 h-8 rounded-full border border-white shadow-lg bg-opacity-90" style={{ background: 'rgba(0, 0, 0, 0.8)' }}>
+                <div className="absolute bottom-0 right-0 w-6 h-6 md:w-8 md:h-8 rounded-full border border-white shadow-lg bg-opacity-90" style={{ background: 'rgba(0, 0, 0, 0.8)' }}>
                     <img 
                         src={svgs[Color.White][piece.power]}
                         alt={`${piece.power} power`}
