@@ -13,6 +13,7 @@ import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingIn
 import { getRatingCategory, RatingCategory, RATING_CATEGORIES } from './utils/ratings';
 import { isFirebaseConfigured, auth, db } from './firebaseConfig';
 import SettingsModal from './components/SettingsModal';
+import KrachtschaakAI from './engine';
 
 var continueGameClicks = -1;
 const formatTime = (totalSeconds: number | null | undefined): string => {
@@ -1295,12 +1296,15 @@ const handleOnlineSpectate = useCallback((id: string) => {
 
 
     const movePiece = useCallback((from: Position, to: Position, premoveOptions: { isPremove: boolean, forcePower: boolean } = { isPremove: false, forcePower: false }) => {
+        
         clearHighlightsAndArrows();
         const currentState = gameStateRef.current;
         if (!currentState) return;
     
         const { board, capturedPieces, enPassantTarget, turn } = currentState;
     
+        console.log(KrachtschaakAI.getBestMove(currentState.board, turn, 3));
+
         const newBoard = board.map(row => [...row]);
         const pieceToMove = { ...newBoard[from.row][from.col]! };
         const capturedPieceOnTarget = newBoard[to.row][to.col];
