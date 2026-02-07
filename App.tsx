@@ -759,6 +759,7 @@ const App: React.FC = () => {
 const [serverOffset, setServerOffset] = useState<number>(0);
 
 useEffect(() => {
+    if (!isFirebaseConfigured) return;
     const offsetRef = db.ref('.info/serverTimeOffset');
     const onValue = (snap: any) => {
         setServerOffset(snap.val() || 0);
