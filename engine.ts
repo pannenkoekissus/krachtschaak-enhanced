@@ -70,6 +70,14 @@ const COMBINATION_BONUSES: Record<PieceType, Partial<Record<PieceType, number>>>
     }
 };
 
+function getPieceValue(type: PieceType, power: PieceType | null): number {
+    let score = PIECE_VALUES[type];
+    if (power) {
+        score += COMBINATION_BONUSES[type]?.[power] || 0;
+    }
+    return score;
+}
+
 // --- Transposition Table ---
 interface TTEntry {
     depth: number;
@@ -78,7 +86,7 @@ interface TTEntry {
     bestMove: Move | null;
 }
 const TT = new Map<bigint, TTEntry>();
-const MAX_TT_SIZE = 500000;
+const MAX_TT_SIZE = 1000000;
 
 // --- Move Ordering Heuristics ---
 const KILLER_MOVES = new Map<number, Move[]>();
@@ -89,12 +97,14 @@ export class MutableBoard {
     hash: bigint;
     turn: Color;
     enPassantTarget: Position | null;
+    currentScore: number; // White perspective score
 
     constructor(initialBoard: BoardState, turn: Color, enPassantTarget: Position | null = null) {
         this.board = initialBoard.map(row => row.map(p => p ? { ...p } : null));
         this.turn = turn;
         this.enPassantTarget = enPassantTarget;
         this.hash = this.computeHash();
+        this.currentScore = this.computeScore();
     }
 
     computeHash(): bigint {
@@ -111,6 +121,38 @@ export class MutableBoard {
         return h;
     }
 
+    computeScore(): number {
+        let totalScore = 0;
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                const piece = this.board[r][c];
+                if (piece) {
+                    const val = getPieceValue(piece.type, piece.power);
+                    totalScore += (piece.color === Color.White ? val : -val);
+                }
+            }
+        }
+        return totalScore;
+    }
+
+    makeNullMove(): any {
+        const oldHash = this.hash;
+        const oldEnPassant = this.enPassantTarget;
+
+        // Null move: just switch turn and clear EP
+        this.turn = this.turn === Color.White ? Color.Black : Color.White;
+        this.hash ^= ZOBRIST_SIDE;
+        this.enPassantTarget = null; // EP rights lost
+
+        return { oldHash, oldEnPassant };
+    }
+
+    unmakeNullMove(undoInfo: any) {
+        this.hash = undoInfo.oldHash;
+        this.enPassantTarget = undoInfo.oldEnPassant;
+        this.turn = this.turn === Color.White ? Color.Black : Color.White;
+    }
+
     makeMove(move: Move): any {
         const fromRow = move.from.row;
         const fromCol = move.from.col;
@@ -122,6 +164,7 @@ export class MutableBoard {
 
         const oldHash = this.hash;
         const oldEnPassant = this.enPassantTarget;
+        const oldScore = this.currentScore;
         const targetSquare = this.board[toRow][toCol];
 
         // 1. Remove piece from source
@@ -133,7 +176,10 @@ export class MutableBoard {
         let epCapturedPos: Position | null = null;
 
         if (targetSquare) {
+            // Capture: Remove target from hash and score
             this.hash ^= getZobristKey(targetSquare.color, targetSquare.type, targetSquare.power, toRow * 8 + toCol);
+            const val = getPieceValue(targetSquare.type, targetSquare.power);
+            this.currentScore -= (targetSquare.color === Color.White ? val : -val);
         } else if (move.piece === PieceType.Pawn && move.to.col !== move.from.col && !targetSquare) {
             // En Passant
             const epR = fromRow;
@@ -143,14 +189,21 @@ export class MutableBoard {
                 this.hash ^= getZobristKey(actualCaptured.color, actualCaptured.type, actualCaptured.power, epR * 8 + epC);
                 this.board[epR][epC] = null;
                 epCapturedPos = { row: epR, col: epC };
+
+                const val = getPieceValue(actualCaptured.type, actualCaptured.power);
+                this.currentScore -= (actualCaptured.color === Color.White ? val : -val);
             }
         }
 
-        // 3. Update Piece State
+        // 3. Update Piece State (Promotion/Power)
         const oldType = piece.type;
         const oldPower = piece.power;
         const oldOriginalType = piece.originalType;
         const oldHasMoved = piece.hasMoved;
+
+        // Remove old piece value from score
+        const oldPieceVal = getPieceValue(oldType, oldPower);
+        this.currentScore -= (piece.color === Color.White ? oldPieceVal : -oldPieceVal);
 
         if (move.promotion) {
             piece.type = move.promotion;
@@ -164,6 +217,10 @@ export class MutableBoard {
         }
 
         piece.hasMoved = true;
+
+        // Add new piece value to score
+        const newPieceVal = getPieceValue(piece.type, piece.power);
+        this.currentScore += (piece.color === Color.White ? newPieceVal : -newPieceVal);
 
         // 4. Place at dest
         this.board[toRow][toCol] = piece;
@@ -204,6 +261,7 @@ export class MutableBoard {
             move,
             oldHash,
             oldEnPassant,
+            oldScore,
             captured: actualCaptured,
             epCapturedPos,
             oldPieceState: { type: oldType, power: oldPower, originalType: oldOriginalType, hasMoved: oldHasMoved },
@@ -213,10 +271,11 @@ export class MutableBoard {
 
     unmakeMove(undoInfo: any) {
         if (!undoInfo) return;
-        const { move, oldHash, oldEnPassant, captured, epCapturedPos, oldPieceState, rookMove } = undoInfo;
+        const { move, oldHash, oldEnPassant, oldScore, captured, epCapturedPos, oldPieceState, rookMove } = undoInfo;
 
         this.hash = oldHash;
         this.enPassantTarget = oldEnPassant;
+        this.currentScore = oldScore;
         this.turn = this.turn === Color.White ? Color.Black : Color.White;
 
         const piece = this.board[move.to.row][move.to.col];
@@ -273,7 +332,7 @@ export default class KrachtschaakAI {
         for (let depth = 1; depth <= maxDepth; depth++) {
             if (this.shouldStop) break;
 
-            const result = this.searchRoot(board, turn, depth);
+            const result = KrachtschaakAI.searchRoot(board, turn, depth);
             if (result.move) bestMove = result.move;
 
             if (bestMove && onUpdate) {
@@ -283,14 +342,14 @@ export default class KrachtschaakAI {
         }
 
         const duration = Date.now() - startTime;
-        // console.log(\`Search completed: Depth \${maxDepth}, Nodes: \${this.nodesVisited}, Time: \${duration}ms, NPS: \${Math.round(this.nodesVisited / (duration / 1000 + 0.001))}\`);
+        console.log(`Search completed: Depth ${maxDepth}, Nodes: ${this.nodesVisited}, Time: ${duration}ms, NPS: ${Math.round(this.nodesVisited / (duration / 1000 + 0.001))}`);
 
         return bestMove;
     }
 
     static searchRoot(board: BoardState, turn: Color, depth: number): { move: Move | null, score: number } {
         const mutableBoard = new MutableBoard(board, turn, null);
-        const moves = this.getOrderedMoves(mutableBoard, depth, null);
+        const moves = KrachtschaakAI.getOrderedMoves(mutableBoard, depth, null);
 
         let bestMove: Move | null = null;
         let bestScore = -Infinity;
@@ -301,7 +360,7 @@ export default class KrachtschaakAI {
             if (this.shouldStop) break;
 
             const undoInfo = mutableBoard.makeMove(move);
-            const score = -this.alphaBeta(mutableBoard, depth - 1, -beta, -alpha);
+            const score = -KrachtschaakAI.alphaBeta(mutableBoard, depth - 1, -beta, -alpha, true);
             mutableBoard.unmakeMove(undoInfo);
 
             if (score > bestScore) {
@@ -316,9 +375,9 @@ export default class KrachtschaakAI {
         return { move: bestMove, score: bestScore };
     }
 
-    static alphaBeta(mutableBoard: MutableBoard, depth: number, alpha: number, beta: number): number {
+    static alphaBeta(mutableBoard: MutableBoard, depth: number, alpha: number, beta: number, allowNull: boolean): number {
         this.nodesVisited++;
-        if (depth === 0) return this.quiescenceSearch(mutableBoard, alpha, beta);
+        if (depth <= 0) return KrachtschaakAI.quiescenceSearch(mutableBoard, alpha, beta);
 
         const ttEntry = TT.get(mutableBoard.hash);
         if (ttEntry && ttEntry.depth >= depth) {
@@ -328,13 +387,29 @@ export default class KrachtschaakAI {
             if (alpha >= beta) return ttEntry.score;
         }
 
-        const moves = this.getOrderedMoves(mutableBoard, depth, ttEntry?.bestMove || null);
+        const inCheck = isKingInCheck(mutableBoard.board, mutableBoard.turn);
+
+        // Null Move Pruning
+        if (allowNull && !inCheck && depth >= 3 && Math.abs(beta) < 10000) {
+            const staticEval = KrachtschaakAI.evaluate(mutableBoard);
+            if (staticEval >= beta) {
+                const undoInfo = mutableBoard.makeNullMove();
+                const score = -KrachtschaakAI.alphaBeta(mutableBoard, depth - 1 - 2, -beta, -beta + 1, false);
+                mutableBoard.unmakeNullMove(undoInfo);
+
+                if (score >= beta) {
+                    return beta;
+                }
+            }
+        }
+
+        const moves = KrachtschaakAI.getOrderedMoves(mutableBoard, depth, ttEntry?.bestMove || null);
 
         if (moves.length === 0) {
-            if (isKingInCheck(mutableBoard.board, mutableBoard.turn)) {
+            if (inCheck) {
                 return -20000 + (100 - depth);
             }
-            return 0;
+            return 0; // Stalemate
         }
 
         let bestScore = -Infinity;
@@ -342,7 +417,7 @@ export default class KrachtschaakAI {
 
         for (const move of moves) {
             const undoInfo = mutableBoard.makeMove(move);
-            const score = -this.alphaBeta(mutableBoard, depth - 1, -beta, -alpha);
+            const score = -KrachtschaakAI.alphaBeta(mutableBoard, depth - 1, -beta, -alpha, true);
             mutableBoard.unmakeMove(undoInfo);
 
             if (score > bestScore) {
@@ -381,11 +456,12 @@ export default class KrachtschaakAI {
 
     static quiescenceSearch(mutableBoard: MutableBoard, alpha: number, beta: number): number {
         this.nodesVisited++;
-        const standPat = this.evaluate(mutableBoard);
+
+        const standPat = KrachtschaakAI.evaluate(mutableBoard);
         if (standPat >= beta) return beta;
         if (alpha < standPat) alpha = standPat;
 
-        const allMoves = this.generateLegalMoves(mutableBoard);
+        const allMoves = KrachtschaakAI.generateLegalMoves(mutableBoard);
         const captures = allMoves.filter(m => m.captured);
 
         captures.sort((a, b) => {
@@ -396,7 +472,7 @@ export default class KrachtschaakAI {
 
         for (const move of captures) {
             const undoInfo = mutableBoard.makeMove(move);
-            const score = -this.quiescenceSearch(mutableBoard, -beta, -alpha);
+            const score = -KrachtschaakAI.quiescenceSearch(mutableBoard, -beta, -alpha);
             mutableBoard.unmakeMove(undoInfo);
 
             if (score >= beta) return beta;
@@ -407,7 +483,7 @@ export default class KrachtschaakAI {
     }
 
     static getOrderedMoves(mutableBoard: MutableBoard, depth: number, ttBestMove: Move | null): Move[] {
-        const allMoves = this.generateLegalMoves(mutableBoard);
+        const allMoves = KrachtschaakAI.generateLegalMoves(mutableBoard);
 
         return allMoves.map(move => {
             let score = 0;
@@ -448,7 +524,7 @@ export default class KrachtschaakAI {
                     const uniqueTargets = new Set();
                     const distinctTargets = [];
                     for (const t of targets) {
-                        const k = `${t.row},${t.col}`;
+                        const k = `${t.row}, ${t.col}`;
                         if (!uniqueTargets.has(k)) {
                             uniqueTargets.add(k);
                             distinctTargets.push(t);
@@ -485,20 +561,6 @@ export default class KrachtschaakAI {
     }
 
     static evaluate(mutableBoard: MutableBoard): number {
-        let totalScore = 0;
-        const board = mutableBoard.board;
-        for (let r = 0; r < 8; r++) {
-            for (let c = 0; c < 8; c++) {
-                const piece = board[r][c];
-                if (piece) {
-                    let score = PIECE_VALUES[piece.type];
-                    if (piece.power) {
-                        score += COMBINATION_BONUSES[piece.type]?.[piece.power] || 0;
-                    }
-                    totalScore += (piece.color === Color.White ? score : -score);
-                }
-            }
-        }
-        return totalScore * (mutableBoard.turn === Color.White ? 1 : -1);
+        return mutableBoard.currentScore * (mutableBoard.turn === Color.White ? 1 : -1);
     }
 }
