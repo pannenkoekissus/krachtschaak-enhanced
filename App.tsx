@@ -1303,8 +1303,6 @@ const handleOnlineSpectate = useCallback((id: string) => {
         if (!currentState) return;
     
         const { board, capturedPieces, enPassantTarget, turn } = currentState;
-    
-        console.log(KrachtschaakAI.getBestMove(currentState.board, turn, 3));
 
         const newBoard = board.map(row => [...row]);
         const pieceToMove = { ...newBoard[from.row][from.col]! };
