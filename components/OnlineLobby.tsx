@@ -9,27 +9,27 @@ type LobbyTab = 'games' | 'players' | 'current_games' | 'finished_games' | 'chal
 
 interface OnlineLobbyProps {
 
-  userUid: string;
-  onGameStart: (gameId: string, playerColor: Color) => void;
-  onBack: () => void;
-  getInitialGameState: (mode: 'online_playing', settings: TimerSettings, dontLoad: boolean, isRated: boolean) => GameState;
-  creatorColor: Color;
-  onGameCreated: () => void;
-  myRatings: Record<RatingCategory, number> | null;
-  onReview: (game: GameState) => void;
-  // Settings Props
-  premovesEnabled: boolean;
-  setPremovesEnabled: (enabled: boolean) => void;
-  moveConfirmationEnabled: boolean;
-  setMoveConfirmationEnabled: (enabled: boolean) => void;
-  drawConfirmationEnabled: boolean;
-  setDrawConfirmationEnabled: (enabled: boolean) => void;
-  resignConfirmationEnabled: boolean;
-  setResignConfirmationEnabled: (enabled: boolean) => void;
-  // State props
-  currentLobbyTab: LobbyTab;
-  setCurrentLobbyTab: (tab: LobbyTab) => void;
-  onSpectate: (gameId: string) => void;
+    userUid: string;
+    onGameStart: (gameId: string, playerColor: Color) => void;
+    onBack: () => void;
+    getInitialGameState: (mode: 'online_playing', settings: TimerSettings, dontLoad: boolean, isRated: boolean) => GameState;
+    creatorColor: Color;
+    onGameCreated: () => void;
+    myRatings: Record<RatingCategory, number> | null;
+    onReview: (game: GameState) => void;
+    // Settings Props
+    premovesEnabled: boolean;
+    setPremovesEnabled: (enabled: boolean) => void;
+    moveConfirmationEnabled: boolean;
+    setMoveConfirmationEnabled: (enabled: boolean) => void;
+    drawConfirmationEnabled: boolean;
+    setDrawConfirmationEnabled: (enabled: boolean) => void;
+    resignConfirmationEnabled: boolean;
+    setResignConfirmationEnabled: (enabled: boolean) => void;
+    // State props
+    currentLobbyTab: LobbyTab;
+    setCurrentLobbyTab: (tab: LobbyTab) => void;
+    onSpectate: (gameId: string) => void;
 }
 
 const formatTime = (totalSeconds: number | null): string => {
@@ -68,7 +68,7 @@ const PlayerRatingsModal: React.FC<{
     return (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
             <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md relative">
-                 <button onClick={onClose} className="absolute top-2 right-3 text-2xl text-gray-400 hover:text-white">&times;</button>
+                <button onClick={onClose} className="absolute top-2 right-3 text-2xl text-gray-400 hover:text-white">&times;</button>
                 <h3 className="text-2xl font-bold mb-6 text-center text-green-400">{user.displayName}'s Ratings</h3>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-lg">
                     {RATING_CATEGORIES.map(category => (
@@ -111,7 +111,7 @@ const ChallengeConfigModal: React.FC<{
         <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
             <div className="bg-gray-800 p-6 rounded-xl shadow-2xl w-full max-w-sm border border-gray-700">
                 <h3 className="text-xl font-bold mb-4 text-center">Challenge {opponent.displayName}</h3>
-                
+
                 <div className="mb-4 flex items-center justify-center">
                     <input type="checkbox" id="modal-rated" checked={isRated} onChange={e => setIsRated(e.target.checked)} className="w-4 h-4 text-purple-600 bg-gray-700 rounded focus:ring-purple-600" />
                     <label htmlFor="modal-rated" className="ml-2 text-gray-300 font-medium">Rated Game</label>
@@ -139,18 +139,18 @@ const ChallengeConfigModal: React.FC<{
                         </div>
                     </div>
                 ) : (
-                     <div className="mb-6 space-y-3">
-                         <div className="flex gap-4 justify-center text-sm">
+                    <div className="mb-6 space-y-3">
+                        <div className="flex gap-4 justify-center text-sm">
                             <label className="flex items-center"><input type="radio" checked={corrType === 'daily'} onChange={() => setCorrType('daily')} className="mr-1" /> Daily</label>
                             <label className="flex items-center"><input type="radio" checked={corrType === 'unlimited'} onChange={() => setCorrType('unlimited')} className="mr-1" /> Unlimited</label>
-                         </div>
-                         {corrType === 'daily' && (
-                             <div>
-                                 <label className="text-xs text-gray-400 block mb-1 text-center">Days per move</label>
-                                 <input type="number" value={days} onChange={e => setDays(e.target.value)} className="w-full p-2 bg-gray-900 border border-gray-600 rounded text-center" />
-                             </div>
-                         )}
-                     </div>
+                        </div>
+                        {corrType === 'daily' && (
+                            <div>
+                                <label className="text-xs text-gray-400 block mb-1 text-center">Days per move</label>
+                                <input type="number" value={days} onChange={e => setDays(e.target.value)} className="w-full p-2 bg-gray-900 border border-gray-600 rounded text-center" />
+                            </div>
+                        )}
+                    </div>
                 )}
 
                 <div className="flex gap-3">
@@ -162,7 +162,7 @@ const ChallengeConfigModal: React.FC<{
     );
 }
 
-const OnlineLobby: React.FC<OnlineLobbyProps> = ({ 
+const OnlineLobby: React.FC<OnlineLobbyProps> = ({
     userUid, onGameStart, onBack, getInitialGameState, creatorColor, onGameCreated, myRatings, onReview,
     premovesEnabled, setPremovesEnabled, moveConfirmationEnabled, setMoveConfirmationEnabled,
     drawConfirmationEnabled, setDrawConfirmationEnabled, resignConfirmationEnabled, setResignConfirmationEnabled,
@@ -176,7 +176,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
     const [tick, setTick] = useState(0); // Force update for timers
     const [showSettings, setShowSettings] = useState(false);
     const [liveGames, setLiveGames] = useState<LobbyGame[]>([]);
-    
+
     // Challenge Logic
     const [incomingChallenges, setIncomingChallenges] = useState<IncomingChallenge[]>([]);
     const [sentChallenges, setSentChallenges] = useState<SentChallenge[]>([]);
@@ -193,81 +193,112 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
     const [baseMinutes, setBaseMinutes] = useState('10');
     const [increment, setIncrement] = useState('5');
     const [daysPerMove, setDaysPerMove] = useState('2');
-    
+
     // Player list state
     const [allUsers, setAllUsers] = useState<UserInfo[]>([]);
     const [searchText, setSearchText] = useState("");
     const [viewingPlayerRatings, setViewingPlayerRatings] = useState<UserInfo | null>(null);
-    
+
     const createdGameListenerRef = useRef<{ gameId: string; ref: any; } | null>(null);
     const gameListenersRef = useRef<Record<string, any>>({});
-    
+
     const previousGameStatuses = useRef<Record<string, GameStatus>>({});
     const mountTime = useRef(Date.now());
     const [filters, setFilters] = useState<Record<string, boolean>>({
-    hyperbullet: true,
-    bullet: true,
-    blitz: true,
-    rapid: true,
-    classical: true,
-    daily: true,
-    unlimited: true
-});
-const toggleFilter = (category: string) => {
-    setFilters(prev => ({ ...prev, [category]: !prev[category] }));
-};
+        hyperbullet: true,
+        bullet: true,
+        blitz: true,
+        rapid: true,
+        classical: true,
+        daily: true,
+        unlimited: true
+    });
+    const toggleFilter = (category: string) => {
+        setFilters(prev => ({ ...prev, [category]: !prev[category] }));
+    };
 
     //spectate effect
 
-useEffect(() => {
-    const gamesRef = db.ref('games');
+    useEffect(() => {
+        if (currentLobbyTab !== 'games' && currentLobbyTab !== 'live') return;
 
-    const onLobbyUpdate = (snapshot: any) => {
-        const gamesData = snapshot.val();
-        const openList: LobbyGame[] = [];
-        const liveList: LobbyGame[] = []; // <--- NIEUW
+        const gamesRef = db.ref('games');
+        setIsLobbyLoading(true);
 
-        if (gamesData) {
-            Object.keys(gamesData).forEach(gameId => {
-                const game = gamesData[gameId];
-                if (!game || !game.players) return;
+        const onLobbyUpdate = (snapshot: any) => {
+            const gamesData = snapshot.val();
 
-                // LOGICA VOOR OPEN GAMES (bestaand)
-                if (game.status === 'waiting' && !game.challengedPlayerInfo) {
-                    // ... jouw bestaande logica voor open games ...
-                     // (Kopieer hier je bestaande logica voor openList.push)
-                }
+            if (currentLobbyTab === 'games') {
+                const gamesList: LobbyGame[] = [];
+                if (gamesData) {
+                    Object.keys(gamesData).forEach(gameId => {
+                        const game = gamesData[gameId];
+                        if (game && game.status === 'waiting' &&
+                            typeof game.players === 'object' && game.players !== null &&
+                            typeof game.playerColors === 'object' && game.playerColors !== null &&
+                            !game.challengedPlayerInfo) {
 
-                // LOGICA VOOR LIVE GAMES (NIEUW)
-                if (game.status === 'playing') {
-                    console.log(`Data voor game ${gameId}:`, game.timerSettings);
-                    const whiteUid = game.playerColors?.white;
-                    const blackUid = game.playerColors?.black;
-                    const whiteName = whiteUid ? game.players[whiteUid]?.displayName : 'Unknown';
-                    const blackName = blackUid ? game.players[blackUid]?.displayName : 'Unknown';
-                    const whiteRating = whiteUid ? game.players[whiteUid]?.ratings?.[game.ratingCategory] : '?';
-                    const blackRating = blackUid ? game.players[blackUid]?.ratings?.[game.ratingCategory] : '?';
+                            const isWhiteTaken = !!game.playerColors.white;
+                            const isBlackTaken = !!game.playerColors.black;
 
-                    liveList.push({
-                        gameId,
-                        creatorName: `${whiteName} (${whiteRating}) vs ${blackName} (${blackRating})`, // Misbruik creatorName even voor display
-                        creatorUid: whiteUid || '', // Niet kritiek voor spectate
-                        creatorRatings: {} as any, 
-                        timerSettings: game.timerSettings,
-                        ratingCategory: game.ratingCategory,
-                        isRated: game.isRated
+                            if ((isWhiteTaken && !isBlackTaken) || (!isWhiteTaken && isBlackTaken)) {
+                                const creatorUid = game.playerColors.white || game.playerColors.black;
+                                if (creatorUid) {
+                                    const creator = game.players[creatorUid];
+                                    if (creator) {
+                                        gamesList.push({
+                                            gameId,
+                                            creatorName: creator.displayName || 'Unknown',
+                                            creatorUid: creator.uid || '',
+                                            creatorRatings: creator.ratings || {},
+                                            timerSettings: game.timerSettings,
+                                            ratingCategory: game.ratingCategory,
+                                            isRated: typeof game.isRated === 'boolean' ? game.isRated : true,
+                                        });
+                                    }
+                                }
+                            }
+                        }
                     });
                 }
-            });
-        }
-        setOpenGames(openList.sort(/* ... */));
-        setLiveGames(liveList); // <--- Update state
-        setIsLobbyLoading(false);
-    };
+                setOpenGames(gamesList.sort((a, b) => (b.creatorRatings[b.ratingCategory] ?? 1200) - (a.creatorRatings[a.ratingCategory] ?? 1200)));
+            }
 
-    gamesRef.on('value', onLobbyUpdate);
-    return () => { gamesRef.off('value', onLobbyUpdate); /* ... */ };
-}, []);
+            if (currentLobbyTab === 'live') {
+                const liveList: LobbyGame[] = [];
+                if (gamesData) {
+                    Object.keys(gamesData).forEach(gameId => {
+                        const game = gamesData[gameId];
+                        if (!game || !game.players) return;
+
+                        if (game.status === 'playing') {
+                            const whiteUid = game.playerColors?.white;
+                            const blackUid = game.playerColors?.black;
+                            const whiteName = whiteUid ? game.players[whiteUid]?.displayName : 'Unknown';
+                            const blackName = blackUid ? game.players[blackUid]?.displayName : 'Unknown';
+                            const whiteRating = whiteUid ? game.players[whiteUid]?.ratings?.[game.ratingCategory] : '?';
+                            const blackRating = blackUid ? game.players[blackUid]?.ratings?.[game.ratingCategory] : '?';
+
+                            liveList.push({
+                                gameId,
+                                creatorName: `${whiteName} (${whiteRating}) vs ${blackName} (${blackRating})`,
+                                creatorUid: whiteUid || '',
+                                creatorRatings: {} as any,
+                                timerSettings: game.timerSettings,
+                                ratingCategory: game.ratingCategory,
+                                isRated: game.isRated
+                            });
+                        }
+                    });
+                }
+                setLiveGames(liveList);
+            }
+            setIsLobbyLoading(false);
+        };
+
+        gamesRef.on('value', onLobbyUpdate);
+        return () => { gamesRef.off('value', onLobbyUpdate); };
+    }, [currentLobbyTab]);
 
     // Timer tick to update live timers in lobby list
     useEffect(() => {
@@ -282,10 +313,10 @@ useEffect(() => {
         } else {
             const baseTime = game.playerTimes ? game.playerTimes[game.myColor] : 0;
             if (game.status === 'playing' && game.isMyTurn && game.turnStartTime) {
-                 // Calculate live elapsed time
-                 const elapsed = (Date.now() - game.turnStartTime) / 1000;
-                 const remaining = Math.max(0, baseTime - elapsed);
-                 return formatTime(remaining);
+                // Calculate live elapsed time
+                const elapsed = (Date.now() - game.turnStartTime) / 1000;
+                const remaining = Math.max(0, baseTime - elapsed);
+                return formatTime(remaining);
             }
             return formatTime(baseTime);
         }
@@ -295,34 +326,34 @@ useEffect(() => {
     useEffect(() => {
         myCurrentGames.forEach(game => {
             const prevStatus = previousGameStatuses.current[game.gameId];
-            
+
             // WARP CASE 1: Game transition from 'waiting' to 'playing' (Someone joined my open game)
             if (game.status === 'playing' && prevStatus === 'waiting') {
-                if(game.opponent) {
+                if (game.opponent) {
                     onGameStart(game.gameId, game.myColor);
                 }
             }
             // WARP CASE 2: New game appearing directly in 'playing' state (Challenge accepted)
             // Only warp if the game started AFTER this lobby component mounted to avoid warping on page refresh/reload
             else if (!prevStatus && game.status === 'playing') {
-                const gameStartTime = game.turnStartTime || 0; 
+                const gameStartTime = game.turnStartTime || 0;
                 // If the game started after we entered the lobby, it's a new event (like a challenge accept)
                 if (gameStartTime > mountTime.current) {
                     onGameStart(game.gameId, game.myColor);
                 }
             }
-            
+
             previousGameStatuses.current[game.gameId] = game.status;
         });
     }, [myCurrentGames, onGameStart]);
 
     // Listener for User's Own Games (standard sync)
     useEffect(() => {
-        if (!userUid) return;
+        if (!userUid || (currentLobbyTab !== 'current_games' && currentLobbyTab !== 'finished_games')) return;
 
         const gameListeners = gameListenersRef.current;
         const userGamesRef = db.ref(`userGames/${userUid}`);
-        
+
         const listener = (snapshot: any) => {
             const gameIds = snapshot.val() || {};
             const currentGameKeys = Object.keys(gameIds);
@@ -369,19 +400,19 @@ useEffect(() => {
             }
             gameListenersRef.current = {};
         };
-    }, [userUid]);
+    }, [userUid, currentLobbyTab]);
 
     // Listener for Incoming Challenges
     useEffect(() => {
-        if (!userUid) return;
+        if (!userUid || currentLobbyTab !== 'challenges') return;
         const challengesRef = db.ref(`challenges/${userUid}`);
-        
+
         const listener = (snapshot: any) => {
             const data = snapshot.val();
             if (data) {
                 const challenges: IncomingChallenge[] = Object.keys(data).map(key => {
                     const val = data[key];
-                     // Normalize data to handle potential casing issues from legacy or manual edits
+                    // Normalize data to handle potential casing issues from legacy or manual edits
                     return {
                         id: key,
                         fromUid: val.fromUid,
@@ -401,17 +432,17 @@ useEffect(() => {
         };
 
         const onError = (err: any) => {
-             console.error("Error reading challenges:", err);
-             setError("Failed to load challenges (Permission Denied?)");
+            console.error("Error reading challenges:", err);
+            setError("Failed to load challenges (Permission Denied?)");
         }
 
         challengesRef.on('value', listener, onError);
         return () => challengesRef.off();
-    }, [userUid]);
+    }, [userUid, currentLobbyTab]);
 
     // Listener for Sent Challenges
     useEffect(() => {
-        if (!userUid) return;
+        if (!userUid || currentLobbyTab !== 'challenges') return;
         const sentChallengesRef = db.ref(`sentChallenges/${userUid}`);
 
         const listener = (snapshot: any) => {
@@ -428,7 +459,7 @@ useEffect(() => {
         };
         sentChallengesRef.on('value', listener);
         return () => sentChallengesRef.off();
-    }, [userUid]);
+    }, [userUid, currentLobbyTab]);
 
     // Process Games List for UI
     useEffect(() => {
@@ -473,13 +504,14 @@ useEffect(() => {
 
     // Fetch Users and Open Games
     useEffect(() => {
+        if (currentLobbyTab !== 'players') return;
         const usersRef = db.ref('users');
         const ratingsRef = db.ref('userRatings');
 
         const handleUserData = (userSnap: any, ratingSnap: any) => {
-             const usersData = userSnap.val() || {};
-             const ratingsData = ratingSnap.val() || {};
-             const userList: UserInfo[] = Object.keys(usersData)
+            const usersData = userSnap.val() || {};
+            const ratingsData = ratingSnap.val() || {};
+            const userList: UserInfo[] = Object.keys(usersData)
                 .filter(uid => usersData[uid].displayName)
                 .map(uid => ({
                     uid,
@@ -487,12 +519,12 @@ useEffect(() => {
                     isOnline: usersData[uid].isOnline || false,
                     ratings: ratingsData[uid]?.ratings || {},
                 }));
-             setAllUsers(userList.sort((a,b) => (b.ratings?.blitz ?? 1200) - (a.ratings?.blitz ?? 1200)));
+            setAllUsers(userList.sort((a, b) => (b.ratings?.blitz ?? 1200) - (a.ratings?.blitz ?? 1200)));
         };
 
         let users: any, ratings: any;
-        const onUsers = (snap: any) => { users = snap; if(ratings) handleUserData(users, ratings) };
-        const onRatings = (snap: any) => { ratings = snap; if(users) handleUserData(users, ratings) };
+        const onUsers = (snap: any) => { users = snap; if (ratings) handleUserData(users, ratings) };
+        const onRatings = (snap: any) => { ratings = snap; if (users) handleUserData(users, ratings) };
 
         usersRef.on('value', onUsers);
         ratingsRef.on('value', onRatings);
@@ -501,64 +533,25 @@ useEffect(() => {
             usersRef.off('value', onUsers);
             ratingsRef.off('value', onRatings);
         };
-    }, []);
+    }, [currentLobbyTab]);
 
+    // Consolidate with the games listener above
     useEffect(() => {
-        const gamesRef = db.ref('games');
-    
-        const onLobbyUpdate = (snapshot: any) => {
-            const gamesData = snapshot.val();
-            const gamesList: LobbyGame[] = [];
-            if (gamesData) {
-                Object.keys(gamesData).forEach(gameId => {
-                    const game = gamesData[gameId];
-                    if (game && game.status === 'waiting' && 
-                        typeof game.players === 'object' && game.players !== null &&
-                        typeof game.playerColors === 'object' && game.playerColors !== null &&
-                        !game.challengedPlayerInfo) {
-                        
-                        const isWhiteTaken = !!game.playerColors.white;
-                        const isBlackTaken = !!game.playerColors.black;
-
-                        if ((isWhiteTaken && !isBlackTaken) || (!isWhiteTaken && isBlackTaken)) {
-                            const creatorUid = game.playerColors.white || game.playerColors.black;
-                            if (creatorUid) {
-                                const creator = game.players[creatorUid];
-                                if (creator) {
-                                    gamesList.push({
-                                        gameId,
-                                        creatorName: creator.displayName || 'Unknown',
-                                        creatorUid: creator.uid || '',
-                                        creatorRatings: creator.ratings || {},
-                                        timerSettings: game.timerSettings,
-                                        ratingCategory: game.ratingCategory,
-                                        isRated: typeof game.isRated === 'boolean' ? game.isRated : true,
-                                    });
-                                }
-                            }
-                        }
-                    }
-                });
+        if (createdGameListenerRef.current) {
+            // Keep this cleanup safe if it exists
+            return () => {
+                if (createdGameListenerRef.current) {
+                    createdGameListenerRef.current.ref.off();
+                }
             }
-            setOpenGames(gamesList.sort((a, b) => (b.creatorRatings[b.ratingCategory] ?? 1200) - (a.creatorRatings[a.ratingCategory] ?? 1200)));
-            setIsLobbyLoading(false);
-        };
-    
-        gamesRef.on('value', onLobbyUpdate);
-    
-        return () => {
-            gamesRef.off('value', onLobbyUpdate);
-            if (createdGameListenerRef.current) {
-                createdGameListenerRef.current.ref.off();
-            }
-        };
+        }
     }, []);
 
     // --- CHALLENGE ACTIONS ---
 
     const handleSendChallenge = async (settings: TimerSettings, isRated: boolean, challengeColor: string) => {
         if (!challengeTarget || !myRatings) return;
-        
+
         const category = getRatingCategory(settings);
         const myRating = myRatings[category] ?? 1200;
         const targetUid = challengeTarget.uid;
@@ -589,7 +582,7 @@ useEffect(() => {
             isRated: isRated,
             challengeColor: challengeColor
         });
-        
+
         setChallengeTarget(null); // Close Modal
         setCurrentLobbyTab('challenges'); // Switch to challenges tab
     };
@@ -608,7 +601,7 @@ useEffect(() => {
         const newGameRef = db.ref('games').push();
         const gameId = newGameRef.key;
         if (!gameId) return;
-        
+
         var isCreatorWhite = Math.random() < 0.5;
         if (challenge.challengeColor === 'white') isCreatorWhite = true;
         if (challenge.challengeColor === 'black') isCreatorWhite = false;
@@ -616,17 +609,17 @@ useEffect(() => {
         const opponentColor = isCreatorWhite ? Color.White : Color.Black;
 
         const initialState = getInitialGameState('online_playing', challenge.timerSettings, true, challenge.isRated);
-        
-        const myPlayerInfo: PlayerInfo = { 
-            uid: userUid, 
-            displayName: auth.currentUser?.displayName || 'Guest', 
-            disconnectTimestamp: null, 
-            ratings: myRatings 
+
+        const myPlayerInfo: PlayerInfo = {
+            uid: userUid,
+            displayName: auth.currentUser?.displayName || 'Guest',
+            disconnectTimestamp: null,
+            ratings: myRatings
         };
 
         // Note: We don't have opponent's full ratings here, just the one sent in challenge.
-        const opponentRatings = { ...myRatings }; 
-        opponentRatings[challenge.ratingCategory] = challenge.fromRating; 
+        const opponentRatings = { ...myRatings };
+        opponentRatings[challenge.ratingCategory] = challenge.fromRating;
 
         const opponentPlayerInfo: PlayerInfo = {
             uid: challenge.fromUid,
@@ -639,7 +632,7 @@ useEffect(() => {
             [userUid]: myPlayerInfo,
             [challenge.fromUid]: opponentPlayerInfo
         };
-        
+
         initialState.playerColors = {
             white: isCreatorWhite ? challenge.fromUid : userUid,
             black: isCreatorWhite ? userUid : challenge.fromUid
@@ -669,7 +662,7 @@ useEffect(() => {
         updates[`sentChallenges/${challenge.fromUid}/${challenge.id}`] = null;
 
         await db.ref().update(updates);
-        
+
         // Manual warp because the game starts in 'playing' state, skipping 'waiting'
         // so the automatic transition logic in useEffect won't catch it.
         onGameStart(gameId, myColor);
@@ -703,7 +696,7 @@ useEffect(() => {
                 const initialTime = (parseFloat(baseMinutes) || 0) * 60;
                 const inc = parseInt(increment, 10) || 0;
                 if (initialTime > 0) {
-                     settings = { initialTime, increment: inc };
+                    settings = { initialTime, increment: inc };
                 }
             } else if (timeControlType === 'correspondence') {
                 if (correspondenceType === 'daily') {
@@ -712,10 +705,10 @@ useEffect(() => {
                         settings = { daysPerMove: days };
                     }
                 } else {
-                     settings = null; // Unlimited
+                    settings = null; // Unlimited
                 }
             }
-            
+
             const newGameRef = db.ref('games').push();
             const gameId = newGameRef.key;
             if (!gameId) { setError("Could not create a game ID."); setIsCreatingGame(false); return; }
@@ -723,13 +716,13 @@ useEffect(() => {
             const initialState = getInitialGameState('online_playing', settings, true, isRated);
             const user = auth.currentUser;
             const displayName = user?.displayName || 'Guest';
-            
+
             const playerInfo: PlayerInfo = { uid: userUid, displayName: displayName, disconnectTimestamp: null, ratings: myRatings };
-            
+
             initialState.players[userUid] = playerInfo;
             initialState.playerColors[creatorColor] = userUid;
             initialState.status = 'waiting';
-            
+
             await newGameRef.set(initialState);
             await db.ref(`userGames/${userUid}/${gameId}`).set(true);
 
@@ -744,7 +737,7 @@ useEffect(() => {
             createdGameListenerRef.current = { gameId, ref: newGameRef };
 
             const category = getRatingCategory(settings);
-            const isRealTimeChallenge = category !== RatingCategory.Daily && category !== RatingCategory.Unlimited;            
+            const isRealTimeChallenge = category !== RatingCategory.Daily && category !== RatingCategory.Unlimited;
             onGameCreated();
             setCurrentLobbyTab('current_games');
 
@@ -773,7 +766,7 @@ useEffect(() => {
                     gameData.players[userUid] = playerInfo;
                     gameData.playerColors[joinedColor] = userUid;
                     gameData.status = 'playing';
-                    
+
                     if (gameData.timerSettings && 'initialTime' in gameData.timerSettings) {
                         gameData.turnStartTime = window.firebase.database.ServerValue.TIMESTAMP;
                     } else if (gameData.timerSettings && 'daysPerMove' in gameData.timerSettings) {
@@ -804,7 +797,7 @@ useEffect(() => {
             setIsJoiningGame(null);
         });
     };
-    
+
     // --- GAME CANCELLATION ---
     const handleCancelGame = async (game: ActiveGameSummary) => {
         if (!userUid) {
@@ -817,11 +810,11 @@ useEffect(() => {
                 createdGameListenerRef.current.ref.off();
                 createdGameListenerRef.current = null;
             }
-            
+
             const updates: any = {};
             updates[`/games/${game.gameId}`] = null;
             updates[`/userGames/${userUid}/${game.gameId}`] = null;
-            
+
             await db.ref().update(updates);
 
         } catch (e: any) {
@@ -845,13 +838,13 @@ useEffect(() => {
 
     const isActionInProgress = isCreatingGame || isJoiningGame !== null;
 
-const filteredLiveGames = useMemo(() => {
-    return liveGames.filter(game => {
-        const cat = game.ratingCategory.toLowerCase();
-        // Als de categorie in onze filters staat, check of hij op 'true' staat
-        return filters[cat] !== false; 
-    });
-}, [liveGames, filters]);
+    const filteredLiveGames = useMemo(() => {
+        return liveGames.filter(game => {
+            const cat = game.ratingCategory.toLowerCase();
+            // Als de categorie in onze filters staat, check of hij op 'true' staat
+            return filters[cat] !== false;
+        });
+    }, [liveGames, filters]);
 
     const filteredUsers = useMemo(() => {
         if (!searchText) return allUsers.filter(u => u.uid !== userUid);
@@ -860,26 +853,26 @@ const filteredLiveGames = useMemo(() => {
 
     const getGameResult = (game: GameState): { text: string, color: string } => {
         const myColorName = game.playerColors.white === userUid ? "White" : "Black";
-    
+
         if (game.winner) {
             if (game.winner === myColorName) return { text: "Win", color: "text-green-400" };
             return { text: "Loss", color: "text-red-400" };
         }
-    
+
         if (game.status.startsWith('draw_') || game.status === 'stalemate') {
             return { text: "Draw", color: "text-gray-400" };
         }
-    
+
         return { text: "Finished", color: "text-gray-400" };
     };
 
     const MenuButton = ({ view, label, count }: { view: typeof currentLobbyTab, label: string, count?: number }) => (
-        <button 
-            onClick={() => setCurrentLobbyTab(view)} 
+        <button
+            onClick={() => setCurrentLobbyTab(view)}
             className={`
                 px-4 py-2 rounded-full text-sm font-semibold transition-all shadow-sm
-                ${currentLobbyTab === view 
-                    ? 'bg-green-600 text-white shadow-green-500/50' 
+                ${currentLobbyTab === view
+                    ? 'bg-green-600 text-white shadow-green-500/50'
                     : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'}
                 relative
             `}
@@ -895,61 +888,61 @@ const filteredLiveGames = useMemo(() => {
 
     return (
         <div className="min-h-screen flex items-center justify-center p-4">
-             <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-4xl flex flex-col items-center relative">
-                 <div className="absolute top-4 right-4">
-                    <button 
+            <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-4xl flex flex-col items-center relative">
+                <div className="absolute top-4 right-4">
+                    <button
                         onClick={() => setShowSettings(true)}
                         className="text-gray-400 hover:text-white transition-colors"
                         title="Settings"
                     >
-                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
                     </button>
-                 </div>
+                </div>
 
-                 <h2 className="text-3xl font-bold mb-2">Online Lobby</h2>
-                 <button onClick={handleViewMyRatings} className="text-lg mb-4 text-gray-300 hover:text-white transition-colors">
-                     Your Blitz Rating: <span className="font-bold text-green-400">{myRatings?.blitz ?? '...'}</span> <span className="text-sm">(view all)</span>
-                 </button>
+                <h2 className="text-3xl font-bold mb-2">Online Lobby</h2>
+                <button onClick={handleViewMyRatings} className="text-lg mb-4 text-gray-300 hover:text-white transition-colors">
+                    Your Blitz Rating: <span className="font-bold text-green-400">{myRatings?.blitz ?? '...'}</span> <span className="text-sm">(view all)</span>
+                </button>
 
-                 {error && <p className="text-red-400 mb-4 font-semibold text-center">{error}</p>}
+                {error && <p className="text-red-400 mb-4 font-semibold text-center">{error}</p>}
 
-                 <div className="flex flex-wrap gap-2 justify-center mb-6 w-full">
+                <div className="flex flex-wrap gap-2 justify-center mb-6 w-full">
                     <MenuButton view="games" label="Open Games" />
                     <MenuButton view="players" label="Players" />
                     <MenuButton view="current_games" label="My Games" count={myCurrentGames.length} />
                     <MenuButton view="finished_games" label="History" />
                     <MenuButton view="challenges" label="Challenges" count={incomingChallenges.length} />
                     <MenuButton view="live" label="Live Games" count={liveGames.length} />
-                 </div>
-
-                 {currentLobbyTab === 'live' && (
-    <div className="w-full max-w-3xl p-4 border border-gray-600 rounded-lg flex flex-col">
-        <h3 className="text-xl font-semibold text-center mb-4">Live Spectator Arena</h3>
-        {liveGames.length === 0 ? <p className="text-gray-400 text-center">No games currently in progress.</p> : null}
-        <div className="flex-grow overflow-y-auto max-h-96 space-y-2 pr-2">
-            {liveGames.map(game => (
-                <div key={game.gameId} className="bg-gray-700 p-3 rounded-lg flex justify-between items-center">
-                    <div>
-                        {/* We hebben de spelersnamen in creatorName gestopt in de stap hierboven */}
-                        <p className="font-semibold truncate text-yellow-100">{game.creatorName}</p>
-                        <p className="text-sm text-gray-400">{renderTimerSetting(game.timerSettings)}, {game.isRated ? 'Rated' : 'Unrated'}</p>
-                    </div>
-                    <button 
-                        onClick={() => onSpectate(game.gameId)} 
-                        className="px-4 py-1 bg-teal-600 hover:bg-teal-700 rounded font-semibold transition-colors flex items-center gap-2"
-                    >
-                        <span>👁️</span> Watch
-                    </button>
                 </div>
-            ))}
-        </div>
-    </div>
-)}
 
-                 {currentLobbyTab === 'challenges' && (
+                {currentLobbyTab === 'live' && (
+                    <div className="w-full max-w-3xl p-4 border border-gray-600 rounded-lg flex flex-col">
+                        <h3 className="text-xl font-semibold text-center mb-4">Live Spectator Arena</h3>
+                        {liveGames.length === 0 ? <p className="text-gray-400 text-center">No games currently in progress.</p> : null}
+                        <div className="flex-grow overflow-y-auto max-h-96 space-y-2 pr-2">
+                            {liveGames.map(game => (
+                                <div key={game.gameId} className="bg-gray-700 p-3 rounded-lg flex justify-between items-center">
+                                    <div>
+                                        {/* We hebben de spelersnamen in creatorName gestopt in de stap hierboven */}
+                                        <p className="font-semibold truncate text-yellow-100">{game.creatorName}</p>
+                                        <p className="text-sm text-gray-400">{renderTimerSetting(game.timerSettings)}, {game.isRated ? 'Rated' : 'Unrated'}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => onSpectate(game.gameId)}
+                                        className="px-4 py-1 bg-teal-600 hover:bg-teal-700 rounded font-semibold transition-colors flex items-center gap-2"
+                                    >
+                                        <span>👁️</span> Watch
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {currentLobbyTab === 'challenges' && (
                     <div className="w-full max-w-3xl flex flex-col gap-6">
                         <div className="p-4 border border-gray-600 rounded-lg flex flex-col">
                             <h3 className="text-xl font-semibold text-center mb-4 text-green-400">Incoming Challenges</h3>
@@ -995,90 +988,89 @@ const filteredLiveGames = useMemo(() => {
                             )}
                         </div>
                     </div>
-                 )}
+                )}
 
-                 {currentLobbyTab === 'live' && (
-    <div className="flex flex-col w-full max-w-3xl space-y-4 animate-fadeIn">
-        
-        {/* 1. Filter Knoppen */}
-        <div className="flex flex-wrap gap-2 justify-center bg-gray-800/50 p-3 rounded-lg border border-gray-700">
-            <span className="text-sm text-gray-400 w-full text-center mb-1 font-medium">Filter by time control:</span>
-            {['hyperbullet', 'bullet', 'blitz', 'rapid', 'daily', 'unlimited'].map((cat) => (
-                <button
-                    key={cat}
-                    onClick={() => toggleFilter(cat)}
-                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all duration-200 ${
-                        filters[cat] 
-                        ? 'bg-teal-600 text-white shadow-[0_0_10px_rgba(20,184,166,0.4)] border border-teal-400' 
-                        : 'bg-gray-800 text-gray-500 border border-gray-700 hover:border-gray-500'
-                    }`}
-                >
-                    {cat.toUpperCase()}
-                </button>
-            ))}
-        </div>
+                {currentLobbyTab === 'live' && (
+                    <div className="flex flex-col w-full max-w-3xl space-y-4 animate-fadeIn">
 
-        {/* 2. De Lijst met Partijen */}
-        <div className="bg-gray-900/80 border border-gray-700 rounded-xl p-4 min-h-[400px] max-h-[600px] overflow-y-auto custom-scrollbar">
-            {filteredLiveGames.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full py-20 text-gray-500">
-                    <span className="text-4xl mb-2">👁️‍🗨️</span>
-                    <p>No live games found with these filters.</p>
-                </div>
-            ) : (
-                <div className="grid gap-3">
-                    {filteredLiveGames.map(game => (
-                        <div key={game.gameId} className="bg-gray-800 hover:bg-gray-750 p-4 rounded-lg flex justify-between items-center border border-gray-700 transition-colors shadow-sm">
-                            <div className="flex flex-col">
-                                <div className="flex items-center gap-2">
-                                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                                    <p className="font-semibold text-gray-100">{game.creatorName}</p>
-                                </div>
-                                <div className="flex gap-3 mt-1 text-xs text-gray-400">
-                                    <span className="flex items-center gap-1">⏱️ {(() => {
-        const settings = game.timerSettings;
-        if (!settings) return '⏱️ ?';
-
-        // 1. Check op Unlimited
-        if (game.ratingCategory?.toLowerCase() === 'unlimited' || settings.isUnlimited) {
-            return '⏱️ Unlimited';
-        }
-
-        // 2. Check op Daily (Dagen)
-        // We kijken of 'daysPerMove' bestaat (of hoe dat veld in jouw types heet)
-        if (game.ratingCategory?.toLowerCase() === 'daily') {
-            const days = settings.daysPerMove || settings.initialTime; // Pas aan naar jouw veldnaam
-            return `⏱️ ${days} days`;
-        }
-
-        // 3. Standaard minuten (Bullet/Blitz/Rapid)
-        const mins = settings.initialTime/60 || settings.minutes;
-        const inc = settings.increment ?? 0;
-        return `⏱️ ${mins}m + ${inc}s`;
-    })()}</span>
-                                    <span className="flex items-center gap-1">🏆 {game.ratingCategory}</span>
-                                    {game.isRated && <span className="text-teal-400 font-bold">RATED</span>}
-                                </div>
-                            </div>
-                            <button 
-                                onClick={() => onSpectate(game.gameId)} 
-                                className="bg-teal-600 hover:bg-teal-500 text-white px-6 py-2 rounded-lg font-bold transition-transform active:scale-95 flex items-center gap-2 shadow-lg"
-                            >
-                                <span>👁️</span> Watch
-                            </button>
+                        {/* 1. Filter Knoppen */}
+                        <div className="flex flex-wrap gap-2 justify-center bg-gray-800/50 p-3 rounded-lg border border-gray-700">
+                            <span className="text-sm text-gray-400 w-full text-center mb-1 font-medium">Filter by time control:</span>
+                            {['hyperbullet', 'bullet', 'blitz', 'rapid', 'daily', 'unlimited'].map((cat) => (
+                                <button
+                                    key={cat}
+                                    onClick={() => toggleFilter(cat)}
+                                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all duration-200 ${filters[cat]
+                                        ? 'bg-teal-600 text-white shadow-[0_0_10px_rgba(20,184,166,0.4)] border border-teal-400'
+                                        : 'bg-gray-800 text-gray-500 border border-gray-700 hover:border-gray-500'
+                                        }`}
+                                >
+                                    {cat.toUpperCase()}
+                                </button>
+                            ))}
                         </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    </div>
-)}
 
-                 {currentLobbyTab === 'current_games' && (
+                        {/* 2. De Lijst met Partijen */}
+                        <div className="bg-gray-900/80 border border-gray-700 rounded-xl p-4 min-h-[400px] max-h-[600px] overflow-y-auto custom-scrollbar">
+                            {filteredLiveGames.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-full py-20 text-gray-500">
+                                    <span className="text-4xl mb-2">👁️‍🗨️</span>
+                                    <p>No live games found with these filters.</p>
+                                </div>
+                            ) : (
+                                <div className="grid gap-3">
+                                    {filteredLiveGames.map(game => (
+                                        <div key={game.gameId} className="bg-gray-800 hover:bg-gray-750 p-4 rounded-lg flex justify-between items-center border border-gray-700 transition-colors shadow-sm">
+                                            <div className="flex flex-col">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                                                    <p className="font-semibold text-gray-100">{game.creatorName}</p>
+                                                </div>
+                                                <div className="flex gap-3 mt-1 text-xs text-gray-400">
+                                                    <span className="flex items-center gap-1">⏱️ {(() => {
+                                                        const settings = game.timerSettings;
+                                                        if (!settings) return '⏱️ ?';
+
+                                                        // 1. Check op Unlimited
+                                                        if (game.ratingCategory?.toLowerCase() === 'unlimited' || settings.isUnlimited) {
+                                                            return '⏱️ Unlimited';
+                                                        }
+
+                                                        // 2. Check op Daily (Dagen)
+                                                        // We kijken of 'daysPerMove' bestaat (of hoe dat veld in jouw types heet)
+                                                        if (game.ratingCategory?.toLowerCase() === 'daily') {
+                                                            const days = settings.daysPerMove || settings.initialTime; // Pas aan naar jouw veldnaam
+                                                            return `⏱️ ${days} days`;
+                                                        }
+
+                                                        // 3. Standaard minuten (Bullet/Blitz/Rapid)
+                                                        const mins = settings.initialTime / 60 || settings.minutes;
+                                                        const inc = settings.increment ?? 0;
+                                                        return `⏱️ ${mins}m + ${inc}s`;
+                                                    })()}</span>
+                                                    <span className="flex items-center gap-1">🏆 {game.ratingCategory}</span>
+                                                    {game.isRated && <span className="text-teal-400 font-bold">RATED</span>}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => onSpectate(game.gameId)}
+                                                className="bg-teal-600 hover:bg-teal-500 text-white px-6 py-2 rounded-lg font-bold transition-transform active:scale-95 flex items-center gap-2 shadow-lg"
+                                            >
+                                                <span>👁️</span> Watch
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {currentLobbyTab === 'current_games' && (
                     <div className="w-full max-w-3xl p-4 border border-gray-600 rounded-lg flex flex-col">
                         <h3 className="text-xl font-semibold text-center mb-4">My Active Games</h3>
                         {myCurrentGames.length === 0 ? <p className="text-gray-400 text-center">No active games.</p> : null}
-                         <div className="flex-grow overflow-y-auto max-h-96 space-y-2 pr-2">{myCurrentGames.map(game => (
+                        <div className="flex-grow overflow-y-auto max-h-96 space-y-2 pr-2">{myCurrentGames.map(game => (
                             <div key={game.gameId} className={`p-3 rounded-lg flex justify-between items-center ${game.status === 'playing' && game.isMyTurn ? 'bg-green-800' : 'bg-gray-700'}`}>
                                 {game.status === 'waiting' ? (
                                     <>
@@ -1105,14 +1097,14 @@ const filteredLiveGames = useMemo(() => {
                                     </>
                                 )}
                             </div>))}
-                         </div>
+                        </div>
                     </div>
-                 )}
-                 {currentLobbyTab === 'finished_games' && (
+                )}
+                {currentLobbyTab === 'finished_games' && (
                     <div className="w-full max-w-3xl p-4 border border-gray-600 rounded-lg flex flex-col">
                         <h3 className="text-xl font-semibold text-center mb-4">Game History</h3>
                         {myFinishedGames.length === 0 ? <p className="text-gray-400 text-center">No completed games.</p> : null}
-                         <div className="flex-grow overflow-y-auto max-h-96 space-y-2 pr-2">{myFinishedGames.map(({ id, data }) => {
+                        <div className="flex-grow overflow-y-auto max-h-96 space-y-2 pr-2">{myFinishedGames.map(({ id, data }) => {
                             const myColor = data.playerColors.white === userUid ? Color.White : Color.Black;
                             const opponentColor = myColor === Color.White ? Color.Black : Color.White;
                             const opponentUid = data.playerColors[opponentColor];
@@ -1129,85 +1121,85 @@ const filteredLiveGames = useMemo(() => {
                                     <button onClick={() => onReview(data)} className="px-4 py-2 ml-4 bg-blue-600 hover:bg-blue-700 rounded font-semibold transition-colors">Review Game</button>
                                 </div>
                             );
-                         })}
-                         </div>
+                        })}
+                        </div>
                     </div>
-                 )}
-                 {currentLobbyTab === 'games' && (
-                     <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-8">
-                         <div className="p-4 border border-gray-600 rounded-lg flex flex-col gap-4">
+                )}
+                {currentLobbyTab === 'games' && (
+                    <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="p-4 border border-gray-600 rounded-lg flex flex-col gap-4">
                             <h3 className="text-xl font-semibold text-center">Create New Game</h3>
-                            <div className="flex items-center justify-center"><input id="rated-check" type="checkbox" checked={isRated} onChange={(e) => setIsRated(e.target.checked)} className="w-4 h-4 text-purple-600 bg-gray-700 border-gray-600 rounded focus:ring-purple-600 ring-offset-gray-800 focus:ring-2"/><label htmlFor="rated-check" className="ms-2 text-lg font-medium text-gray-300">Rated Game</label></div>
-                            
+                            <div className="flex items-center justify-center"><input id="rated-check" type="checkbox" checked={isRated} onChange={(e) => setIsRated(e.target.checked)} className="w-4 h-4 text-purple-600 bg-gray-700 border-gray-600 rounded focus:ring-purple-600 ring-offset-gray-800 focus:ring-2" /><label htmlFor="rated-check" className="ms-2 text-lg font-medium text-gray-300">Rated Game</label></div>
+
                             <div className="flex justify-center bg-gray-700 rounded-lg p-1">
                                 <button onClick={() => setTimeControlType('realtime')} className={`flex-1 p-2 rounded ${timeControlType === 'realtime' ? 'bg-blue-600' : ''}`}>Real-Time</button>
                                 <button onClick={() => setTimeControlType('correspondence')} className={`flex-1 p-2 rounded ${timeControlType === 'correspondence' ? 'bg-blue-600' : ''}`}>Correspondence</button>
                             </div>
 
-                             {timeControlType === 'realtime' && (
+                            {timeControlType === 'realtime' && (
                                 <div className='flex gap-2 items-end'>
-                                    <div><label className="block mb-1 text-md font-medium text-gray-300">Base Time (min)</label><input type="number" value={baseMinutes} onChange={e => setBaseMinutes(e.target.value)} className="w-full p-2 bg-gray-700 text-white rounded-lg border-2 border-gray-600" step="0.1" min="0.1"/></div>
-                                    <div><label className="block mb-1 text-md font-medium text-gray-300">Increment (sec)</label><input type="number" value={increment} onChange={e => { const val = e.target.value; if (val === '' || parseInt(val, 10) >= 0) setIncrement(val); }} className="w-full p-2 bg-gray-700 text-white rounded-lg border-2 border-gray-600" min="0"/></div>
+                                    <div><label className="block mb-1 text-md font-medium text-gray-300">Base Time (min)</label><input type="number" value={baseMinutes} onChange={e => setBaseMinutes(e.target.value)} className="w-full p-2 bg-gray-700 text-white rounded-lg border-2 border-gray-600" step="0.1" min="0.1" /></div>
+                                    <div><label className="block mb-1 text-md font-medium text-gray-300">Increment (sec)</label><input type="number" value={increment} onChange={e => { const val = e.target.value; if (val === '' || parseInt(val, 10) >= 0) setIncrement(val); }} className="w-full p-2 bg-gray-700 text-white rounded-lg border-2 border-gray-600" min="0" /></div>
                                 </div>
-                             )}
-                             {timeControlType === 'correspondence' && (
+                            )}
+                            {timeControlType === 'correspondence' && (
                                 <div className="space-y-3">
                                     <div className="flex items-center justify-center gap-4 text-lg">
-                                        <label className="flex items-center"><input type="radio" name="corr-type" value="daily" checked={correspondenceType === 'daily'} onChange={() => setCorrespondenceType('daily')} className="w-4 h-4 text-blue-600 bg-gray-900 border-gray-700 focus:ring-blue-600 ring-offset-gray-800 focus:ring-2"/> <span className="ml-2">Daily</span></label>
-                                        <label className="flex items-center"><input type="radio" name="corr-type" value="unlimited" checked={correspondenceType === 'unlimited'} onChange={() => setCorrespondenceType('unlimited')} className="w-4 h-4 text-blue-600 bg-gray-900 border-gray-700 focus:ring-blue-600 ring-offset-gray-800 focus:ring-2"/> <span className="ml-2">Unlimited</span></label>
+                                        <label className="flex items-center"><input type="radio" name="corr-type" value="daily" checked={correspondenceType === 'daily'} onChange={() => setCorrespondenceType('daily')} className="w-4 h-4 text-blue-600 bg-gray-900 border-gray-700 focus:ring-blue-600 ring-offset-gray-800 focus:ring-2" /> <span className="ml-2">Daily</span></label>
+                                        <label className="flex items-center"><input type="radio" name="corr-type" value="unlimited" checked={correspondenceType === 'unlimited'} onChange={() => setCorrespondenceType('unlimited')} className="w-4 h-4 text-blue-600 bg-gray-900 border-gray-700 focus:ring-blue-600 ring-offset-gray-800 focus:ring-2" /> <span className="ml-2">Unlimited</span></label>
                                     </div>
                                     <div className={`transition-opacity duration-300 ${correspondenceType === 'unlimited' ? 'opacity-50' : 'opacity-100'}`}>
                                         <label className="block mb-1 text-md font-medium text-gray-300 text-center">Days per Move</label>
                                         <input type="number" value={daysPerMove} onChange={e => setDaysPerMove(e.target.value)} disabled={correspondenceType === 'unlimited'} className="w-full p-2 bg-gray-700 text-white rounded-lg border-2 border-gray-600 disabled:cursor-not-allowed" min="1" step="1" />
                                     </div>
                                 </div>
-                             )}
+                            )}
 
                             <button onClick={handleCreateGame} disabled={isActionInProgress} className="w-full mt-2 px-6 py-3 bg-green-600 hover:bg-green-700 rounded-lg text-xl font-semibold transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed">{isCreatingGame ? 'Creating...' : 'Create Game'}</button>
-                         </div>
-                         <div className="p-4 border border-gray-600 rounded-lg flex flex-col"><h3 className="text-xl font-semibold text-center mb-4">Join a Game</h3>
-                             {isLobbyLoading ? <p className="text-gray-400 text-center">Loading games...</p> : !openGames.length ? <p className="text-gray-400 text-center">No open games available.</p> : null}
-                             <div className="flex-grow overflow-y-auto max-h-64 space-y-2 pr-2">{openGames.map(game => (
+                        </div>
+                        <div className="p-4 border border-gray-600 rounded-lg flex flex-col"><h3 className="text-xl font-semibold text-center mb-4">Join a Game</h3>
+                            {isLobbyLoading ? <p className="text-gray-400 text-center">Loading games...</p> : !openGames.length ? <p className="text-gray-400 text-center">No open games available.</p> : null}
+                            <div className="flex-grow overflow-y-auto max-h-64 space-y-2 pr-2">{openGames.map(game => (
                                 <div key={game.gameId} className="bg-gray-700 p-3 rounded-lg flex justify-between items-center">
                                     <div><p className="font-semibold truncate">{game.creatorName} ({game.creatorRatings?.[game.ratingCategory] ?? '...'})</p><p className="text-sm text-gray-400">{renderTimerSetting(game.timerSettings)}, {game.isRated ? 'Rated' : 'Unrated'}</p></div>
                                     <button onClick={() => handleJoinGame(game)} disabled={isActionInProgress} className="px-4 py-1 bg-blue-600 hover:bg-blue-700 rounded font-semibold transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed">{isJoiningGame === game.gameId ? 'Joining...' : 'Join'}</button>
                                 </div>))}
-                             </div>
-                         </div>
-                     </div>
-                 )}
-                 {currentLobbyTab === 'players' && (
-                     <div className="w-full max-w-3xl p-4 border border-gray-600 rounded-lg flex flex-col"><h3 className="text-xl font-semibold text-center mb-4">Active Players</h3>
-                         <input type="text" placeholder="Search for a player..." value={searchText} onChange={e => setSearchText(e.target.value)} className="w-full p-2 mb-4 bg-gray-700 text-white rounded-lg border-2 border-gray-600"/>
-                         <div className="flex-grow overflow-y-auto max-h-80 space-y-2 pr-2">{filteredUsers.map(user => (
+                            </div>
+                        </div>
+                    </div>
+                )}
+                {currentLobbyTab === 'players' && (
+                    <div className="w-full max-w-3xl p-4 border border-gray-600 rounded-lg flex flex-col"><h3 className="text-xl font-semibold text-center mb-4">Active Players</h3>
+                        <input type="text" placeholder="Search for a player..." value={searchText} onChange={e => setSearchText(e.target.value)} className="w-full p-2 mb-4 bg-gray-700 text-white rounded-lg border-2 border-gray-600" />
+                        <div className="flex-grow overflow-y-auto max-h-80 space-y-2 pr-2">{filteredUsers.map(user => (
                             <div key={user.uid} className="bg-gray-700 p-3 rounded-lg flex justify-between items-center">
                                 <button onClick={() => setViewingPlayerRatings(user)} className="flex items-center gap-2 text-left hover:bg-gray-600 rounded p-1 flex-grow">
                                     <span className={`w-3 h-3 rounded-full flex-shrink-0 ${user.isOnline ? 'bg-green-500' : 'bg-gray-500'}`}></span>
                                     <p className="font-semibold truncate">{user.displayName} (Blitz: {user.ratings?.blitz ?? 1200})</p>
                                 </button>
-                                <button 
-                                    onClick={() => setChallengeTarget(user)} 
+                                <button
+                                    onClick={() => setChallengeTarget(user)}
                                     className="ml-2 px-3 py-1 bg-purple-600 hover:bg-purple-500 rounded text-sm font-semibold transition-colors whitespace-nowrap"
                                 >
                                     Challenge
                                 </button>
                             </div>))}
-                         </div>
-                     </div>
-                 )}
-                 
-                 <button onClick={onBack} className="mt-8 px-6 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-semibold transition-colors">Back to Menu</button>
-             </div>
-             {viewingPlayerRatings && <PlayerRatingsModal user={viewingPlayerRatings} onClose={() => setViewingPlayerRatings(null)} />}
-             {challengeTarget && (
-                <ChallengeConfigModal 
-                    opponent={challengeTarget} 
-                    onCancel={() => setChallengeTarget(null)} 
-                    onSend={handleSendChallenge} 
+                        </div>
+                    </div>
+                )}
+
+                <button onClick={onBack} className="mt-8 px-6 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-semibold transition-colors">Back to Menu</button>
+            </div>
+            {viewingPlayerRatings && <PlayerRatingsModal user={viewingPlayerRatings} onClose={() => setViewingPlayerRatings(null)} />}
+            {challengeTarget && (
+                <ChallengeConfigModal
+                    opponent={challengeTarget}
+                    onCancel={() => setChallengeTarget(null)}
+                    onSend={handleSendChallenge}
                 />
-             )}
-             {showSettings && (
-                <SettingsModal 
+            )}
+            {showSettings && (
+                <SettingsModal
                     onClose={() => setShowSettings(false)}
                     premovesEnabled={premovesEnabled}
                     setPremovesEnabled={setPremovesEnabled}
@@ -1218,7 +1210,7 @@ const filteredLiveGames = useMemo(() => {
                     resignConfirmationEnabled={resignConfirmationEnabled}
                     setResignConfirmationEnabled={setResignConfirmationEnabled}
                 />
-             )}
+            )}
         </div>
     );
 };
