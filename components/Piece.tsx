@@ -3,22 +3,35 @@
 import React from 'react';
 import { Piece as PieceProps, PieceType, Color } from '../types';
 
+import whiteKing from '../images/white_king.svg';
+import whiteQueen from '../images/white_queen.svg';
+import whiteRook from '../images/white_rook.svg';
+import whiteBishop from '../images/white_bishop.svg';
+import whiteKnight from '../images/white_knight.svg';
+import whitePawn from '../images/white_pawn.svg';
+import blackKing from '../images/black_king.svg';
+import blackQueen from '../images/black_queen.svg';
+import blackRook from '../images/black_rook.svg';
+import blackBishop from '../images/black_bishop.svg';
+import blackKnight from '../images/black_knight.svg';
+import blackPawn from '../images/black_pawn.svg';
+
 const svgs: Record<Color, Record<PieceType, string>> = {
     [Color.White]: {
-        [PieceType.King]: "../images/white_king.svg",
-        [PieceType.Queen]: "../images/white_queen.svg",
-        [PieceType.Rook]: "../images/white_rook.svg",
-        [PieceType.Bishop]: "../images/white_bishop.svg",
-        [PieceType.Knight]: "../images/white_knight.svg",
-        [PieceType.Pawn]: "../images/white_pawn.svg",
+        [PieceType.King]: whiteKing,
+        [PieceType.Queen]: whiteQueen,
+        [PieceType.Rook]: whiteRook,
+        [PieceType.Bishop]: whiteBishop,
+        [PieceType.Knight]: whiteKnight,
+        [PieceType.Pawn]: whitePawn,
     },
     [Color.Black]: {
-        [PieceType.King]: "../images/black_king.svg",
-        [PieceType.Queen]: "../images/black_queen.svg",
-        [PieceType.Rook]: "../images/black_rook.svg",
-        [PieceType.Bishop]: "../images/black_bishop.svg",
-        [PieceType.Knight]: "../images/black_knight.svg",
-        [PieceType.Pawn]: "../images/black_pawn.svg",
+        [PieceType.King]: blackKing,
+        [PieceType.Queen]: blackQueen,
+        [PieceType.Rook]: blackRook,
+        [PieceType.Bishop]: blackBishop,
+        [PieceType.Knight]: blackKnight,
+        [PieceType.Pawn]: blackPawn,
     },
 };
 
