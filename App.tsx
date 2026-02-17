@@ -399,10 +399,11 @@ const App: React.FC = () => {
 
         const rawBoard = state.board;
         const safeBoard: BoardState = Array(8).fill(null).map(() => Array(8).fill(null));
-        if (rawBoard && Array.isArray(rawBoard)) {
+        // Check if rawBoard is an object or array (Firebase can return objects for sparse arrays)
+        if (rawBoard && typeof rawBoard === 'object') {
             for (let r = 0; r < 8; r++) {
-                const rawRow = rawBoard[r];
-                if (rawRow && (Array.isArray(rawRow) || typeof rawRow === 'object')) {
+                const rawRow = (rawBoard as any)[r];
+                if (rawRow && typeof rawRow === 'object') {
                     for (let c = 0; c < 8; c++) {
                         safeBoard[r][c] = sanitizePiece((rawRow as any)[c]);
                     }
