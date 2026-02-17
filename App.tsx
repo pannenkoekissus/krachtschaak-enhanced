@@ -190,9 +190,7 @@ const App: React.FC = () => {
         // Move Sounds
         if ((status === 'playing' || status === 'promotion') && hasMoveChanged) {
             // Priority: Check > Capture > Move
-            if (isKingInCheck(board, turn)) {
-                playCheckSound();
-            } else if (hasCapture) {
+            if (hasCapture) {
                 playCaptureSound();
             } else {
                 playMoveSound();
