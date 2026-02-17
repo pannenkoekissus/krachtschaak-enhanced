@@ -13,7 +13,6 @@ import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingIn
 import { getRatingCategory, RatingCategory, RATING_CATEGORIES } from './utils/ratings';
 import { isFirebaseConfigured, auth, db } from './firebaseConfig';
 import SettingsModal from './components/SettingsModal';
-import KrachtschaakAI from './engine';
 
 var continueGameClicks = -1;
 const formatTime = (totalSeconds: number | null | undefined): string => {
@@ -67,11 +66,11 @@ const App: React.FC = () => {
     const [timerSettings, setTimerSettings] = useState<TimerSettings>(null);
     const [turnStartTime, setTurnStartTime] = useState<number | null>(null);
     const [completedAt, setCompletedAt] = useState<number | null>(null);
-    
+
     const [gameMode, setGameMode] = useState<GameMode>('menu');
     const [showLocalSetup, setShowLocalSetup] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
-    
+
     // Online state
     const [gameId, setGameId] = useState<string | null>(null);
     const [myOnlineColor, setMyOnlineColor] = useState<Color | null>(null);
@@ -92,8 +91,8 @@ const App: React.FC = () => {
     const [reviewingGame, setReviewingGame] = useState<GameState | null>(null);
     const [showPowerLegend, setShowPowerLegend] = useState(false);
     const [showConfirmation, setShowConfirmation] = useState<'draw' | 'resign' | 'move' | 'premove' | null>(null);
-    const [pendingMove, setPendingMove] = useState<{from: Position, to: Position} | null>(null);
-    const [pendingPremove, setPendingPremove] = useState<{from: Position, to: Position, isForcePower: boolean} | null>(null);
+    const [pendingMove, setPendingMove] = useState<{ from: Position, to: Position } | null>(null);
+    const [pendingPremove, setPendingPremove] = useState<{ from: Position, to: Position, isForcePower: boolean } | null>(null);
     const [showLogoutWarning, setShowLogoutWarning] = useState(false);
 
     // New Features: History & Chat
@@ -113,7 +112,7 @@ const App: React.FC = () => {
     const [resignConfirmationEnabled, _setResignConfirmationEnabled] = useState(true);
     const [showPowerPieces, _setShowPowerPieces] = useState(true);
     const [premoves, setPremoves] = useState<GameState['premoves']>({});
-    
+
     // Commit confirmation interception state
     const [pendingCommitState, setPendingCommitState] = useState<GameState | null>(null);
     const [preCommitState, setPreCommitState] = useState<GameState | null>(null);
@@ -121,14 +120,14 @@ const App: React.FC = () => {
 
     // Menu Message State
     const [menuMessage, setMenuMessage] = useState<{ text: string, type: 'info' | 'error' } | null>(null);
-    
+
     // UI State for highlighting and arrows
     const [lastMove, setLastMove] = useState<{ from: Position, to: Position } | null>(null);
     const [playersLeft, setPlayersLeft] = useState<{ [uid: string]: boolean }>({});
     const [highlightedSquares, setHighlightedSquares] = useState<Position[]>([]);
     const [arrows, setArrows] = useState<{ from: Position; to: Position }[]>([]);
     const [rightClickStartSquare, setRightClickStartSquare] = useState<Position | null>(null);
-    
+
     // Lifted Lobby State
     const [lobbyView, setLobbyView] = useState<'games' | 'players' | 'current_games' | 'finished_games' | 'challenges'>('games');
 
@@ -137,10 +136,11 @@ const App: React.FC = () => {
     const [myRatings, setMyRatings] = useState<Record<RatingCategory, number> | null>(null);
     const [authLoading, setAuthLoading] = useState(true);
     const [showAuthModal, setShowAuthModal] = useState(false);
-    
+
     const statusRef = useRef(status);
     const timerRef = useRef<number | null>(null);
     const gameStateRef = useRef<GameState | null>(null);
+    const isProcessingGameOver = useRef(false);
     const rejoinTimerRef = useRef<number | null>(null);
     const countdownIntervalRef = useRef<number | null>(null);
     const presenceListeners = useRef<{ connectedRef?: any; userSessionsRef?: any }>({});
@@ -164,7 +164,7 @@ const App: React.FC = () => {
 
     useEffect(() => {
         if (activeTab === 'moves' && movesContainerRef.current) {
-             movesContainerRef.current.scrollTop = movesContainerRef.current.scrollHeight;
+            movesContainerRef.current.scrollTop = movesContainerRef.current.scrollHeight;
         }
     }, [moveHistory, activeTab]);
 
@@ -173,9 +173,9 @@ const App: React.FC = () => {
         if (currentUser && gameRef && (activeTab === 'chat')) {
             // Update last read timestamp in Firebase if we are in chat tab and messages exist
             if (chatMessages.length > 0) {
-                 const now = Date.now();
-                 // Use update instead of set to avoid overwriting other user data
-                 gameRef.child(`players/${currentUser.uid}`).update({ lastReadChatTimestamp: now });
+                const now = Date.now();
+                // Use update instead of set to avoid overwriting other user data
+                gameRef.child(`players/${currentUser.uid}`).update({ lastReadChatTimestamp: now });
             }
         }
     }, [activeTab, chatMessages.length, currentUser, gameRef]);
@@ -183,16 +183,16 @@ const App: React.FC = () => {
     const unreadChatCount = useMemo(() => {
         if (!currentUser) return 0;
         if (activeTab === 'chat') return 0;
-        
+
         const myPlayer = players[currentUser.uid];
         const lastRead = myPlayer?.lastReadChatTimestamp || 0;
-        
-        return chatMessages.filter(msg => 
+
+        return chatMessages.filter(msg =>
             msg.uid !== currentUser.uid && msg.timestamp > lastRead
         ).length;
     }, [chatMessages, players, currentUser, activeTab]);
 
-    
+
     const randomizeNextGameColor = useCallback(() => {
         setNextGameColor(Math.random() < 0.5 ? Color.White : Color.Black);
     }, []);
@@ -241,7 +241,7 @@ const App: React.FC = () => {
             db.ref(`userSettings/${currentUser.uid}/${key}`).set(value);
         }
     };
-    
+
     // Load settings from Firebase
     useEffect(() => {
         if (currentUser && isFirebaseConfigured) {
@@ -267,7 +267,7 @@ const App: React.FC = () => {
             setShowAuthModal(true);
             return;
         }
-    
+
         const unsubscribe = auth.onAuthStateChanged(async (user: any) => {
             // Clean up any listeners from the previous user
             if (presenceListeners.current.connectedRef) presenceListeners.current.connectedRef.off();
@@ -276,7 +276,7 @@ const App: React.FC = () => {
             sessionRef.current = null;
 
             const isAllowedIn = user && (user.isAnonymous || user.emailVerified);
-    
+
             if (isAllowedIn) {
                 const ratingRef = db.ref(`userRatings/${user.uid}`);
                 const ratingSnap = await ratingRef.once('value');
@@ -293,28 +293,28 @@ const App: React.FC = () => {
 
                 setCurrentUser(user);
                 setShowAuthModal(false);
-    
+
                 const liveRatingRef = db.ref(`userRatings/${user.uid}/ratings`);
                 liveRatingRef.on('value', (snapshot: any) => {
                     setMyRatings(snapshot.val());
                 });
-    
+
                 // Multi-session presence system
                 const userRef = db.ref(`users/${user.uid}`);
                 const connectedRef = db.ref('.info/connected');
                 const userSessionsRef = db.ref(`sessions/${user.uid}`);
                 const userIsOnlineRef = userRef.child('isOnline');
-                
+
                 presenceListeners.current = { connectedRef, userSessionsRef };
 
                 connectedRef.on('value', (snap: any) => {
                     if (snap.val() !== true) return;
-                    
+
                     const session = userSessionsRef.push(true);
                     sessionRef.current = session;
-                    
+
                     // When this session disconnects, remove it from the list.
-                    session.onDisconnect().remove(() => {});
+                    session.onDisconnect().remove(() => { });
 
                     // Also, queue a status update to offline. 
                     // If other sessions are open, their listener will override this back to true.
@@ -325,7 +325,7 @@ const App: React.FC = () => {
                         userRef.child('displayName').set(user.displayName);
                     }
                 });
-                
+
                 userSessionsRef.on('value', (snapshot: any) => {
                     userIsOnlineRef.set(snapshot.exists());
                 });
@@ -337,14 +337,14 @@ const App: React.FC = () => {
             }
             setAuthLoading(false);
         });
-    
+
         return () => {
             unsubscribe();
             if (presenceListeners.current.connectedRef) presenceListeners.current.connectedRef.off();
             if (presenceListeners.current.userSessionsRef) presenceListeners.current.userSessionsRef.off();
         };
     }, []);
-    
+
     const currentGameState = useMemo((): GameState => ({
         board, turn, status, winner, promotionData, capturedPieces,
         enPassantTarget, halfmoveClock, positionHistory,
@@ -358,7 +358,7 @@ const App: React.FC = () => {
         isRated, rematchOffer, nextGameId, ratingChange, challengedPlayerInfo, turnStartTime, premoves, lastMove, playersLeft,
         completedAt, moveHistory, chatMessages
     ]);
-    
+
     useEffect(() => {
         gameStateRef.current = currentGameState;
     }, [currentGameState]);
@@ -372,7 +372,7 @@ const App: React.FC = () => {
             }
         }
     }, [gameMode, gameRef]);
-    
+
     const loadGameState = useCallback((state: GameState | null) => {
         if (!state) {
             return;
@@ -391,26 +391,26 @@ const App: React.FC = () => {
             }
             return null;
         };
-    
+
         const sanitizePieceArray = (arr: any[] | undefined): Piece[] => {
             if (!Array.isArray(arr)) return [];
             return arr.map(sanitizePiece).filter((p): p is Piece => p !== null);
         };
-    
+
         const rawBoard = state.board;
         const safeBoard: BoardState = Array(8).fill(null).map(() => Array(8).fill(null));
         if (rawBoard && Array.isArray(rawBoard)) {
             for (let r = 0; r < 8; r++) {
                 const rawRow = rawBoard[r];
                 if (rawRow && (Array.isArray(rawRow) || typeof rawRow === 'object')) {
-                     for (let c = 0; c < 8; c++) {
+                    for (let c = 0; c < 8; c++) {
                         safeBoard[r][c] = sanitizePiece((rawRow as any)[c]);
                     }
                 }
             }
         }
         setBoard(safeBoard);
-    
+
         const rawCaptured = state.capturedPieces;
         const safeCaptured: Record<Color, Piece[]> = { white: [], black: [] };
         if (rawCaptured && typeof rawCaptured === 'object') {
@@ -418,9 +418,14 @@ const App: React.FC = () => {
             safeCaptured.black = sanitizePieceArray(rawCaptured.black);
         }
         setCapturedPieces(safeCaptured);
-    
+
         setTurn(state.turn || Color.White);
-        setStatus(state.status || 'playing');
+
+        const newStatus = state.status || 'playing';
+        if (newStatus === 'playing' || newStatus === 'promotion') {
+            isProcessingGameOver.current = false;
+        }
+        setStatus(newStatus);
         setWinner(state.winner || null);
         setPromotionData(state.promotionData || null);
         setEnPassantTarget(state.enPassantTarget || null);
@@ -428,7 +433,7 @@ const App: React.FC = () => {
         setPositionHistory(state.positionHistory || {});
         setAmbiguousEnPassantData(state.ambiguousEnPassantData || null);
         setDrawOffer(state.drawOffer || null);
-    
+
         setPlayerTimes(state.playerTimes || null);
         setDisplayedTime(state.playerTimes || null);
         setTurnStartTime(state.turnStartTime || null);
@@ -446,7 +451,7 @@ const App: React.FC = () => {
         setLastMove(state.lastMove || null);
         setMoveHistory(state.moveHistory || []);
         setChatMessages(state.chat || []);
-        
+
         // This is a transient UI state and should be reset whenever the game state is loaded.
         setDraggedPiece(null);
 
@@ -473,7 +478,7 @@ const App: React.FC = () => {
             }
         }
         setPlayers(safePlayers);
-    
+
         const rawPlayerColors = state.playerColors;
         let safePlayerColors = { white: null, black: null };
         if (typeof rawPlayerColors === 'object' && rawPlayerColors !== null) {
@@ -487,25 +492,25 @@ const App: React.FC = () => {
 
     const commitNewGameState = useCallback((newState: GameState, isFromRemote = false, skipConfirmation = false) => {
         if (!isFromRemote) {
-             const isCorrespondence = !newState.timerSettings || 'daysPerMove' in newState.timerSettings;
-             // Intercept commit for confirmation if enabled for Correspondence/Daily games
-             // Important: Do NOT loadGameState here to prevent visual update until confirmed
-             if (!skipConfirmation && moveConfirmationEnabled && isCorrespondence && gameMode != 'local') {
-                 setPendingCommitState(newState);
-                 
-                 // If we have a state snapshot from before an online interaction (promotion/ambiguous), use that as the base for reversion.
-                 // Otherwise use current state (for simple moves).
-                 const revertState = preInteractionStateRef.current || gameStateRef.current;
-                 setPreCommitState(revertState);
-                 
-                 // Clear the interaction ref now that we've used it
-                 if (preInteractionStateRef.current) {
-                     preInteractionStateRef.current = null;
-                 }
+            const isCorrespondence = !newState.timerSettings || 'daysPerMove' in newState.timerSettings;
+            // Intercept commit for confirmation if enabled for Correspondence/Daily games
+            // Important: Do NOT loadGameState here to prevent visual update until confirmed
+            if (!skipConfirmation && moveConfirmationEnabled && isCorrespondence && gameMode != 'local') {
+                setPendingCommitState(newState);
 
-                 setShowConfirmation('move');
-                 return;
-             }
+                // If we have a state snapshot from before an online interaction (promotion/ambiguous), use that as the base for reversion.
+                // Otherwise use current state (for simple moves).
+                const revertState = preInteractionStateRef.current || gameStateRef.current;
+                setPreCommitState(revertState);
+
+                // Clear the interaction ref now that we've used it
+                if (preInteractionStateRef.current) {
+                    preInteractionStateRef.current = null;
+                }
+
+                setShowConfirmation('move');
+                return;
+            }
 
             loadGameState(newState);
             setSelectedPiece(null);
@@ -514,7 +519,7 @@ const App: React.FC = () => {
             if (gameMode === 'local') {
                 setHistory(prev => [...prev, newState]);
             }
-             updateGameInDb(newState);
+            updateGameInDb(newState);
         } else {
             loadGameState(newState);
         }
@@ -529,63 +534,121 @@ const App: React.FC = () => {
 
     const handleGameOver = useCallback(async (baseState: GameState, newStatus: GameStatus, newWinner: string | null) => {
         if (statusRef.current !== 'playing' && statusRef.current !== 'promotion') return;
+        if (isProcessingGameOver.current) return;
+        isProcessingGameOver.current = true;
 
-        let finalState: GameState = { 
-            ...baseState, 
-            status: newStatus, 
-            winner: newWinner, 
+        let finalState: GameState = {
+            ...baseState,
+            status: newStatus,
+            winner: newWinner,
             playersLeft: baseState.playersLeft || {},
             completedAt: gameMode === 'online_playing' ? (window.firebase.database.ServerValue.TIMESTAMP as any) : Date.now()
         };
-    
-        if (gameMode === 'online_playing' && finalState.isRated && finalState.playerColors.white && finalState.playerColors.black) {
-            const whiteUid = finalState.playerColors.white!;
-            const blackUid = finalState.playerColors.black!;
-            const category = finalState.ratingCategory;
 
-            // Use rating at the end of the game
-            let whiteRating = 1200;
-            let blackRating = 1200;
-            
-            try {
-                // Fetch current ratings
-                const whiteRatingSnap = await db.ref(`userRatings/${whiteUid}/ratings/${category}`).once('value');
-                const blackRatingSnap = await db.ref(`userRatings/${blackUid}/ratings/${category}`).once('value');
-                
-                if (whiteRatingSnap.exists()) whiteRating = whiteRatingSnap.val();
-                if (blackRatingSnap.exists()) blackRating = blackRatingSnap.val();
+        if (gameMode === 'online_playing' && gameRef) {
+            // Transactional update to ensure only ONE client ends the game and does so on valid state
+            gameRef.transaction((currentData: GameState | null) => {
+                if (!currentData) return finalState; // First write? unlikely but safe
 
-            } catch (e) {
-                console.error("Error fetching final ratings", e);
-                // Fallback to initial ratings if fetch fails
-                if (finalState.initialRatings) {
-                    whiteRating = finalState.initialRatings.white;
-                    blackRating = finalState.initialRatings.black;
+                // If game is already over, ABORT transaction (return undefined)
+                if (currentData.status !== 'playing' && currentData.status !== 'promotion') {
+                    console.log("transaction aborted");
+                    return;
+                }
+
+                // Check for "Wrong Person Winning" Race Condition:
+                // If we claim timeout/end based on a turn that doesn't match server, ABORT.
+                // This happens if opponent moved just as we claimed timeout.
+                if (baseState.turn !== currentData.turn) {
+                    console.log("transaction aborted");
+                    return;
+                }
+
+                // Apply our final state
+                // We must manually merge to ensure we don't lose concurrent updates to unrelated fields (like chat),
+                // although for game over, the state transition is usually definitive.
+                // Ideally we return 'finalState', but 'finalState' is based on 'baseState'.
+                // If 'baseState' is stale on chat, we lose chat.
+                // However, 'handleGameOver' usually happens on a synchronized state or a deduced state.
+                // Let's trust 'finalState' is built from a recent 'baseState'.
+
+                // IMPORTANT: Remove undefined fields for Firebase
+                const cleanState = JSON.parse(JSON.stringify(finalState));
+                return cleanState;
+            }, (error, committed, snapshot) => {
+                if (error) {
+                    console.error("Game Over Transaction Failed:", error);
+                    isProcessingGameOver.current = false;
+                } else if (!committed) {
+                    console.log("Game Over Transaction Aborted (Game already finished or state mismatch).");
+                    isProcessingGameOver.current = false; // We didn't finish it, so we stop processing. Ref will be reset by loadGameState when listener fires.
+                } else {
+                    console.log("Game Over Transaction Committed. Processing Ratings...");
+                    // WE are the one who finished the game. Now we update ratings.
+                    processRatings(finalState);
+                }
+            });
+        } else {
+            // Local game - just commit
+            commitNewGameState(finalState, false, true);
+            isProcessingGameOver.current = false;
+        }
+
+        async function processRatings(finalState: GameState) {
+            if (finalState.isRated && finalState.playerColors.white && finalState.playerColors.black) {
+                const whiteUid = finalState.playerColors.white;
+                const blackUid = finalState.playerColors.black;
+                const category = finalState.ratingCategory;
+
+                let whiteRating = 1200;
+                let blackRating = 1200;
+
+                try {
+                    const whiteRatingSnap = await db.ref(`userRatings/${whiteUid}/ratings/${category}`).once('value');
+                    const blackRatingSnap = await db.ref(`userRatings/${blackUid}/ratings/${category}`).once('value');
+
+                    if (whiteRatingSnap.exists()) whiteRating = whiteRatingSnap.val();
+                    if (blackRatingSnap.exists()) blackRating = blackRatingSnap.val();
+
+                } catch (e) {
+                    console.error("Error fetching final ratings", e);
+                    if (finalState.initialRatings) {
+                        whiteRating = finalState.initialRatings.white;
+                        blackRating = finalState.initialRatings.black;
+                    }
+                }
+
+                let whiteScore = 0.5;
+                if (newWinner === 'White' || newWinner === 'white') whiteScore = 1;
+                if (newWinner === 'Black' || newWinner === 'black') whiteScore = 0;
+                const blackScore = 1 - whiteScore;
+
+                const newWhiteRating = calculateElo(whiteRating, blackRating, whiteScore);
+                const newBlackRating = calculateElo(blackRating, whiteRating, blackScore);
+
+                const calculatedRatingChange = {
+                    white: newWhiteRating - whiteRating,
+                    black: newBlackRating - blackRating
+                };
+
+                // Update Ratings
+                const updates: any = {};
+                updates[`userRatings/${whiteUid}/ratings/${category}`] = newWhiteRating;
+                updates[`userRatings/${blackUid}/ratings/${category}`] = newBlackRating;
+
+                // Update the game record with the change
+                if (gameRef) {
+                    updates[`games/${gameId}/ratingChange`] = calculatedRatingChange;
+                    updates[`games/${gameId}/initialRatings`] = { white: whiteRating, black: blackRating }; // Ensure initial is set correctly if missing
+                    gameRef.root.update(updates);
                 }
             }
-            
-            let whiteScore = 0.5;
-            if (newWinner === 'White' || newWinner === 'white') whiteScore = 1;
-            if (newWinner === 'Black' || newWinner === 'black') whiteScore = 0;
-            const blackScore = 1 - whiteScore;
-    
-            const newWhiteRating = calculateElo(whiteRating, blackRating, whiteScore);
-            const newBlackRating = calculateElo(blackRating, whiteRating, blackScore);
-            
-            const calculatedRatingChange = {
-                white: newWhiteRating - whiteRating,
-                black: newBlackRating - blackRating
-            };
-            finalState.ratingChange = calculatedRatingChange;
-    
-            if (myOnlineColor) { // Only the player(s) still in the game should write the result
-                db.ref(`userRatings/${whiteUid}/ratings/${category}`).set(newWhiteRating);
-                db.ref(`userRatings/${blackUid}/ratings/${category}`).set(newBlackRating);
-            }
+            // Logic is done. 'isProcessingGameOver' remains true until component unmounts or state changes via listener.
+            // Actually, we should probably set it to false if we want to allow re-entry?
+            // No, game is over. logic shouldn't run again for this game.
         }
-        // Force commit for game over, bypassing move confirmation logic
-        commitNewGameState(finalState, false, true);
-    }, [gameMode, myOnlineColor, commitNewGameState, gameId]);
+
+    }, [gameMode, commitNewGameState, gameId]);
 
 
     const finalizeTurn = useCallback((
@@ -599,7 +662,7 @@ const App: React.FC = () => {
         moveDetails?: { isForcePower?: boolean }
     ) => {
         const { turn, halfmoveClock, positionHistory, drawOffer, timerSettings, players, playerColors, initialRatings, isRated, ratingCategory, challengedPlayerInfo, playersLeft, moveHistory } = baseState;
-        
+
         const newPlayerTimes = (baseState.playerTimes && timerSettings && 'increment' in timerSettings) ? { ...baseState.playerTimes, [turn]: baseState.playerTimes[turn] + timerSettings.increment } : baseState.playerTimes;
 
         const nextTurn = turn === Color.White ? Color.Black : Color.White;
@@ -609,7 +672,7 @@ const App: React.FC = () => {
         const newPositionHistory = { ...positionHistory, [key]: newCount };
         let newStatus: GameStatus = 'playing';
         let newWinner: string | null = null;
-    
+
         if (newHalfmoveClock >= 100) {
             newStatus = 'draw_fiftyMove';
         } else if (newCount >= 3) {
@@ -617,7 +680,7 @@ const App: React.FC = () => {
         } else {
             const hasStandardLegalMoves = hasLegalMoves(currentBoard, nextTurn, nextEnPassantTarget);
             const canPlayerCaptureKing = canCaptureKing(currentBoard, nextTurn);
-    
+
             if (!hasStandardLegalMoves && !canPlayerCaptureKing) {
                 const isPlayerInCheck = isKingInCheck(currentBoard, nextTurn);
                 if (isPlayerInCheck) {
@@ -638,54 +701,54 @@ const App: React.FC = () => {
         let newMoveHistory = [...(moveHistory || [])];
         if (move) {
             let piece = baseState.board[move.from.row][move.from.col];
-            
+
             // Fallback for online ambiguous en passant where piece is already at 'to' visually in currentState (via localAmbiguousEnPassantState)
             // Note: finalizeTurn is called with currentBoard = newBoard from resolveAmbiguousEnPassant.
             // newBoard has the piece at 'to'.
             // But if we look at baseState.board, the piece might still be at 'from'.
             // However, if we are resolving, we want to grab the piece properties.
             if (!piece && localAmbiguousEnPassantState && localAmbiguousEnPassantState.from.row === move.from.row && localAmbiguousEnPassantState.from.col === move.from.col) {
-                 // Try to grab it from the board passed in, at the 'to' location, since we just moved it there in resolveAmbiguousEnPassant
-                 const pAtTo = currentBoard[move.to.row][move.to.col];
-                 if(pAtTo) piece = pAtTo;
+                // Try to grab it from the board passed in, at the 'to' location, since we just moved it there in resolveAmbiguousEnPassant
+                const pAtTo = currentBoard[move.to.row][move.to.col];
+                if (pAtTo) piece = pAtTo;
             }
-            
+
             // Fallback for local promotion where piece is not at 'from' in baseState if it was already moved during the promotion state transition
             if (!piece && baseState.promotionData && baseState.promotionData.from.row === move.from.row && baseState.promotionData.from.col === move.from.col) {
                 piece = baseState.promotionData.promotingPiece;
             }
-            
+
             // Fallback for online promotion
             if (!piece && localPromotionState && localPromotionState.from.row === move.from.row && localPromotionState.from.col === move.from.col) {
                 piece = localPromotionState.promotingPiece;
             }
-            
-             // Fallback for online ambiguous en passant
-             // Note: We changed logic so movePiece DOES NOT update board visually for ambiguous EP, so piece SHOULD be at 'from'
-             // But keeping fallback just in case of race conditions or specific flows
+
+            // Fallback for online ambiguous en passant
+            // Note: We changed logic so movePiece DOES NOT update board visually for ambiguous EP, so piece SHOULD be at 'from'
+            // But keeping fallback just in case of race conditions or specific flows
             if (!piece && localAmbiguousEnPassantState && localAmbiguousEnPassantState.from.row === move.from.row && localAmbiguousEnPassantState.from.col === move.from.col) {
-                 // Try to grab from currentBoard if not in baseState, but ideally it's in baseState
-                 const pAtFrom = currentBoard[move.to.row][move.to.col]; // It moved to 'to' in currentBoard
-                 if(pAtFrom) piece = pAtFrom; // It might have transformed or moved, but properties should be roughly same for history
+                // Try to grab from currentBoard if not in baseState, but ideally it's in baseState
+                const pAtFrom = currentBoard[move.to.row][move.to.col]; // It moved to 'to' in currentBoard
+                if (pAtFrom) piece = pAtFrom; // It might have transformed or moved, but properties should be roughly same for history
             }
 
 
             if (piece) {
                 const targetPiece = baseState.board[move.to.row][move.to.col];
                 // Determine if it was a capture for notation purposes (en passant, standard, or power move capture)
-                
+
                 let isCapture = false;
                 if (localPromotionState || localAmbiguousEnPassantState) {
-                     // In online promotion/ambiguous, baseState board already has the piece moved. 
-                     // For pawn moves, diagonal implies capture.
-                     isCapture = move.from.col !== move.to.col;
+                    // In online promotion/ambiguous, baseState board already has the piece moved. 
+                    // For pawn moves, diagonal implies capture.
+                    isCapture = move.from.col !== move.to.col;
                 } else {
-                     isCapture = !!targetPiece || (piece?.type === PieceType.Pawn && move.to.col !== move.from.col && !targetPiece);
+                    isCapture = !!targetPiece || (piece?.type === PieceType.Pawn && move.to.col !== move.from.col && !targetPiece);
                 }
-                
+
                 // For online promotion, targetPiece is actually the moved piece itself (since baseState is updated), so we shouldn't use it for capturedPieceType logic directly in a standard way.
                 const capturedPieceType = targetPiece ? targetPiece.type : (isCapture ? PieceType.Pawn : undefined);
-                
+
                 // For getNotation, we need a Piece object if captured.
                 const capturedForNotation = isCapture ? (targetPiece || { type: PieceType.Pawn } as any) : null;
 
@@ -712,7 +775,7 @@ const App: React.FC = () => {
                     isForcePower: !!moveDetails?.isForcePower, // Ensure boolean, never undefined
                     powerConsumed: powerConsumed
                 };
-                
+
                 if (capturedPieceType) {
                     moveData.captured = capturedPieceType;
                 }
@@ -730,11 +793,11 @@ const App: React.FC = () => {
             positionHistory: newPositionHistory, ambiguousEnPassantData: null,
             // Logic change: drawOffer is preserved if it equals the current turn (offerer just moved)
             // and cleared if it equals nextTurn (opponent moved)
-            drawOffer: (drawOffer && drawOffer === turn) ? drawOffer : null, 
+            drawOffer: (drawOffer && drawOffer === turn) ? drawOffer : null,
             playerTimes: newPlayerTimes,
             turnStartTime: null,
             moveDeadline: newMoveDeadline,
-            timerSettings, ratingCategory, players, playerColors, initialRatings, isRated, rematchOffer: null, nextGameId: null, ratingChange: null, challengedPlayerInfo, 
+            timerSettings, ratingCategory, players, playerColors, initialRatings, isRated, rematchOffer: null, nextGameId: null, ratingChange: null, challengedPlayerInfo,
             premoves: baseState.premoves,
             playersLeft,
             lastMove: move,
@@ -746,39 +809,39 @@ const App: React.FC = () => {
             handleGameOver(turnEndState, newStatus, newWinner);
             return;
         }
-    
+
         const newGameState: GameState = {
-           ...turnEndState,
-           turn: nextTurn,
-           turnStartTime: (timerSettings && 'initialTime' in timerSettings) ? (gameMode === 'local' ? Date.now() : (window.firebase.database.ServerValue.TIMESTAMP as any)) : null,
+            ...turnEndState,
+            turn: nextTurn,
+            turnStartTime: (timerSettings && 'initialTime' in timerSettings) ? (gameMode === 'local' ? Date.now() : (window.firebase.database.ServerValue.TIMESTAMP as any)) : null,
         };
-    
+
         commitNewGameState(newGameState);
     }, [commitNewGameState, handleGameOver, gameMode, localPromotionState, localAmbiguousEnPassantState]);
-    
-const [serverOffset, setServerOffset] = useState<number>(0);
 
-useEffect(() => {
-    if (!isFirebaseConfigured) return;
-    const offsetRef = db.ref('.info/serverTimeOffset');
-    const onValue = (snap: any) => {
-        setServerOffset(snap.val() || 0);
-    };
-    offsetRef.on('value', onValue);
-    return () => offsetRef.off('value', onValue);
-}, []);
+    const [serverOffset, setServerOffset] = useState<number>(0);
+
+    useEffect(() => {
+        if (!isFirebaseConfigured) return;
+        const offsetRef = db.ref('.info/serverTimeOffset');
+        const onValue = (snap: any) => {
+            setServerOffset(snap.val() || 0);
+        };
+        offsetRef.on('value', onValue);
+        return () => offsetRef.off('value', onValue);
+    }, []);
 
     useEffect(() => {
         if (timerRef.current) clearInterval(timerRef.current);
-    
+
         if (status !== 'playing' && status !== 'promotion') {
             setDisplayedTime(playerTimes);
             return;
         }
-    
+
         const isRealtime = timerSettings && 'initialTime' in timerSettings;
         const isDaily = timerSettings && 'daysPerMove' in timerSettings;
-    
+
         if (isRealtime && playerTimes && turnStartTime) {
             const timeAtTurnStart = playerTimes[turn];
             setDisplayedTime(playerTimes);
@@ -793,12 +856,12 @@ useEffect(() => {
                     elapsedSeconds = Math.max(0, Date.now() - turnStartTime) / 1000;
                 }
                 const newTime = timeAtTurnStart - elapsedSeconds;
-                
+
                 setDisplayedTime(prev => prev ? { ...prev, [turn]: Math.max(0, newTime) } : null);
-    
+
                 if (newTime <= 0) {
-                     // Check timeout even if opponent is disconnected
-                     if (gameMode !== 'online_playing' || turn === myOnlineColor || statusRef.current === 'playing') {
+                    // Check timeout even if opponent is disconnected
+                    if (gameMode !== 'online_playing' || turn === myOnlineColor || statusRef.current === 'playing') {
                         if (timerRef.current) clearInterval(timerRef.current);
                         const winnerColor = turn.toLowerCase() === Color.White.toLowerCase() ? Color.Black : Color.White;
                         if (gameStateRef.current) {
@@ -810,13 +873,13 @@ useEffect(() => {
                 }
             }, 250);
         } else if (isDaily && moveDeadline) {
-             timerRef.current = window.setInterval(() => {
+            timerRef.current = window.setInterval(() => {
                 if (statusRef.current !== 'playing') {
-                     if (timerRef.current) clearInterval(timerRef.current);
-                     return;
+                    if (timerRef.current) clearInterval(timerRef.current);
+                    return;
                 }
-                setMoveDeadline(d => d); 
-                
+                setMoveDeadline(d => d);
+
                 if (Date.now() > moveDeadline) {
                     if (gameMode !== 'online_playing' || turn === myOnlineColor || statusRef.current === 'playing') {
                         if (timerRef.current) clearInterval(timerRef.current);
@@ -830,7 +893,7 @@ useEffect(() => {
         } else {
             setDisplayedTime(playerTimes);
         }
-    
+
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
         };
@@ -886,7 +949,7 @@ useEffect(() => {
             moveHistory: [],
             chat: []
         };
-        
+
         if (!dontLoad) {
             loadGameState(initialGameState);
             setDisplayedTime(initialPlayerTimes);
@@ -899,7 +962,7 @@ useEffect(() => {
         }
         return initialGameState;
     }, [loadGameState]);
-    
+
     const handleBackToMenu = useCallback(async () => {
         const localStatus = statusRef.current;
         if (currentUser && gameMode === 'online_playing' && localStatus === 'playing' && gameRef) {
@@ -908,31 +971,31 @@ useEffect(() => {
                 gameRef.child(`players/${currentUser.uid}/disconnectTimestamp`).set(window.firebase.database.ServerValue.TIMESTAMP);
             }
         }
-    
+
         if (currentUser && gameMode === 'online_playing' && localStatus === 'waiting' && gameRef && gameId) {
             const isPersistentGame = !timerSettings || ('daysPerMove' in timerSettings);
             if (!isPersistentGame) {
                 const updates: { [path: string]: any } = {};
                 updates[`/games/${gameId}`] = null;
                 updates[`/userGames/${currentUser.uid}/${gameId}`] = null;
-                
+
                 const challengedUid = gameStateRef.current?.challengedPlayerInfo?.uid;
                 if (challengedUid) {
-                    db.ref(`challenges/${challengedUid}/${gameId}`).remove(() => {});
+                    db.ref(`challenges/${challengedUid}/${gameId}`).remove(() => { });
                 }
-                
+
                 db.ref().update(updates);
             }
         }
-    
+
         // Navigation Logic: Return to Lobby if logged in and online game, else Main Menu
         if (gameMode === 'online_playing' || gameMode === 'online_spectating') {
-             setGameMode('online_lobby');
+            setGameMode('online_lobby');
         } else {
-             setGameMode('menu');
-             if (gameMode === 'online_lobby') {
-                 setLobbyView('games');
-             }
+            setGameMode('menu');
+            if (gameMode === 'online_lobby') {
+                setLobbyView('games');
+            }
         }
 
         setMyOnlineColor(null);
@@ -943,7 +1006,7 @@ useEffect(() => {
         randomizeNextGameColor();
         setChatMessages([]);
     }, [gameId, myOnlineColor, currentUser, randomizeNextGameColor, gameMode, status, gameRef, timerSettings, ratingCategory]);
-    
+
     const handleStartOnline = () => {
         if (currentUser) {
             setGameMode('online_lobby');
@@ -959,14 +1022,15 @@ useEffect(() => {
         try {
             const userGamesSnapshot = await db.ref(`userGames/${currentUser.uid}`).once('value');
             const userGamesObj = userGamesSnapshot.val();
-            
+
 
             if (!userGamesObj) {
                 setMenuMessage({ text: "You don't have any moves to make!", type: 'info' });
-                setTimeout(() => {if (continueGameClicks === 0) {
-                setMenuMessage(null)
-                }
-                continueGameClicks = continueGameClicks - 1;
+                setTimeout(() => {
+                    if (continueGameClicks === 0) {
+                        setMenuMessage(null)
+                    }
+                    continueGameClicks = continueGameClicks - 1;
                 }, 3000);
                 return;
             }
@@ -982,7 +1046,7 @@ useEffect(() => {
                 const game = snap.val() as GameState;
                 if (game && game.status === 'playing') {
                     const myColor = game.playerColors.white === currentUser.uid ? Color.White : Color.Black;
-                    
+
                     if (game.timerSettings && 'initialTime' in game.timerSettings) {
                         // Priority 1: Any active Real-time game
                         const lastMoveTime = game.turnStartTime || 0;
@@ -1002,64 +1066,66 @@ useEffect(() => {
 
             // 1. Check Real-Time games
             if (activeRealTimeGames.length > 0) {
-                 activeRealTimeGames.sort((a, b) => b.lastMoveTime - a.lastMoveTime); // Most recent / active first
-                 const gameId = activeRealTimeGames[0].id;
-                 const gameSnapshot = gameSnapshots.find(s => s.key === gameId)!;
-                 const gameData = gameSnapshot.val() as GameState;
-                 const myColor = gameData.playerColors.white === currentUser.uid ? Color.White : Color.Black;
-                 
-                 setLobbyView('current_games');
-                 handleOnlineGameStart(gameId, myColor);
-                 return;
+                activeRealTimeGames.sort((a, b) => b.lastMoveTime - a.lastMoveTime); // Most recent / active first
+                const gameId = activeRealTimeGames[0].id;
+                const gameSnapshot = gameSnapshots.find(s => s.key === gameId)!;
+                const gameData = gameSnapshot.val() as GameState;
+                const myColor = gameData.playerColors.white === currentUser.uid ? Color.White : Color.Black;
+
+                setLobbyView('current_games');
+                handleOnlineGameStart(gameId, myColor);
+                return;
             }
 
             // 2. Check Correspondence games (My turn)
             if (activeCorrespondenceGames.length > 0) {
-                 activeCorrespondenceGames.sort((a, b) => a.timeLeft - b.timeLeft); // Least time left first
-                 const gameId = activeCorrespondenceGames[0].id;
-                 const gameSnapshot = gameSnapshots.find(s => s.key === gameId)!;
-                 const gameData = gameSnapshot.val() as GameState;
-                 const myColor = gameData.playerColors.white === currentUser.uid ? Color.White : Color.Black;
+                activeCorrespondenceGames.sort((a, b) => a.timeLeft - b.timeLeft); // Least time left first
+                const gameId = activeCorrespondenceGames[0].id;
+                const gameSnapshot = gameSnapshots.find(s => s.key === gameId)!;
+                const gameData = gameSnapshot.val() as GameState;
+                const myColor = gameData.playerColors.white === currentUser.uid ? Color.White : Color.Black;
 
-                 setLobbyView('current_games');
-                 handleOnlineGameStart(gameId, myColor);
-                 return;
+                setLobbyView('current_games');
+                handleOnlineGameStart(gameId, myColor);
+                return;
             }
 
             setMenuMessage({ text: "You don't have any moves to make!", type: 'info' });
-            setTimeout(() => {if (continueGameClicks === 0) {
-                setMenuMessage(null)
+            setTimeout(() => {
+                if (continueGameClicks === 0) {
+                    setMenuMessage(null)
                 }
                 continueGameClicks = continueGameClicks - 1;
-                }, 3000);
+            }, 3000);
 
         } catch (e) {
             console.error("Error continuing game:", e);
             setMenuMessage({ text: "Error finding game.", type: 'error' });
-            setTimeout(() => {if (continueGameClicks === 0) {
-                setMenuMessage(null)
+            setTimeout(() => {
+                if (continueGameClicks === 0) {
+                    setMenuMessage(null)
                 }
                 continueGameClicks = continueGameClicks - 1;
-                }, 3000);
+            }, 3000);
         }
     };
-//spectate functie
-const handleOnlineSpectate = useCallback((id: string) => {
-    setGameId(id);
-    const ref = db.ref(`games/${id}`);
-    setGameRef(ref);
-    
-    setGameMode('online_spectating'); // Nieuwe modus!
-    setMyOnlineColor(null); // Belangrijk: je bent geen wit of zwart
-    
-    // Reset states
-    setRematchOffer(null);
-    setNextGameId(null);
-    setRatingChange(null);
-    setIsForcePowerMode(false);
-    setDraggedPiece(null);
-    setActiveTab('controls');
-}, []);
+    //spectate functie
+    const handleOnlineSpectate = useCallback((id: string) => {
+        setGameId(id);
+        const ref = db.ref(`games/${id}`);
+        setGameRef(ref);
+
+        setGameMode('online_spectating'); // Nieuwe modus!
+        setMyOnlineColor(null); // Belangrijk: je bent geen wit of zwart
+
+        // Reset states
+        setRematchOffer(null);
+        setNextGameId(null);
+        setRatingChange(null);
+        setIsForcePowerMode(false);
+        setDraggedPiece(null);
+        setActiveTab('controls');
+    }, []);
 
     const handleOnlineGameStart = useCallback((id: string, color: Color) => {
         setMyOnlineColor(color);
@@ -1067,7 +1133,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
         const ref = db.ref(`games/${id}`);
         setGameRef(ref);
         setGameMode('online_playing');
-        
+
         setRematchOffer(null);
         setNextGameId(null);
         setRatingChange(null);
@@ -1076,10 +1142,10 @@ const handleOnlineSpectate = useCallback((id: string) => {
         setActiveTab('controls');
 
     }, []);
-    
+
     useEffect(() => {
         if (!gameRef || !currentUser) return;
-    
+
         const playerInGameRef = gameRef.child(`players/${currentUser.uid}`);
         playerInGameRef.update({ disconnectTimestamp: null });
         const onDisconnectRef = playerInGameRef.child('disconnectTimestamp').onDisconnect();
@@ -1088,27 +1154,27 @@ const handleOnlineSpectate = useCallback((id: string) => {
         const onGameUpdate = (snapshot: any) => {
             if (snapshot.exists()) {
                 const rawState: GameState = snapshot.val();
-                
+
                 if (rawState.nextGameId) {
                     if (gameRef) gameRef.off('value', onGameUpdate);
                     const myNewColor = rawState.playerColors.white === currentUser.uid ? Color.Black : Color.White;
                     handleOnlineGameStart(rawState.nextGameId, myNewColor);
                     return;
                 }
-    
+
                 commitNewGameState(rawState, true);
-    
+
             } else {
-                 if (statusRef.current !== 'opponent_disconnected' && statusRef.current !== 'kingCaptured' && statusRef.current !== 'checkmate' && myOnlineColor) {
-                   const winnerName = myOnlineColor.charAt(0).toUpperCase() + myOnlineColor.slice(1);
-                   if (gameStateRef.current) {
-                   }
+                if (statusRef.current !== 'opponent_disconnected' && statusRef.current !== 'kingCaptured' && statusRef.current !== 'checkmate' && myOnlineColor) {
+                    const winnerName = myOnlineColor.charAt(0).toUpperCase() + myOnlineColor.slice(1);
+                    if (gameStateRef.current) {
+                    }
                 }
             }
         };
-    
+
         gameRef.on('value', onGameUpdate);
-    
+
         return () => {
             if (playerInGameRef) {
                 onDisconnectRef.cancel();
@@ -1151,7 +1217,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
                 }
             } else {
                 rejoinTimerRef.current = window.setTimeout(() => {
-                     if (gameStateRef.current && statusRef.current === 'playing') {
+                    if (gameStateRef.current && statusRef.current === 'playing') {
                     }
                 }, timeLeftToRejoin * 1000);
             }
@@ -1178,7 +1244,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
 
         const isExemptFromDisconnect = ratingCategory === RatingCategory.Daily || ratingCategory === RatingCategory.Unlimited;
         if (isExemptFromDisconnect) return;
-        
+
         const opponentColor = myOnlineColor === Color.White ? Color.Black : Color.White;
         const opponentUid = playerColors[opponentColor];
         const opponent = opponentUid ? players[opponentUid] : null;
@@ -1236,7 +1302,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
             commitNewGameState(newState, false, true);
         }
     };
-    
+
     const confirmResign = () => {
         if (status === 'playing') {
             const resigningPlayer = gameMode === 'online_playing' ? myOnlineColor! : turn;
@@ -1248,22 +1314,22 @@ const handleOnlineSpectate = useCallback((id: string) => {
 
     const handleResign = () => {
         if (resignConfirmationEnabled) {
-             setShowConfirmation('resign');
+            setShowConfirmation('resign');
         } else {
-             confirmResign();
+            confirmResign();
         }
     };
-    
+
     const handlePlayAgain = () => {
         if (gameMode === 'online_playing') {
             handleBackToMenu();
         } else {
             //Maak de schone staat
-            const newLocalState = resetGame('local', timerSettings); 
-        
-        //Pas de schone staat toe op alle component states (board, turn, status, etc.)
-        loadGameState(newLocalState);
-             setShowLocalSetup(true);
+            const newLocalState = resetGame('local', timerSettings);
+
+            //Pas de schone staat toe op alle component states (board, turn, status, etc.)
+            loadGameState(newLocalState);
+            setShowLocalSetup(true);
         }
     };
 
@@ -1282,10 +1348,10 @@ const handleOnlineSpectate = useCallback((id: string) => {
             timestamp: Date.now(),
             uid: currentUser.uid
         };
-        
+
         // Optimistic update not strictly needed as listener is fast, but good for UX
         // We rely on listener to update state mostly
-        
+
         try {
             const newChat = [...chatMessages, newMessage];
             await gameRef.update({ chat: newChat });
@@ -1297,27 +1363,27 @@ const handleOnlineSpectate = useCallback((id: string) => {
 
 
     const movePiece = useCallback((from: Position, to: Position, premoveOptions: { isPremove: boolean, forcePower: boolean } = { isPremove: false, forcePower: false }) => {
-        
+
         clearHighlightsAndArrows();
         const currentState = gameStateRef.current;
         if (!currentState) return;
-    
+
         const { board, capturedPieces, enPassantTarget, turn } = currentState;
 
         const newBoard = board.map(row => [...row]);
         const pieceToMove = { ...newBoard[from.row][from.col]! };
         const capturedPieceOnTarget = newBoard[to.row][to.col];
         let resetHalfmoveClock = pieceToMove.type === PieceType.Pawn;
-    
+
         const newCapturedPieces: Record<Color, Piece[]> = {
             white: [...(capturedPieces.white || [])],
             black: [...(capturedPieces.black || [])],
         };
-    
+
         const wasPowerMove = isPowerMove(board, from, to, enPassantTarget);
         const wasAmbiguousMove = isAmbiguousMove(board, from, to, enPassantTarget);
         const isEnPassantCapture = (pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn) && enPassantTarget && to.row === enPassantTarget.row && to.col === enPassantTarget.col && !capturedPieceOnTarget;
-        
+
         const forcePowerFromPremove = premoveOptions.isPremove && premoveOptions.forcePower;
         const useForcePower = isForcePowerMode || forcePowerFromPremove;
         const isAmbiguousEnPassant = isEnPassantCapture && pieceToMove.power === PieceType.Pawn && [PieceType.Queen, PieceType.Bishop, PieceType.King].includes(pieceToMove.originalType);
@@ -1326,27 +1392,27 @@ const handleOnlineSpectate = useCallback((id: string) => {
             // DIRECTLY set the premove without confirmation dialog, per latest request
             if (gameRef && myOnlineColor) {
                 const premoveRef = gameRef.child('premoves').child(myOnlineColor);
-               premoveRef.transaction(currentPremoveData => {
-                if (gameRef.child(turn) === myOnlineColor) return;
-                 return { 
-    from, 
-    to, 
-    isForcePower: useForcePower 
-  };
-});
+                premoveRef.transaction(currentPremoveData => {
+                    if (gameRef.child(turn) === myOnlineColor) return;
+                    return {
+                        from,
+                        to,
+                        isForcePower: useForcePower
+                    };
+                });
             }
             return;
         }
 
         if (isAmbiguousEnPassant && !useForcePower) {
-             if (gameMode === 'online_playing') {
-                 // Save state before visual interaction
-                 preInteractionStateRef.current = currentState;
+            if (gameMode === 'online_playing') {
+                // Save state before visual interaction
+                preInteractionStateRef.current = currentState;
 
-                 // For online, handle locally first but don't commit visual move
-                 setLocalAmbiguousEnPassantState({ from, to });
-                 return;
-             }
+                // For online, handle locally first but don't commit visual move
+                setLocalAmbiguousEnPassantState({ from, to });
+                return;
+            }
 
             const newState: GameState = { ...currentState, status: 'ambiguous_en_passant', ambiguousEnPassantData: { from, to }, lastMove: { from, to } };
             commitNewGameState(newState);
@@ -1358,16 +1424,16 @@ const handleOnlineSpectate = useCallback((id: string) => {
             actualCapturedPiece = newBoard[from.row][to.col] as Piece;
             newBoard[from.row][to.col] = null;
         }
-    
+
         const wasCapture = !!actualCapturedPiece;
         let acquiredPower: PieceType | null = null;
-    
+
         if (wasCapture && actualCapturedPiece) {
             resetHalfmoveClock = true;
             acquiredPower = actualCapturedPiece.originalType;
             const capturedColor = actualCapturedPiece.color;
             newCapturedPieces[capturedColor].push(actualCapturedPiece);
-    
+
             if (actualCapturedPiece.isKing) {
                 pieceToMove.power = acquiredPower;
                 pieceToMove.hasMoved = true;
@@ -1378,12 +1444,12 @@ const handleOnlineSpectate = useCallback((id: string) => {
                 return;
             }
         }
-    
+
         const promotionRank = turn === Color.White ? 0 : 7;
         const isMovingToPromotionRank = to.row === promotionRank;
         const hasPawnAbility = pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn;
         const isCapturingPawnOnPromotionRank = wasCapture && actualCapturedPiece?.originalType === PieceType.Pawn && isMovingToPromotionRank;
-    
+
         if ((isMovingToPromotionRank && hasPawnAbility) || isCapturingPawnOnPromotionRank) {
             let powerAfterPromotion: PieceType | null = null;
             if (isCapturingPawnOnPromotionRank) {
@@ -1397,7 +1463,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
                     powerAfterPromotion = null;
                 }
             }
-    
+
             const promotionInfo: PromotionData = {
                 from,
                 position: to,
@@ -1411,7 +1477,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
                 preInteractionStateRef.current = currentState;
                 setLocalPromotionState(promotionInfo);
                 // Don't visually move yet to avoid bugs on cancel
-                return; 
+                return;
             }
 
             // For local games, proceed as before
@@ -1428,9 +1494,9 @@ const handleOnlineSpectate = useCallback((id: string) => {
             commitNewGameState(newState);
             return;
         }
-    
+
         let powerAfterMove = pieceToMove.power;
-        if(wasCapture) {
+        if (wasCapture) {
             powerAfterMove = acquiredPower;
         } else if (useForcePower && wasAmbiguousMove) {
             powerAfterMove = null;
@@ -1444,13 +1510,13 @@ const handleOnlineSpectate = useCallback((id: string) => {
         pieceToMove.hasMoved = true;
         newBoard[to.row][to.col] = pieceToMove;
         newBoard[from.row][from.col] = null;
-    
+
         // Handle castling: move the rook. This is a special move type and should not
         // be triggered if the move was a power move or a forced power move.
         const isPotentialCastle = pieceToMove.type === PieceType.King &&
-                                  Math.abs(to.col - from.col) === 2 &&
-                                  from.row === to.row &&
-                                  !wasCapture;
+            Math.abs(to.col - from.col) === 2 &&
+            from.row === to.row &&
+            !wasCapture;
 
 
         if (isPotentialCastle && !wasPowerMove && !wasForcedPowerMove) {
@@ -1464,14 +1530,14 @@ const handleOnlineSpectate = useCallback((id: string) => {
                 newBoard[from.row][rookCol] = null;
             }
         }
-    
+
         let nextEnPassantTarget: Position | null = (pieceToMove.type === PieceType.Pawn && Math.abs(to.row - from.row) === 2) ? { row: from.row + (to.row - from.row) / 2, col: from.col } : null;
-        
+
         let newPlayerTimes = currentState.playerTimes;
         if (currentState.playerTimes && currentState.turnStartTime && currentState.timerSettings && 'initialTime' in currentState.timerSettings) {
             var elapsedMs = premoveOptions.isPremove ? 0 : (Math.max(0, Date.now() - currentState.turnStartTime + serverOffset));
             if (gameMode === 'local') {
-               elapsedMs = premoveOptions.isPremove ? 0 : (Math.max(0, Date.now() - currentState.turnStartTime));
+                elapsedMs = premoveOptions.isPremove ? 0 : (Math.max(0, Date.now() - currentState.turnStartTime));
             }
             const remainingTime = currentState.playerTimes[currentState.turn] - (elapsedMs / 1000);
             newPlayerTimes = {
@@ -1490,7 +1556,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
 
         if (myPremove && turn === myOnlineColor && status === 'playing') {
             if (gameRef && myOnlineColor) {
-                gameRef.child('premoves').child(myOnlineColor).remove(() => {});
+                gameRef.child('premoves').child(myOnlineColor).remove(() => { });
             }
 
             const piece = board[myPremove.from.row]?.[myPremove.from.col];
@@ -1509,7 +1575,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
             setValidMoves([]);
             return;
         }
-        
+
         const piece = board[selectedPiece.row][selectedPiece.col];
         const color = gameMode === 'online_playing' && myOnlineColor ? myOnlineColor : turn;
 
@@ -1518,7 +1584,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
             setValidMoves([]);
             return;
         }
-        
+
         const allMoves = getValidMoves(board, selectedPiece, enPassantTarget, true, !isMyTurn);
         setValidMoves(allMoves);
     }, [selectedPiece, board, turn, myOnlineColor, enPassantTarget, status, gameMode, localPromotionState, localAmbiguousEnPassantState]);
@@ -1537,22 +1603,22 @@ const handleOnlineSpectate = useCallback((id: string) => {
                 if (selectedPiece.row === row && selectedPiece.col === col) {
                     setSelectedPiece(null);
                     if (gameRef && myOnlineColor && premoves?.[myOnlineColor]) {
-                        gameRef.child('premoves').child(myOnlineColor).remove(() => {});
+                        gameRef.child('premoves').child(myOnlineColor).remove(() => { });
                     }
                     return;
                 }
-                
+
                 // Check if the target is a valid premove target for the selected piece
                 if (validMoves.some(move => move.row === targetSquare.row && move.col === targetSquare.col)) {
-                     movePiece(selectedPiece, targetSquare, { isPremove: true, forcePower: isForcePowerMode });
-                     setSelectedPiece(null);
+                    movePiece(selectedPiece, targetSquare, { isPremove: true, forcePower: isForcePowerMode });
+                    setSelectedPiece(null);
                 } else {
                     const pieceOnTarget = board[row][col];
                     // If another of my pieces is clicked, change selection.
                     if (pieceOnTarget && pieceOnTarget.color === myOnlineColor) {
                         setSelectedPiece(targetSquare);
                         if (gameRef && myOnlineColor && premoves?.[myOnlineColor]) {
-                            gameRef.child('premoves').child(myOnlineColor).remove(() => {});
+                            gameRef.child('premoves').child(myOnlineColor).remove(() => { });
                         }
                     } else {
                         setSelectedPiece(null); // Deselect if an invalid square is clicked
@@ -1567,7 +1633,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
             }
             return;
         }
-        
+
         // Normal move Logic
         if (isMyTurn) {
             const targetSquare = { row, col };
@@ -1594,25 +1660,25 @@ const handleOnlineSpectate = useCallback((id: string) => {
             }
         }
     }, [gameMode, myOnlineColor, turn, status, premovesEnabled, selectedPiece, board, validMoves, movePiece, gameRef, isForcePowerMode, premoves, localPromotionState, localAmbiguousEnPassantState, moveConfirmationEnabled, timerSettings]);
-    
+
     const confirmMove = () => {
         if (pendingCommitState) {
-             updateGameInDb(pendingCommitState);
-             // local history update if needed (though local mode doesn't use confirmation usually)
-             setPendingCommitState(null);
-             setPreCommitState(null);
+            updateGameInDb(pendingCommitState);
+            // local history update if needed (though local mode doesn't use confirmation usually)
+            setPendingCommitState(null);
+            setPreCommitState(null);
         } else if (pendingPremove && gameRef && myOnlineColor) {
-             gameRef.child('premoves').child(myOnlineColor).transaction(currentPremoveData => {
+            gameRef.child('premoves').child(myOnlineColor).transaction(currentPremoveData => {
                 if (gameRef.child(turn) === myOnlineColor) return;
                 return pendingPremove;
-             });
-             setPendingPremove(null);
+            });
+            setPendingPremove(null);
         }
         setShowConfirmation(null);
     };
 
     const onCancelRematch = () => {
-         if (gameRef) gameRef.update({ rematchOffer: null });
+        if (gameRef) gameRef.update({ rematchOffer: null });
     };
 
     const resolveAmbiguousEnPassant = useCallback((choice: 'move' | 'capture') => {
@@ -1624,11 +1690,11 @@ const handleOnlineSpectate = useCallback((id: string) => {
 
         const { from, to } = data;
         let newBoard = currentState.board.map(row => [...row]);
-        
+
         // Fix for online ambiguous en passant where piece is already visually at 'to'
         const isOnlineAmbiguous = gameMode === 'online_playing' && localAmbiguousEnPassantState;
         const sourcePos = from; // piece is logically at 'from' in baseState
-        
+
         // Piece should exist at sourcePos
         if (!newBoard[sourcePos.row][sourcePos.col]) return;
 
@@ -1650,15 +1716,15 @@ const handleOnlineSpectate = useCallback((id: string) => {
         } else {
             pieceToMove.power = PieceType.Pawn;
         }
-        
+
         pieceToMove.hasMoved = true;
         newBoard[to.row][to.col] = pieceToMove;
-        
+
         // Ensure 'from' is cleared
         newBoard[from.row][from.col] = null;
-        
+
         if (gameMode === 'online_playing') {
-             setLocalAmbiguousEnPassantState(null);
+            setLocalAmbiguousEnPassantState(null);
         }
 
         const promotionRank = currentState.turn === Color.White ? 0 : 7;
@@ -1686,9 +1752,9 @@ const handleOnlineSpectate = useCallback((id: string) => {
         // Use localPromotionState for online games
         const promotionInfo = gameMode === 'online_playing' ? localPromotionState : gameStateRef.current?.promotionData;
         const currentState = gameStateRef.current;
-    
+
         if (!currentState || !promotionInfo) return;
-    
+
         const { from, position, promotingPiece, powerAfterPromotion } = promotionInfo;
         const newBoard = currentState.board.map(r => [...r]);
         const newPiece: Piece = {
@@ -1707,7 +1773,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
         if (gameMode === 'online_playing') {
             setLocalPromotionState(null);
         }
-    
+
         finalizeTurn(currentState, newBoard, null, true, currentState.capturedPieces, { from, to: position }, chosenPieceType);
     }, [finalizeTurn, gameMode, localPromotionState]);
 
@@ -1728,7 +1794,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
             handleBackToMenu();
             return;
         }
-    
+
         const user = auth.currentUser;
         const uid = user.uid;
 
@@ -1738,8 +1804,8 @@ const handleOnlineSpectate = useCallback((id: string) => {
                 const sentChallengesRef = db.ref(`sentChallenges/${uid}`);
                 const sentSnapshot = await sentChallengesRef.once('value');
                 if (sentSnapshot.exists()) {
-                     setShowLogoutWarning(true);
-                     return; // Block logout
+                    setShowLogoutWarning(true);
+                    return; // Block logout
                 }
             } catch (e) {
                 console.error("Error checking sent challenges", e);
@@ -1748,7 +1814,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
 
         // CLEANUP: Cancel outgoing challenges and remove sentChallenges record
         const updates: { [path: string]: any } = {};
-        
+
         try {
             const sentChallengesRef = db.ref(`sentChallenges/${uid}`);
             const sentSnapshot = await sentChallengesRef.once('value');
@@ -1756,7 +1822,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
 
             if (sentData) {
                 const challenges: SentChallenge[] = Object.keys(sentData).map(key => ({ id: key, ...sentData[key] }));
-                
+
                 for (const c of challenges) {
                     // Cancel Real-time challenges always. Guest cancels all (though blocked above, keeping this for robustness)
                     if (user.isAnonymous || c.isRealtime) {
@@ -1780,73 +1846,73 @@ const handleOnlineSpectate = useCallback((id: string) => {
                 const sessionsSnap = await sessionsRef.once('value');
                 // If numChildren <= 1, this is likely the last session (since current one is included or just about to be removed)
                 if (sessionsSnap.numChildren() <= 1) {
-                     const userGamesRef = db.ref(`userGames/${uid}`);
-                     const userGamesSnap = await userGamesRef.once('value');
-                     const gameIdsObject = userGamesSnap.val();
-                     
-                     if (gameIdsObject) {
+                    const userGamesRef = db.ref(`userGames/${uid}`);
+                    const userGamesSnap = await userGamesRef.once('value');
+                    const gameIdsObject = userGamesSnap.val();
+
+                    if (gameIdsObject) {
                         const gameIds = Object.keys(gameIdsObject);
                         for (const gameId of gameIds) {
                             const gameRef = db.ref(`games/${gameId}`);
                             const gameSnap = await gameRef.once('value');
                             const gameData = gameSnap.val() as GameState;
-                            
+
                             if (gameData && gameData.status === 'waiting') {
                                 // Check if user is the creator (assuming creator is one of the players)
                                 const isCreator = (gameData.playerColors.white === uid || gameData.playerColors.black === uid);
                                 // Check if Real-time (not Daily)
                                 const isRealtime = !gameData.timerSettings || ('initialTime' in gameData.timerSettings);
-                                
+
                                 if (isCreator && isRealtime) {
-                                     updates[`games/${gameId}`] = null;
-                                     updates[`userGames/${uid}/${gameId}`] = null;
+                                    updates[`games/${gameId}`] = null;
+                                    updates[`userGames/${uid}/${gameId}`] = null;
                                 }
                             }
                         }
-                     }
+                    }
                 }
             }
         } catch (e) {
             console.error("Error cleaning up waiting games", e);
         }
-    
+
         if (user.isAnonymous) {
             const userGamesRef = db.ref(`userGames/${uid}`);
             const userGamesSnap = await userGamesRef.once('value');
             const gameIdsObject = userGamesSnap.val();
-    
+
             const gamePromises: Promise<void>[] = [];
-    
+
             if (gameIdsObject) {
                 for (const gameId of Object.keys(gameIdsObject)) {
                     const gameRef = db.ref(`games/${gameId}`);
                     gamePromises.push(gameRef.once('value').then(gameSnap => {
                         const gameData: GameState | null = gameSnap.val();
                         if (!gameData) return;
-    
+
                         if (gameData.status === 'playing') {
                             const guestColor = gameData.playerColors.white === uid ? Color.White : Color.Black;
                             const opponentColor = guestColor === Color.White ? Color.Black : Color.White;
                             const winnerName = opponentColor.charAt(0).toUpperCase() + opponentColor.slice(1);
                             const opponentUid = gameData.playerColors[opponentColor];
-                            
+
                             updates[`games/${gameId}/status`] = 'resignation';
                             updates[`games/${gameId}/winner`] = winnerName;
-    
+
                             if (opponentUid && gameData.isRated && gameData.initialRatings) {
                                 const whiteRating = gameData.initialRatings.white;
                                 const blackRating = gameData.initialRatings.black;
                                 const whiteScore = guestColor === Color.White ? 0 : 1;
-                                
+
                                 const newWhiteRating = calculateElo(whiteRating, blackRating, whiteScore);
                                 const newBlackRating = calculateElo(blackRating, whiteRating, 1 - whiteScore);
-                                
+
                                 const ratingChange = {
                                     white: newWhiteRating - whiteRating,
                                     black: newBlackRating - blackRating
                                 };
                                 updates[`games/${gameId}/ratingChange`] = ratingChange;
-    
+
                                 const category = gameData.ratingCategory;
                                 const opponentNewRating = opponentColor === Color.White ? newWhiteRating : newBlackRating;
                                 updates[`userRatings/${opponentUid}/ratings/${category}`] = opponentNewRating;
@@ -1857,33 +1923,33 @@ const handleOnlineSpectate = useCallback((id: string) => {
                     }));
                 }
             }
-    
+
             await Promise.all(gamePromises);
-            
+
             // NOTE: We no longer delete the user node completely.
             // Instead, we mark them as having been a guest and offline.
             updates[`/users/${uid}/isGuest`] = true;
             updates[`/users/${uid}/guestLoggedOut`] = true; // Added flag as requested
             updates[`/users/${uid}/isOnline`] = false;
-            
+
             // Clean up ratings and userGames index as they are no longer relevant for a logged out guest
             updates[`/userRatings/${uid}`] = null;
             updates[`/userGames/${uid}`] = null;
             updates[`/sessions/${uid}`] = null;
         } else {
-             if (sessionRef.current) {
-                await sessionRef.current.remove(() => {});
+            if (sessionRef.current) {
+                await sessionRef.current.remove(() => { });
             }
         }
-    
+
         if (Object.keys(updates).length > 0) {
             await db.ref().update(updates);
         }
-    
+
         await auth.signOut();
         handleBackToMenu();
     };
-    
+
     // Rematch handlers
     const handleOfferRematch = () => {
         if (gameMode === 'online_playing' && myOnlineColor && gameRef) {
@@ -1898,30 +1964,30 @@ const handleOnlineSpectate = useCallback((id: string) => {
     const handleAcceptRematch = async () => {
         const currentState = gameStateRef.current;
         if (!currentState || !gameRef || !currentUser || !myRatings) return;
-    
+
         const oldWhiteUid = currentState.playerColors.white!;
         const oldBlackUid = currentState.playerColors.black!;
         const whitePlayerInfo = currentState.players[oldWhiteUid];
         const blackPlayerInfo = currentState.players[oldBlackUid];
-    
+
         let whiteRatings = { ...whitePlayerInfo.ratings };
         let blackRatings = { ...blackPlayerInfo.ratings };
-    
+
         if (currentState.isRated && currentState.ratingChange) {
             const category = currentState.ratingCategory;
             whiteRatings[category] += currentState.ratingChange.white;
             blackRatings[category] += currentState.ratingChange.black;
         }
-    
+
         const newGameState = resetGame('online_playing', currentState.timerSettings, true, currentState.isRated);
-    
+
         newGameState.playerColors = { white: oldBlackUid, black: oldWhiteUid };
-    
+
         newGameState.players = {
             [oldWhiteUid]: { ...whitePlayerInfo, ratings: whiteRatings },
             [oldBlackUid]: { ...blackPlayerInfo, ratings: blackRatings },
         };
-        
+
         const category = newGameState.ratingCategory;
         newGameState.initialRatings = { white: blackRatings[category], black: whiteRatings[category] };
         newGameState.status = 'playing';
@@ -1935,18 +2001,18 @@ const handleOnlineSpectate = useCallback((id: string) => {
             await newGameRef.set(newGameState);
             db.ref(`userGames/${oldWhiteUid}/${newGameRef.key}`).set(true);
             db.ref(`userGames/${oldBlackUid}/${newGameRef.key}`).set(true);
-            
+
             await gameRef.update({ nextGameId: newGameRef.key });
         } catch (error) {
             console.error("Failed to create rematch game:", error);
         }
     };
-    
+
     useEffect(() => {
-        if(status !== 'playing' && selectedPiece) {
-             setSelectedPiece(null);
-             setValidMoves([]);
-             setIsForcePowerMode(false);
+        if (status !== 'playing' && selectedPiece) {
+            setSelectedPiece(null);
+            setValidMoves([]);
+            setIsForcePowerMode(false);
         }
     }, [status, selectedPiece]);
 
@@ -1996,7 +2062,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
         const isMyTurn = gameMode !== 'online_playing' || turn === myOnlineColor;
         const piece = board[row][col];
         const color = gameMode === 'online_playing' && myOnlineColor ? myOnlineColor : turn;
-        
+
         if (!piece || piece.color !== color || status !== 'playing' || localPromotionState || localAmbiguousEnPassantState) {
             e.preventDefault();
             return;
@@ -2005,7 +2071,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
         if (isMyTurn || premovesEnabled) {
             e.dataTransfer.setData('text/plain', JSON.stringify({ row, col }));
             e.dataTransfer.effectAllowed = 'move';
-            
+
             setTimeout(() => {
                 setSelectedPiece({ row, col });
                 setDraggedPiece({ row, col });
@@ -2014,11 +2080,11 @@ const handleOnlineSpectate = useCallback((id: string) => {
             e.preventDefault();
         }
     };
-    
+
     const handleDrop = (e: React.DragEvent, row: number, col: number) => {
         e.preventDefault();
         const fromDataString = e.dataTransfer.getData('text/plain');
-    
+
         if (fromDataString) {
             try {
                 const fromPos: Position = JSON.parse(fromDataString);
@@ -2045,9 +2111,9 @@ const handleOnlineSpectate = useCallback((id: string) => {
     const handleBackFromReview = () => {
         setReviewingGame(null);
         if (currentUser && isFirebaseConfigured) {
-             setGameMode('online_lobby');
+            setGameMode('online_lobby');
         } else {
-             setGameMode('menu');
+            setGameMode('menu');
         }
     };
 
@@ -2072,7 +2138,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
             );
         }
 
-        
+
         const isFlipped = (gameMode === 'online_playing' ? myOnlineColor === Color.Black : turn === Color.Black) && (gameMode !== 'online_spectating');
 
         const whitePlayerUid = playerColors?.white;
@@ -2087,7 +2153,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
         const bottomPlayerName = isFlipped ? (blackPlayer?.displayName || 'Black') : (whitePlayer?.displayName || 'White');
         const topPlayerRating = isFlipped ? initialRatings?.white : initialRatings?.black;
         const bottomPlayerRating = isFlipped ? initialRatings?.black : initialRatings?.white;
-        
+
         const myColor = gameMode === 'online_playing' ? myOnlineColor : turn;
         const myPlayerHasPowerPiece = board.flat().some(p => p && p.color === myColor && p.power);
         const showForcePowerButton = status === 'playing' && myPlayerHasPowerPiece;
@@ -2124,7 +2190,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
                 {/* Captured pieces only shown on desktop */}
                 <div className="hidden md:block">
                     <h3 className="text-md md:text-lg font-bold border-b border-t my-1 md:my-2 border-gray-600 py-1">Captured</h3>
-                    <div className="flex flex-wrap gap-1 min-h-[32px] md:min-h-[40px]">{captured.map((p, i) => p && <div key={i} className="w-6 h-6 md:w-8 md:h-8"><PieceComponent piece={p}/></div>)}</div>
+                    <div className="flex flex-wrap gap-1 min-h-[32px] md:min-h-[40px]">{captured.map((p, i) => p && <div key={i} className="w-6 h-6 md:w-8 md:h-8"><PieceComponent piece={p} /></div>)}</div>
                 </div>
             </div>
         );
@@ -2135,14 +2201,14 @@ const handleOnlineSpectate = useCallback((id: string) => {
                 <div className="w-full max-w-lg md:max-w-md lg:max-w-lg xl:max-w-2xl flex flex-col">
                     {/* Top Player Info (Mobile) */}
                     <div className="w-full mb-2 md:hidden">
-                        <PlayerInfoPanel 
+                        <PlayerInfoPanel
                             name={topPlayerName} rating={topPlayerRating} isDisconnected={topPlayerIsDisconnected}
                             isOpponent={topPlayerIsOpponent} countdown={rejoinCountdown} time={topPlayerTime}
-                            isTurn={isTopPlayerTurn} captured={[]} 
+                            isTurn={isTopPlayerTurn} captured={[]}
                         />
                     </div>
                     <div className="w-full relative">
-                        <GameOverlay 
+                        <GameOverlay
                             status={effectiveStatus} winner={winner} onRestart={handlePlayAgain}
                             onPromote={handlePromotion} promotionData={localPromotionState || promotionData}
                             onResolveAmbiguousEnPassant={resolveAmbiguousEnPassant}
@@ -2157,8 +2223,8 @@ const handleOnlineSpectate = useCallback((id: string) => {
                             nextGameId={nextGameId}
                             onCancelRematch={onCancelRematch}
                         />
-                        <Board 
-                            board={board} selectedPiece={selectedPiece} validMoves={validMoves} 
+                        <Board
+                            board={board} selectedPiece={selectedPiece} validMoves={validMoves}
                             onSquareClick={handleSquareClick} turn={turn} playerColor={myOnlineColor}
                             gameMode={gameMode} isInteractionDisabled={isInteractionDisabled}
                             onPieceDragStart={handleDragStart}
@@ -2175,7 +2241,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
                             showPowerPieces={showPowerPieces}
                         />
                     </div>
-                     {/* Bottom Player Info (Mobile) */}
+                    {/* Bottom Player Info (Mobile) */}
                     <div className="w-full mt-2 md:hidden">
                         <PlayerInfoPanel
                             name={bottomPlayerName} rating={bottomPlayerRating} isDisconnected={bottomPlayerIsDisconnected}
@@ -2187,11 +2253,11 @@ const handleOnlineSpectate = useCallback((id: string) => {
                     {/* Mobile Controls & Chat Tabs */}
                     <div className="w-full mt-4 md:hidden bg-gray-800 rounded-lg p-2">
                         <div className="flex mb-2 border-b border-gray-600">
-                             <button onClick={() => setActiveTab('controls')} className={`flex-1 py-2 text-sm font-semibold ${activeTab === 'controls' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400'}`}>Actions</button>
-                             <button onClick={() => setActiveTab('chat')} className={`flex-1 py-2 text-sm font-semibold relative ${activeTab === 'chat' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400'}`}>
+                            <button onClick={() => setActiveTab('controls')} className={`flex-1 py-2 text-sm font-semibold ${activeTab === 'controls' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400'}`}>Actions</button>
+                            <button onClick={() => setActiveTab('chat')} className={`flex-1 py-2 text-sm font-semibold relative ${activeTab === 'chat' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400'}`}>
                                 Chat {unreadChatCount > 0 && <span className="absolute -top-1 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">{unreadChatCount}</span>}
-                             </button>
-                             <button onClick={() => setActiveTab('moves')} className={`flex-1 py-2 text-sm font-semibold ${activeTab === 'moves' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400'}`}>Moves</button>
+                            </button>
+                            <button onClick={() => setActiveTab('moves')} className={`flex-1 py-2 text-sm font-semibold ${activeTab === 'moves' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400'}`}>Moves</button>
                         </div>
 
                         {activeTab === 'controls' && (
@@ -2222,15 +2288,15 @@ const handleOnlineSpectate = useCallback((id: string) => {
                                     </div>
                                 )}
                                 <div className="grid grid-cols-2 gap-4">
-                                     <button 
+                                    <button
                                         onClick={() => setShowPowerLegend(true)}
                                         className="w-full px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg font-semibold transition-colors"
                                     >
                                         Power Legend
                                     </button>
                                     {gameMode === 'local' && (<button onClick={handleUndo} disabled={history.length <= 1} className="w-full mt-4 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-semibold transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed">Undo Move</button>)}
-                                     {showForcePowerButton && (
-                                        <button 
+                                    {showForcePowerButton && (
+                                        <button
                                             onClick={() => setIsForcePowerMode(!isForcePowerMode)}
                                             className={`w-full px-4 py-2 rounded-lg font-semibold transition-colors text-white ${isForcePowerMode ? 'bg-red-700 hover:bg-red-800' : 'bg-red-500 hover:bg-red-600'}`}
                                         >
@@ -2244,26 +2310,26 @@ const handleOnlineSpectate = useCallback((id: string) => {
 
                                 {/* Captured Pieces on Mobile - Placed below Back to Menu */}
                                 <div className="flex flex-col gap-2 my-2">
-                                   <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
-                                       <span className="text-sm text-gray-300 font-bold">Captured by White:</span>
-                                       <div className="flex flex-wrap gap-1">
-                                           {capturedPieces.black.map((p, i) => <div key={i} className="w-6 h-6"><PieceComponent piece={p}/></div>)}
-                                           {capturedPieces.black.length === 0 && <span className="text-gray-500 text-xs italic">None</span>}
-                                       </div>
-                                   </div>
-                                   <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
-                                       <span className="text-sm text-gray-300 font-bold">Captured by Black:</span>
-                                       <div className="flex flex-wrap gap-1">
-                                           {capturedPieces.white.map((p, i) => <div key={i} className="w-6 h-6"><PieceComponent piece={p}/></div>)}
+                                    <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
+                                        <span className="text-sm text-gray-300 font-bold">Captured by White:</span>
+                                        <div className="flex flex-wrap gap-1">
+                                            {capturedPieces.black.map((p, i) => <div key={i} className="w-6 h-6"><PieceComponent piece={p} /></div>)}
+                                            {capturedPieces.black.length === 0 && <span className="text-gray-500 text-xs italic">None</span>}
+                                        </div>
+                                    </div>
+                                    <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
+                                        <span className="text-sm text-gray-300 font-bold">Captured by Black:</span>
+                                        <div className="flex flex-wrap gap-1">
+                                            {capturedPieces.white.map((p, i) => <div key={i} className="w-6 h-6"><PieceComponent piece={p} /></div>)}
                                             {capturedPieces.white.length === 0 && <span className="text-gray-500 text-xs italic">None</span>}
-                                       </div>
-                                   </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         )}
 
                         {activeTab === 'chat' && (
-                             <div className="flex flex-col h-64">
+                            <div className="flex flex-col h-64">
                                 <div ref={chatContainerRef} className="flex-grow overflow-y-auto mb-2 space-y-2 p-2 bg-gray-900 rounded">
                                     {chatMessages.length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
                                     {chatMessages.map((msg, i) => {
@@ -2277,21 +2343,21 @@ const handleOnlineSpectate = useCallback((id: string) => {
                                     })}
                                 </div>
                                 <form onSubmit={handleSendChat} className="flex gap-2 mt-auto">
-                                    <input 
-                                        type="text" 
-                                        value={chatInput} 
-                                        onChange={e => setChatInput(e.target.value)} 
+                                    <input
+                                        type="text"
+                                        value={chatInput}
+                                        onChange={e => setChatInput(e.target.value)}
                                         maxLength={100}
                                         placeholder="Type a message (max 100 chars)..."
                                         className="flex-grow p-2 bg-gray-700 rounded border border-gray-600 text-white text-sm"
                                     />
                                     <button type="submit" className="px-3 py-2 bg-blue-600 rounded hover:bg-blue-500 font-bold text-sm">Send</button>
                                 </form>
-                             </div>
+                            </div>
                         )}
-                        
-                         {activeTab === 'moves' && (
-                             <div className="h-64 overflow-y-auto p-2 bg-gray-900 rounded text-sm font-mono" ref={movesContainerRef}>
+
+                        {activeTab === 'moves' && (
+                            <div className="h-64 overflow-y-auto p-2 bg-gray-900 rounded text-sm font-mono" ref={movesContainerRef}>
                                 <table className="w-full text-left">
                                     <thead>
                                         <tr className="text-gray-500 border-b border-gray-700">
@@ -2316,29 +2382,29 @@ const handleOnlineSpectate = useCallback((id: string) => {
                                         })()}
                                     </tbody>
                                 </table>
-                             </div>
+                            </div>
                         )}
                     </div>
                 </div>
 
                 {/* Side Panel (Desktop) */}
                 <div className="w-full md:w-80 bg-gray-800 p-4 rounded-lg shadow-xl hidden md:flex flex-col h-[600px]">
-                     <div className="flex mb-4 border-b border-gray-600">
-                         <button type="button" onClick={() => setActiveTab('controls')} className={`flex-1 py-2 font-semibold ${activeTab === 'controls' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}>Game</button>
-                         <button type="button" onClick={() => setActiveTab('chat')} className={`flex-1 py-2 font-semibold relative ${activeTab === 'chat' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}>
+                    <div className="flex mb-4 border-b border-gray-600">
+                        <button type="button" onClick={() => setActiveTab('controls')} className={`flex-1 py-2 font-semibold ${activeTab === 'controls' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}>Game</button>
+                        <button type="button" onClick={() => setActiveTab('chat')} className={`flex-1 py-2 font-semibold relative ${activeTab === 'chat' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}>
                             Chat {unreadChatCount > 0 && <span className="absolute top-1 right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">{unreadChatCount}</span>}
-                         </button>
-                         <button type="button" onClick={() => setActiveTab('moves')} className={`flex-1 py-2 font-semibold ${activeTab === 'moves' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}>Moves</button>
-                     </div>
+                        </button>
+                        <button type="button" onClick={() => setActiveTab('moves')} className={`flex-1 py-2 font-semibold ${activeTab === 'moves' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}>Moves</button>
+                    </div>
 
-                     {activeTab === 'controls' && (
+                    {activeTab === 'controls' && (
                         <div className="flex-grow flex flex-col overflow-y-auto">
-                             <h1 className="text-2xl font-bold text-center mb-1 text-green-400">Krachtschaak</h1>
-                             <p className="text-center text-gray-400 mb-4 capitalize text-sm">
+                            <h1 className="text-2xl font-bold text-center mb-1 text-green-400">Krachtschaak</h1>
+                            <p className="text-center text-gray-400 mb-4 capitalize text-sm">
                                 {formatTimerSettingText(timerSettings)} • {isRated ? `Rated (${ratingCategory})` : 'Unrated'}
-                             </p>
-                             <div className="mb-4">
-                                <PlayerInfoPanel 
+                            </p>
+                            <div className="mb-4">
+                                <PlayerInfoPanel
                                     name={topPlayerName} rating={topPlayerRating} isDisconnected={topPlayerIsDisconnected}
                                     isOpponent={topPlayerIsOpponent} countdown={rejoinCountdown} time={topPlayerTime}
                                     isTurn={isTopPlayerTurn} captured={topPlayerCapturedPieces}
@@ -2350,50 +2416,50 @@ const handleOnlineSpectate = useCallback((id: string) => {
                                 isTurn={isBottomPlayerTurn} captured={bottomPlayerCapturedPieces}
                             />
                             <div className="mt-auto pt-4">
-                              <button 
-                                  onClick={() => setShowPowerLegend(true)}
-                                  className="w-full mb-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg font-semibold transition-colors text-sm"
-                              >
-                                  Power Legend
-                              </button>
-                              {showForcePowerButton && (
-                                <div className="my-2">
-                                    <button 
-                                        onClick={() => setIsForcePowerMode(!isForcePowerMode)}
-                                        className={`w-full px-4 py-2 rounded-lg font-semibold transition-colors text-white text-sm ${isForcePowerMode ? 'bg-red-700 hover:bg-red-800' : 'bg-red-500 hover:bg-red-600'}`}
-                                    >
-                                        {isForcePowerMode ? 'Forcing Power Loss!' : 'Force Power Use'}
-                                    </button>
-                                    <p className="text-xs text-gray-400 mt-1 text-center">Ambiguous moves consume power.</p>
-                                </div>
-                              )}
-                              {status === 'playing' && (
-                                  <div className="mt-2 text-center">
-                                      {drawOffer && drawOffer !== myColor ? (
-                                          <div>
-                                              <p className="mb-2 text-yellow-400 text-sm">{drawOffer.charAt(0).toUpperCase() + drawOffer.slice(1)} offers draw.</p>
-                                              <div className="flex justify-center gap-2">
-                                                  <button onClick={handleAcceptDraw} className="px-4 py-1 bg-green-600 hover:bg-green-700 rounded text-sm font-semibold transition-colors">Accept</button>
-                                                  <button onClick={handleDeclineDraw} className="px-4 py-1 bg-gray-600 hover:bg-gray-700 rounded text-sm font-semibold transition-colors">Decline</button>
-                                              </div>
-                                          </div>
-                                      ) : drawOffer && drawOffer === myColor ? (
-                                          <p className="text-gray-400 text-sm">Draw offer sent.</p>
-                                      ) : (
-                                          <button onClick={handleOfferDraw} className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors text-sm">Offer Draw</button>
-                                      )}
-                                  </div>
-                              )}
-                              {gameMode === 'local' && (<button onClick={handleUndo} disabled={history.length <= 1} className="w-full mt-4 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-semibold transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed text-sm">Undo Move</button>)}
-                              {status === 'playing' && (<button onClick={handleResign} className="w-full mt-4 px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg font-semibold transition-colors text-sm">Resign</button>)}
-                              <button onClick={handleBackToMenu} className="w-full mt-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-semibold transition-colors text-sm">
-                                  {gameMode === 'online_playing' ? 'Back to Lobby' : 'Back to Menu'}
-                              </button>
+                                <button
+                                    onClick={() => setShowPowerLegend(true)}
+                                    className="w-full mb-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg font-semibold transition-colors text-sm"
+                                >
+                                    Power Legend
+                                </button>
+                                {showForcePowerButton && (
+                                    <div className="my-2">
+                                        <button
+                                            onClick={() => setIsForcePowerMode(!isForcePowerMode)}
+                                            className={`w-full px-4 py-2 rounded-lg font-semibold transition-colors text-white text-sm ${isForcePowerMode ? 'bg-red-700 hover:bg-red-800' : 'bg-red-500 hover:bg-red-600'}`}
+                                        >
+                                            {isForcePowerMode ? 'Forcing Power Loss!' : 'Force Power Use'}
+                                        </button>
+                                        <p className="text-xs text-gray-400 mt-1 text-center">Ambiguous moves consume power.</p>
+                                    </div>
+                                )}
+                                {status === 'playing' && (
+                                    <div className="mt-2 text-center">
+                                        {drawOffer && drawOffer !== myColor ? (
+                                            <div>
+                                                <p className="mb-2 text-yellow-400 text-sm">{drawOffer.charAt(0).toUpperCase() + drawOffer.slice(1)} offers draw.</p>
+                                                <div className="flex justify-center gap-2">
+                                                    <button onClick={handleAcceptDraw} className="px-4 py-1 bg-green-600 hover:bg-green-700 rounded text-sm font-semibold transition-colors">Accept</button>
+                                                    <button onClick={handleDeclineDraw} className="px-4 py-1 bg-gray-600 hover:bg-gray-700 rounded text-sm font-semibold transition-colors">Decline</button>
+                                                </div>
+                                            </div>
+                                        ) : drawOffer && drawOffer === myColor ? (
+                                            <p className="text-gray-400 text-sm">Draw offer sent.</p>
+                                        ) : (
+                                            <button onClick={handleOfferDraw} className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors text-sm">Offer Draw</button>
+                                        )}
+                                    </div>
+                                )}
+                                {gameMode === 'local' && (<button onClick={handleUndo} disabled={history.length <= 1} className="w-full mt-4 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-semibold transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed text-sm">Undo Move</button>)}
+                                {status === 'playing' && (<button onClick={handleResign} className="w-full mt-4 px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg font-semibold transition-colors text-sm">Resign</button>)}
+                                <button onClick={handleBackToMenu} className="w-full mt-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-semibold transition-colors text-sm">
+                                    {gameMode === 'online_playing' ? 'Back to Lobby' : 'Back to Menu'}
+                                </button>
                             </div>
                         </div>
-                     )}
+                    )}
 
-                     {activeTab === 'chat' && (
+                    {activeTab === 'chat' && (
                         <div className="flex-grow flex flex-col h-full">
                             <div ref={chatContainerRef} className="flex-grow overflow-y-auto mb-2 space-y-2 p-2 bg-gray-900 rounded border border-gray-700">
                                 {chatMessages.length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
@@ -2408,10 +2474,10 @@ const handleOnlineSpectate = useCallback((id: string) => {
                                 })}
                             </div>
                             <form onSubmit={handleSendChat} className="flex gap-2 mt-auto">
-                                <input 
-                                    type="text" 
-                                    value={chatInput} 
-                                    onChange={e => setChatInput(e.target.value)} 
+                                <input
+                                    type="text"
+                                    value={chatInput}
+                                    onChange={e => setChatInput(e.target.value)}
                                     maxLength={100}
                                     placeholder="Type a message (max 100 chars)..."
                                     className="flex-grow p-2 bg-gray-700 rounded border border-gray-600 text-white text-sm focus:outline-none focus:border-green-500"
@@ -2419,9 +2485,9 @@ const handleOnlineSpectate = useCallback((id: string) => {
                                 <button type="submit" className="px-3 py-2 bg-blue-600 rounded hover:bg-blue-500 font-bold text-sm">Send</button>
                             </form>
                         </div>
-                     )}
+                    )}
 
-                     {activeTab === 'moves' && (
+                    {activeTab === 'moves' && (
                         <div className="flex-grow overflow-y-auto p-2 bg-gray-900 rounded text-sm font-mono border border-gray-700" ref={movesContainerRef}>
                             <table className="w-full text-left">
                                 <thead>
@@ -2448,7 +2514,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
                                 </tbody>
                             </table>
                         </div>
-                     )}
+                    )}
                 </div>
             </div>
         );
@@ -2456,35 +2522,35 @@ const handleOnlineSpectate = useCallback((id: string) => {
 
     const renderContent = () => {
         if (reviewingGame) {
-             return <GameReview game={reviewingGame} onBack={handleBackFromReview} />;
+            return <GameReview game={reviewingGame} onBack={handleBackFromReview} />;
         }
 
         if (gameMode === 'menu') {
-             return (
+            return (
                 <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-white p-4">
                     <h1 className="text-5xl md:text-7xl font-bold mb-8 text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500">
                         Krachtschaak
                     </h1>
-                     {menuMessage && (
+                    {menuMessage && (
                         <div className={`mb-6 p-4 rounded-lg ${menuMessage.type === 'error' ? 'bg-red-600' : 'bg-blue-600'} text-white font-semibold shadow-lg`}>
                             {menuMessage.text}
                         </div>
                     )}
                     <div className="space-y-4 w-full max-w-md">
-                         <button 
+                        <button
                             onClick={() => setShowLocalSetup(true)}
                             className="w-full py-4 bg-gray-700 hover:bg-gray-600 rounded-xl text-xl font-bold transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-3"
                         >
                             <span>♟️</span> Local Game
                         </button>
-                         <button 
+                        <button
                             onClick={handleStartOnline}
                             className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 rounded-xl text-xl font-bold transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-3"
                         >
                             <span>🌐</span> Online Play
                         </button>
                         {currentUser && (
-                             <button
+                            <button
                                 onClick={handleContinueOnlineGame}
                                 className="w-full py-4 bg-green-600 hover:bg-green-500 rounded-xl text-xl font-bold transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-3"
                             >
@@ -2498,7 +2564,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
                             <span>⚙️</span> Settings
                         </button>
                         {currentUser && (
-                            <button 
+                            <button
                                 onClick={handleLogout}
                                 className="w-full py-3 mt-8 bg-red-900/50 hover:bg-red-800/50 text-red-300 rounded-lg font-semibold transition-colors border border-red-800"
                             >
@@ -2506,12 +2572,12 @@ const handleOnlineSpectate = useCallback((id: string) => {
                             </button>
                         )}
                     </div>
-                    
+
                     <div className="mt-6">
-                        <a 
-                            href="https://gratis-5137332.jouwweb.site/de-officiele-krachtschaak-regels" 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
+                        <a
+                            href="https://gratis-5137332.jouwweb.site/de-officiele-krachtschaak-regels"
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="text-blue-400 hover:text-blue-300 underline text-lg font-medium"
                         >
                             How to Play (Official Rules in Dutch)
@@ -2521,7 +2587,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
                     {showLocalSetup && (
                         <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4">
                             <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-sm relative">
-                                <button 
+                                <button
                                     onClick={() => setShowLocalSetup(false)}
                                     className="absolute top-2 right-3 text-2xl text-gray-400 hover:text-white"
                                 >
@@ -2531,7 +2597,7 @@ const handleOnlineSpectate = useCallback((id: string) => {
                                 <div className="space-y-3">
                                     <button onClick={() => resetGame('local', null)} className="w-full py-3 bg-green-600 hover:bg-green-700 rounded-lg text-lg font-semibold transition-colors">Unlimited Time</button>
                                     <div className="border-t border-gray-700 my-4"></div>
-                                    
+
                                     <div className="flex gap-2 items-end mb-2">
                                         <div>
                                             <label className="block mb-1 text-xs text-gray-400">Base (min)</label>
@@ -2542,12 +2608,12 @@ const handleOnlineSpectate = useCallback((id: string) => {
                                             <input type="number" value={localCustomInc} onChange={e => setLocalCustomInc(e.target.value)} className="w-full p-2 bg-gray-700 rounded text-center" min="0" />
                                         </div>
                                     </div>
-                                    <button 
+                                    <button
                                         onClick={() => {
                                             const base = parseFloat(localCustomBase) || 10;
                                             const inc = parseInt(localCustomInc) || 0;
                                             resetGame('local', { initialTime: base * 60, increment: inc });
-                                        }} 
+                                        }}
                                         className="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-lg font-semibold transition-colors"
                                     >
                                         Start Custom
@@ -2556,9 +2622,9 @@ const handleOnlineSpectate = useCallback((id: string) => {
                             </div>
                         </div>
                     )}
-                    
-                     {showSettings && (
-                        <SettingsModal 
+
+                    {showSettings && (
+                        <SettingsModal
                             onClose={() => setShowSettings(false)}
                             premovesEnabled={premovesEnabled}
                             setPremovesEnabled={setPremovesEnabled}
@@ -2578,10 +2644,10 @@ const handleOnlineSpectate = useCallback((id: string) => {
 
         if (gameMode === 'online_lobby') {
             return (
-                <OnlineLobby 
+                <OnlineLobby
                     onSpectate={handleOnlineSpectate}
-                    userUid={currentUser?.uid} 
-                    onGameStart={handleOnlineGameStart} 
+                    userUid={currentUser?.uid}
+                    onGameStart={handleOnlineGameStart}
                     onBack={() => setGameMode('menu')}
                     getInitialGameState={resetGame}
                     creatorColor={nextGameColor}
@@ -2616,35 +2682,35 @@ const handleOnlineSpectate = useCallback((id: string) => {
             {showConfirmation && (
                 <ConfirmationModal
                     title={
-                        showConfirmation === 'draw' ? 'Offer Draw?' : 
-                        showConfirmation === 'move' ? 'Confirm Move' : 
-                        showConfirmation === 'premove' ? 'Confirm Premove' :
-                        'Resign Game?'
+                        showConfirmation === 'draw' ? 'Offer Draw?' :
+                            showConfirmation === 'move' ? 'Confirm Move' :
+                                showConfirmation === 'premove' ? 'Confirm Premove' :
+                                    'Resign Game?'
                     }
                     message={
-                        showConfirmation === 'draw' ? "Are you sure you want to offer a draw to your opponent?" : 
-                        showConfirmation === 'move' ? `Are you sure you want to submit this move${moveNotation ? ': ' + moveNotation : ''}? (Correspondence Game)` :
-                        showConfirmation === 'premove' ? `Are you sure you want to premove${moveNotation ? ': ' + moveNotation : ''}?` :
-                        "Are you sure you want to resign? This action cannot be undone."
+                        showConfirmation === 'draw' ? "Are you sure you want to offer a draw to your opponent?" :
+                            showConfirmation === 'move' ? `Are you sure you want to submit this move${moveNotation ? ': ' + moveNotation : ''}? (Correspondence Game)` :
+                                showConfirmation === 'premove' ? `Are you sure you want to premove${moveNotation ? ': ' + moveNotation : ''}?` :
+                                    "Are you sure you want to resign? This action cannot be undone."
                     }
                     onConfirm={showConfirmation === 'draw' ? confirmOfferDraw : (showConfirmation === 'move' || showConfirmation === 'premove') ? confirmMove : confirmResign}
-                    onCancel={() => { 
-                         if (showConfirmation === 'move' && preCommitState) {
-                             loadGameState(preCommitState);
-                             setPendingCommitState(null);
-                             setPreCommitState(null);
-                         }
-                         if (showConfirmation === 'premove') {
-                             setPendingPremove(null);
-                         }
-                         setShowConfirmation(null); 
-                         setPendingMove(null); 
+                    onCancel={() => {
+                        if (showConfirmation === 'move' && preCommitState) {
+                            loadGameState(preCommitState);
+                            setPendingCommitState(null);
+                            setPreCommitState(null);
+                        }
+                        if (showConfirmation === 'premove') {
+                            setPendingPremove(null);
+                        }
+                        setShowConfirmation(null);
+                        setPendingMove(null);
                     }}
                     confirmText={showConfirmation === 'draw' ? 'Offer Draw' : (showConfirmation === 'move' || showConfirmation === 'premove') ? 'Submit' : 'Resign'}
                     cancelText="Cancel"
                 />
             )}
-             {showLogoutWarning && (
+            {showLogoutWarning && (
                 <ConfirmationModal
                     title="Cannot Logout"
                     message="You have active sent challenges. Please cancel them in the 'Challenges' tab before exiting as a Guest."
