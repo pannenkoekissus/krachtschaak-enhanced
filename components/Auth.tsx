@@ -84,7 +84,6 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
                         const userEmailSnapshot = await db.ref(`users/${userUid}/email`).get();
                         if (userEmailSnapshot.exists()) {
                             loginEmail = userEmailSnapshot.val();
-                            setEmail(loginEmail);
                         } else {
                             throw new Error("Username not found.");
                         }
