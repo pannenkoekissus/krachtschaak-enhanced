@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { playMoveSound, playCaptureSound, playCheckSound, playWinSound, playLossSound, playDrawSound } from './utils/sounds';
 import Board from './components/Board';
 import GameOverlay from './components/GameOverlay';
 import PieceComponent from './components/Piece';
@@ -147,6 +148,62 @@ const App: React.FC = () => {
     const sessionRef = useRef<any>(null);
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const movesContainerRef = useRef<HTMLDivElement>(null);
+
+    // Sound Effects
+    const prevStatus = useRef(status);
+    const prevLastMove = useRef(lastMove);
+    const prevCapturedCounts = useRef({ white: 0, black: 0 });
+
+    useEffect(() => {
+        const hasStatusChanged = prevStatus.current !== status;
+        const hasMoveChanged = lastMove && (prevLastMove.current !== lastMove);
+
+        // Captured Logic (Check if count of captured pieces increased)
+        const whiteCapturedCount = capturedPieces.white ? capturedPieces.white.length : 0;
+        const blackCapturedCount = capturedPieces.black ? capturedPieces.black.length : 0;
+        const hasCapture = whiteCapturedCount > prevCapturedCounts.current.white || blackCapturedCount > prevCapturedCounts.current.black;
+
+        // Game Over Sounds
+        if (hasStatusChanged) {
+            // kingCaptured is treated same as checkmate for sounds
+            if (status === 'checkmate' || status === 'kingCaptured') {
+                if (gameMode === 'online_playing' && myOnlineColor) {
+                    const iWon = winner && winner.toLowerCase() === myOnlineColor.toLowerCase();
+                    if (iWon) playWinSound();
+                    else playLossSound();
+                } else {
+                    playWinSound();
+                }
+            } else if (status === 'stalemate' || status.startsWith('draw')) {
+                playDrawSound();
+            } else if (status === 'resignation' || status === 'timeout') {
+                if (gameMode === 'online_playing' && myOnlineColor) {
+                    const iWon = winner && winner.toLowerCase() === myOnlineColor.toLowerCase();
+                    if (iWon) playWinSound();
+                    else playLossSound();
+                } else if (winner) {
+                    playWinSound();
+                }
+            }
+        }
+
+        // Move Sounds
+        if ((status === 'playing' || status === 'promotion') && hasMoveChanged) {
+            // Priority: Check > Capture > Move
+            if (isKingInCheck(board, turn)) {
+                playCheckSound();
+            } else if (hasCapture) {
+                playCaptureSound();
+            } else {
+                playMoveSound();
+            }
+        }
+
+        prevStatus.current = status;
+        prevLastMove.current = lastMove;
+        prevCapturedCounts.current = { white: whiteCapturedCount, black: blackCapturedCount };
+    }, [status, lastMove, winner, gameMode, myOnlineColor, board, turn, capturedPieces]);
+
 
     // Local Game Custom Time State
     const [localCustomBase, setLocalCustomBase] = useState('10');
