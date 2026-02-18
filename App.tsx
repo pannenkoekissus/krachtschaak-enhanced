@@ -112,6 +112,8 @@ const App: React.FC = () => {
     const [drawConfirmationEnabled, _setDrawConfirmationEnabled] = useState(true);
     const [resignConfirmationEnabled, _setResignConfirmationEnabled] = useState(true);
     const [showPowerPieces, _setShowPowerPieces] = useState(true);
+    const [showPowerRings, _setShowPowerRings] = useState(true);
+    const [showOriginalType, _setShowOriginalType] = useState(true);
     const [soundsEnabled, _setSoundsEnabled] = useState(true);
     const [premoves, setPremoves] = useState<GameState['premoves']>({});
 
@@ -305,6 +307,18 @@ const App: React.FC = () => {
             db.ref(`userSettings/${currentUser.uid}/showPowerPieces`).set(enabled);
         }
     };
+    const setShowPowerRings = (enabled: boolean) => {
+        _setShowPowerRings(enabled);
+        if (currentUser && isFirebaseConfigured) {
+            db.ref(`userSettings/${currentUser.uid}/showPowerRings`).set(enabled);
+        }
+    };
+    const setShowOriginalType = (enabled: boolean) => {
+        _setShowOriginalType(enabled);
+        if (currentUser && isFirebaseConfigured) {
+            db.ref(`userSettings/${currentUser.uid}/showOriginalType`).set(enabled);
+        }
+    };
     const setSoundsEnabled = (enabled: boolean) => {
         _setSoundsEnabled(enabled);
         if (currentUser && isFirebaseConfigured) {
@@ -329,6 +343,8 @@ const App: React.FC = () => {
                     if (val.drawConfirmationEnabled !== undefined) _setDrawConfirmationEnabled(val.drawConfirmationEnabled);
                     if (val.resignConfirmationEnabled !== undefined) _setResignConfirmationEnabled(val.resignConfirmationEnabled);
                     if (val.showPowerPieces !== undefined) _setShowPowerPieces(val.showPowerPieces);
+                    if (val.showPowerRings !== undefined) _setShowPowerRings(val.showPowerRings);
+                    if (val.showOriginalType !== undefined) _setShowOriginalType(val.showOriginalType);
                     if (val.soundsEnabled !== undefined) _setSoundsEnabled(val.soundsEnabled);
                 }
             });
@@ -2326,6 +2342,8 @@ const App: React.FC = () => {
                             onBoardMouseUp={handleBoardMouseUp}
                             onBoardContextMenu={handleBoardContextMenu}
                             showPowerPieces={showPowerPieces}
+                            showPowerRings={showPowerRings}
+                            showOriginalType={showOriginalType}
                         />
                     </div>
                     {/* Bottom Player Info (Mobile) */}
@@ -2723,6 +2741,10 @@ const App: React.FC = () => {
                             setResignConfirmationEnabled={setResignConfirmationEnabled}
                             showPowerPieces={showPowerPieces}
                             setShowPowerPieces={setShowPowerPieces}
+                            showPowerRings={showPowerRings}
+                            setShowPowerRings={setShowPowerRings}
+                            showOriginalType={showOriginalType}
+                            setShowOriginalType={setShowOriginalType}
                             soundsEnabled={soundsEnabled}
                             setSoundsEnabled={setSoundsEnabled}
                         />
@@ -2753,6 +2775,10 @@ const App: React.FC = () => {
                     setResignConfirmationEnabled={setResignConfirmationEnabled}
                     showPowerPieces={showPowerPieces}
                     setShowPowerPieces={setShowPowerPieces}
+                    showPowerRings={showPowerRings}
+                    setShowPowerRings={setShowPowerRings}
+                    showOriginalType={showOriginalType}
+                    setShowOriginalType={setShowOriginalType}
                     soundsEnabled={soundsEnabled}
                     setSoundsEnabled={setSoundsEnabled}
                     currentLobbyTab={lobbyView}

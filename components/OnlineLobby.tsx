@@ -22,12 +22,12 @@ interface OnlineLobbyProps {
     setPremovesEnabled: (enabled: boolean) => void;
     moveConfirmationEnabled: boolean;
     setMoveConfirmationEnabled: (enabled: boolean) => void;
-    drawConfirmationEnabled: boolean;
-    setDrawConfirmationEnabled: (enabled: boolean) => void;
-    resignConfirmationEnabled: boolean;
-    setResignConfirmationEnabled: (enabled: boolean) => void;
     showPowerPieces: boolean;
     setShowPowerPieces: (enabled: boolean) => void;
+    showPowerRings: boolean;
+    setShowPowerRings: (enabled: boolean) => void;
+    showOriginalType: boolean;
+    setShowOriginalType: (enabled: boolean) => void;
     soundsEnabled: boolean;
     setSoundsEnabled: (enabled: boolean) => void;
     // State props
@@ -170,7 +170,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
     userUid, onGameStart, onBack, getInitialGameState, creatorColor, onGameCreated, myRatings, onReview,
     premovesEnabled, setPremovesEnabled, moveConfirmationEnabled, setMoveConfirmationEnabled,
     drawConfirmationEnabled, setDrawConfirmationEnabled, resignConfirmationEnabled, setResignConfirmationEnabled,
-    showPowerPieces, setShowPowerPieces, soundsEnabled, setSoundsEnabled,
+    showPowerPieces, setShowPowerPieces, showPowerRings, setShowPowerRings, showOriginalType, setShowOriginalType, soundsEnabled, setSoundsEnabled,
     currentLobbyTab, setCurrentLobbyTab, onSpectate
 }) => {
     const [openGames, setOpenGames] = useState<LobbyGame[]>([]);
@@ -1216,6 +1216,10 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                     setResignConfirmationEnabled={setResignConfirmationEnabled}
                     showPowerPieces={showPowerPieces}
                     setShowPowerPieces={setShowPowerPieces}
+                    showPowerRings={showPowerRings}
+                    setShowPowerRings={setShowPowerRings}
+                    showOriginalType={showOriginalType}
+                    setShowOriginalType={setShowOriginalType}
                     soundsEnabled={soundsEnabled}
                     setSoundsEnabled={setSoundsEnabled}
                 />

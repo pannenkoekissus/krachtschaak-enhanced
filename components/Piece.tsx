@@ -50,10 +50,17 @@ interface PieceComponentProps {
     onDragEnd?: (e: React.DragEvent) => void;
     isBeingDragged?: boolean;
     showPowerPieces?: boolean;
+    showPowerRings?: boolean;
+    showOriginalType?: boolean;
 }
 
 
-const Piece: React.FC<PieceComponentProps> = ({ piece, onDragStart, onDragEnd, isBeingDragged, showPowerPieces = true }) => {
+const Piece: React.FC<PieceComponentProps> = ({
+    piece, onDragStart, onDragEnd, isBeingDragged,
+    showPowerPieces = true,
+    showPowerRings = true,
+    showOriginalType = true
+}) => {
     const hasEffectivePower = (piece: PieceProps): boolean => {
         if (!piece.power) return false;
 
@@ -69,7 +76,7 @@ const Piece: React.FC<PieceComponentProps> = ({ piece, onDragStart, onDragEnd, i
     };
 
     const effectivePower = hasEffectivePower(piece);
-    const powerRingClass = effectivePower ? `ring-4 ${powerColors[piece.power!]}` : '';
+    const powerRingClass = (effectivePower && showPowerRings) ? `ring-4 ${powerColors[piece.power!]}` : '';
     const dragClass = isBeingDragged ? 'opacity-50' : 'opacity-100';
 
     return (
@@ -84,6 +91,16 @@ const Piece: React.FC<PieceComponentProps> = ({ piece, onDragStart, onDragEnd, i
                 alt={`${piece.color} ${piece.type}`}
                 className={`w-full h-full object-contain drop-shadow-lg ${powerRingClass} rounded-full`}
             />
+            {/* Original Type Indicator (Top Left) */}
+            {showOriginalType && piece.type !== piece.originalType && (
+                <div className="absolute top-0 left-0 w-6 h-6 md:w-8 md:h-8 rounded-full border border-white shadow-lg bg-opacity-90 flex items-center justify-center" style={{ background: 'rgba(0, 0, 0, 0.6)' }}>
+                    <img
+                        src={svgs[piece.color][piece.originalType]}
+                        alt={`original ${piece.originalType}`}
+                        className="w-[80%] h-[80%] object-contain opacity-70"
+                    />
+                </div>
+            )}
             {effectivePower && piece.power && showPowerPieces && (
                 <div className="absolute bottom-0 right-0 w-6 h-6 md:w-8 md:h-8 rounded-full border border-white shadow-lg bg-opacity-90" style={{ background: 'rgba(0, 0, 0, 0.8)' }}>
                     <img
