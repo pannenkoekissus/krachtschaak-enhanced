@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { playMoveSound, playCaptureSound, playCheckSound, playWinSound, playLossSound, playDrawSound } from './utils/sounds';
+import { playMoveSound, playCaptureSound, playWinSound, playLossSound, playDrawSound, playLowTimeSound } from './utils/sounds';
 import Board from './components/Board';
 import GameOverlay from './components/GameOverlay';
 import PieceComponent from './components/Piece';
@@ -901,6 +901,7 @@ const App: React.FC = () => {
         if (isRealtime && playerTimes && turnStartTime) {
             const timeAtTurnStart = playerTimes[turn];
             setDisplayedTime(playerTimes);
+            let hasPlayedLowTimeSound = false;
             if (timerRef.current) clearInterval(timerRef.current);
             timerRef.current = window.setInterval(() => {
                 if (statusRef.current !== 'playing') {
@@ -913,8 +914,12 @@ const App: React.FC = () => {
                 }
                 const newTime = timeAtTurnStart - elapsedSeconds;
 
-                setDisplayedTime(prev => prev ? { ...prev, [turn]: Math.max(0, newTime) } : null);
+                if (newTime <= 10 && newTime > 0 && !hasPlayedLowTimeSound) {
+                    playLowTimeSound();
+                    hasPlayedLowTimeSound = true;
+                }
 
+                setDisplayedTime(prev => prev ? { ...prev, [turn]: Math.max(0, newTime) } : null);
                 if (newTime <= 0) {
                     // Check timeout even if opponent is disconnected
                     if (gameMode !== 'online_playing' || turn === myOnlineColor || statusRef.current === 'playing') {

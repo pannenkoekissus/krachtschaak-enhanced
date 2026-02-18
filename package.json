@@ -11,10 +11,13 @@
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
     "firebase": "^12.9.0",
+    "howler": "^2.2.4",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "use-sound": "^5.0.0"
   },
   "devDependencies": {
+    "@types/howler": "^2.2.12",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.0",
