@@ -155,6 +155,19 @@ const App: React.FC = () => {
     const prevCapturedCounts = useRef({ white: 0, black: 0 });
 
     useEffect(() => {
+        // Only play sounds if we are actually in a game screen and not reviewing
+        const isGameScreen = gameMode === 'local' || gameMode === 'online_playing' || gameMode === 'online_spectating';
+        if (!isGameScreen || reviewingGame) {
+            // Update refs so they don't trigger when we return to the game screen
+            prevStatus.current = status;
+            prevLastMove.current = lastMove;
+            prevCapturedCounts.current = {
+                white: capturedPieces.white ? capturedPieces.white.length : 0,
+                black: capturedPieces.black ? capturedPieces.black.length : 0
+            };
+            return;
+        }
+
         const hasStatusChanged = prevStatus.current !== status;
         const hasMoveChanged = lastMove && (prevLastMove.current !== lastMove);
 
@@ -200,7 +213,7 @@ const App: React.FC = () => {
         prevStatus.current = status;
         prevLastMove.current = lastMove;
         prevCapturedCounts.current = { white: whiteCapturedCount, black: blackCapturedCount };
-    }, [status, lastMove, winner, gameMode, myOnlineColor, board, turn, capturedPieces]);
+    }, [status, lastMove, winner, gameMode, myOnlineColor, board, turn, capturedPieces, reviewingGame]);
 
 
     // Local Game Custom Time State
@@ -915,8 +928,11 @@ const App: React.FC = () => {
                 const newTime = timeAtTurnStart - elapsedSeconds;
 
                 if (newTime <= 10 && newTime > 0 && !hasPlayedLowTimeSound) {
-                    playLowTimeSound();
-                    hasPlayedLowTimeSound = true;
+                    const isGameScreen = gameMode === 'local' || gameMode === 'online_playing' || gameMode === 'online_spectating';
+                    if (isGameScreen && !reviewingGame) {
+                        playLowTimeSound();
+                        hasPlayedLowTimeSound = true;
+                    }
                 }
 
                 setDisplayedTime(prev => prev ? { ...prev, [turn]: Math.max(0, newTime) } : null);
