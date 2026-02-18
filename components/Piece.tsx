@@ -54,7 +54,22 @@ interface PieceComponentProps {
 
 
 const Piece: React.FC<PieceComponentProps> = ({ piece, onDragStart, onDragEnd, isBeingDragged, showPowerPieces = true }) => {
-    const powerRingClass = piece.power ? `ring-4 ${powerColors[piece.power]}` : '';
+    const hasEffectivePower = (piece: PieceProps): boolean => {
+        if (!piece.power) return false;
+
+        // A piece with its own power doesn't do anything
+        if (piece.type === piece.power) return false;
+
+        // A queen with bishop or rook power also doesn't do anything
+        if (piece.type === PieceType.Queen && (piece.power === PieceType.Bishop || piece.power === PieceType.Rook)) {
+            return false;
+        }
+
+        return true;
+    };
+
+    const effectivePower = hasEffectivePower(piece);
+    const powerRingClass = effectivePower ? `ring-4 ${powerColors[piece.power!]}` : '';
     const dragClass = isBeingDragged ? 'opacity-50' : 'opacity-100';
 
     return (
@@ -69,7 +84,7 @@ const Piece: React.FC<PieceComponentProps> = ({ piece, onDragStart, onDragEnd, i
                 alt={`${piece.color} ${piece.type}`}
                 className={`w-full h-full object-contain drop-shadow-lg ${powerRingClass} rounded-full`}
             />
-            {piece.power && showPowerPieces && (
+            {effectivePower && piece.power && showPowerPieces && (
                 <div className="absolute bottom-0 right-0 w-6 h-6 md:w-8 md:h-8 rounded-full border border-white shadow-lg bg-opacity-90" style={{ background: 'rgba(0, 0, 0, 0.8)' }}>
                     <img
                         src={svgs[Color.White][piece.power]}

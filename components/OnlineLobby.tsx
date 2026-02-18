@@ -26,6 +26,10 @@ interface OnlineLobbyProps {
     setDrawConfirmationEnabled: (enabled: boolean) => void;
     resignConfirmationEnabled: boolean;
     setResignConfirmationEnabled: (enabled: boolean) => void;
+    showPowerPieces: boolean;
+    setShowPowerPieces: (enabled: boolean) => void;
+    soundsEnabled: boolean;
+    setSoundsEnabled: (enabled: boolean) => void;
     // State props
     currentLobbyTab: LobbyTab;
     setCurrentLobbyTab: (tab: LobbyTab) => void;
@@ -166,6 +170,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
     userUid, onGameStart, onBack, getInitialGameState, creatorColor, onGameCreated, myRatings, onReview,
     premovesEnabled, setPremovesEnabled, moveConfirmationEnabled, setMoveConfirmationEnabled,
     drawConfirmationEnabled, setDrawConfirmationEnabled, resignConfirmationEnabled, setResignConfirmationEnabled,
+    showPowerPieces, setShowPowerPieces, soundsEnabled, setSoundsEnabled,
     currentLobbyTab, setCurrentLobbyTab, onSpectate
 }) => {
     const [openGames, setOpenGames] = useState<LobbyGame[]>([]);
@@ -1209,6 +1214,10 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                     setDrawConfirmationEnabled={setDrawConfirmationEnabled}
                     resignConfirmationEnabled={resignConfirmationEnabled}
                     setResignConfirmationEnabled={setResignConfirmationEnabled}
+                    showPowerPieces={showPowerPieces}
+                    setShowPowerPieces={setShowPowerPieces}
+                    soundsEnabled={soundsEnabled}
+                    setSoundsEnabled={setSoundsEnabled}
                 />
             )}
         </div>

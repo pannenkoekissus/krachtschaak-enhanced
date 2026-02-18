@@ -112,6 +112,7 @@ const App: React.FC = () => {
     const [drawConfirmationEnabled, _setDrawConfirmationEnabled] = useState(true);
     const [resignConfirmationEnabled, _setResignConfirmationEnabled] = useState(true);
     const [showPowerPieces, _setShowPowerPieces] = useState(true);
+    const [soundsEnabled, _setSoundsEnabled] = useState(true);
     const [premoves, setPremoves] = useState<GameState['premoves']>({});
 
     // Commit confirmation interception state
@@ -157,7 +158,7 @@ const App: React.FC = () => {
     useEffect(() => {
         // Only play sounds if we are actually in a game screen and not reviewing
         const isGameScreen = gameMode === 'local' || gameMode === 'online_playing' || gameMode === 'online_spectating';
-        if (!isGameScreen || reviewingGame) {
+        if (!isGameScreen || reviewingGame || !soundsEnabled) {
             // Update refs so they don't trigger when we return to the game screen
             prevStatus.current = status;
             prevLastMove.current = lastMove;
@@ -304,6 +305,12 @@ const App: React.FC = () => {
             db.ref(`userSettings/${currentUser.uid}/showPowerPieces`).set(enabled);
         }
     };
+    const setSoundsEnabled = (enabled: boolean) => {
+        _setSoundsEnabled(enabled);
+        if (currentUser && isFirebaseConfigured) {
+            db.ref(`userSettings/${currentUser.uid}/soundsEnabled`).set(enabled);
+        }
+    };
     const updateSettings = (key: string, value: boolean) => {
         if (currentUser && isFirebaseConfigured) {
             db.ref(`userSettings/${currentUser.uid}/${key}`).set(value);
@@ -322,6 +329,7 @@ const App: React.FC = () => {
                     if (val.drawConfirmationEnabled !== undefined) _setDrawConfirmationEnabled(val.drawConfirmationEnabled);
                     if (val.resignConfirmationEnabled !== undefined) _setResignConfirmationEnabled(val.resignConfirmationEnabled);
                     if (val.showPowerPieces !== undefined) _setShowPowerPieces(val.showPowerPieces);
+                    if (val.soundsEnabled !== undefined) _setSoundsEnabled(val.soundsEnabled);
                 }
             });
         }
@@ -930,7 +938,9 @@ const App: React.FC = () => {
                 if (newTime <= 10 && newTime > 0 && !hasPlayedLowTimeSound) {
                     const isGameScreen = gameMode === 'local' || gameMode === 'online_playing' || gameMode === 'online_spectating';
                     if (isGameScreen && !reviewingGame) {
-                        playLowTimeSound();
+                        if (soundsEnabled) {
+                            playLowTimeSound();
+                        }
                         hasPlayedLowTimeSound = true;
                     }
                 }
@@ -2713,6 +2723,8 @@ const App: React.FC = () => {
                             setResignConfirmationEnabled={setResignConfirmationEnabled}
                             showPowerPieces={showPowerPieces}
                             setShowPowerPieces={setShowPowerPieces}
+                            soundsEnabled={soundsEnabled}
+                            setSoundsEnabled={setSoundsEnabled}
                         />
                     )}
                 </div>
@@ -2739,6 +2751,10 @@ const App: React.FC = () => {
                     setDrawConfirmationEnabled={setDrawConfirmationEnabled}
                     resignConfirmationEnabled={resignConfirmationEnabled}
                     setResignConfirmationEnabled={setResignConfirmationEnabled}
+                    showPowerPieces={showPowerPieces}
+                    setShowPowerPieces={setShowPowerPieces}
+                    soundsEnabled={soundsEnabled}
+                    setSoundsEnabled={setSoundsEnabled}
                     currentLobbyTab={lobbyView}
                     setCurrentLobbyTab={setLobbyView}
                 />
