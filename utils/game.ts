@@ -3,7 +3,7 @@
 import { BoardState, Piece, PieceType, Color, Position, Square, Move } from '../types';
 
 const PIECE_ORDER: PieceType[] = [
-    PieceType.Rook, PieceType.Knight, PieceType.Bishop, PieceType.Queen, 
+    PieceType.Rook, PieceType.Knight, PieceType.Bishop, PieceType.Queen,
     PieceType.King, PieceType.Bishop, PieceType.Knight, PieceType.Rook
 ];
 
@@ -84,7 +84,7 @@ const getStepMoves = (board: BoardState, pos: Position, directions: number[][], 
 };
 
 const getPawnMoves = (board: BoardState, pos: Position, enPassantTarget: Position | null, isPremove = false): Position[] => {
-    const piece = board[pos.row][pos.col]as Piece;
+    const piece = board[pos.row][pos.col] as Piece;
     const moves: Position[] = [];
     const direction = piece.color === Color.White ? -1 : 1;
     const startRow = piece.color === Color.White ? 6 : 1;
@@ -101,13 +101,13 @@ const getPawnMoves = (board: BoardState, pos: Position, enPassantTarget: Positio
             }
         }
     }
-    
+
 
     // Captures
     const captureCols = [pos.col - 1, pos.col + 1];
     for (const c of captureCols) {
         if (isWithinBoard(pos.row + direction, c)) {
-            if(isPremove) {
+            if (isPremove) {
                 moves.push({ row: pos.row + direction, col: c });
             } else {
                 const target = board[pos.row + direction][c];
@@ -117,11 +117,11 @@ const getPawnMoves = (board: BoardState, pos: Position, enPassantTarget: Positio
             }
         }
     }
-    
+
     // En Passant
     if (enPassantTarget && enPassantTarget.row === pos.row + direction && Math.abs(enPassantTarget.col - pos.col) === 1) {
-         if(isWithinBoard(enPassantTarget.row, enPassantTarget.col) && !board[enPassantTarget.row][enPassantTarget.col]){
-            moves.push({row: enPassantTarget.row, col: enPassantTarget.col});
+        if (isWithinBoard(enPassantTarget.row, enPassantTarget.col) && !board[enPassantTarget.row][enPassantTarget.col]) {
+            moves.push({ row: enPassantTarget.row, col: enPassantTarget.col });
         }
     }
 
@@ -134,9 +134,9 @@ export const isSquareAttacked = (board: BoardState, position: Position, attacker
         for (let c = 0; c < 8; c++) {
             const piece = board[r][c];
             if (piece && piece.color === attackerColor) {
-                 const potentialAttacks = getMovesForPieceType(board, {row: r, col: c}, piece.type, null, true)
-                    .concat(piece.power ? getMovesForPieceType(board, {row: r, col: c}, piece.power, null, true) : []);
-                
+                const potentialAttacks = getMovesForPieceType(board, { row: r, col: c }, piece.type, null, true)
+                    .concat(piece.power ? getMovesForPieceType(board, { row: r, col: c }, piece.power, null, true) : []);
+
                 if (potentialAttacks.some(m => m.row === position.row && m.col === position.col)) {
                     return true;
                 }
@@ -174,14 +174,14 @@ const getKingPremoveMoves = (board: BoardState, pos: Position): Position[] => {
 };
 
 const getKingMoves = (board: BoardState, pos: Position): Position[] => {
-    const piece = board[pos.row][pos.col]as Piece;
+    const piece = board[pos.row][pos.col] as Piece;
     const moves = getStepMoves(board, pos, [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1], [1, -1], [1, 1]]);
-    
+
     // Castling logic needs to check for checks on traversed squares
     if (!piece.hasMoved && !isKingInCheck(board, piece.color)) {
         const opponentColor = piece.color === Color.White ? Color.Black : Color.White;
         const rank = pos.row;
-        
+
         // Kingside castling
         const kingsideRook = board[rank][7];
         if (kingsideRook?.type === PieceType.Rook && !kingsideRook.hasMoved && !board[rank][5] && !board[rank][6]) {
@@ -215,7 +215,7 @@ export const getMovesForPieceType = (board: BoardState, pos: Position, pieceType
         }
         return moves;
     }
-    
+
     switch (pieceType) {
         case PieceType.Pawn:
             return getPawnMoves(board, pos, enPassantTarget, isPremove);
@@ -245,14 +245,14 @@ const filterLegalMoves = (board: BoardState, color: Color, moves: Position[], fr
     return moves.filter(to => {
         const tempBoard = JSON.parse(JSON.stringify(board));
         const piece = { ...tempBoard[from.row][from.col]! };
-        
+
         if (piece.type === PieceType.Pawn && enPassantTarget && to.row === enPassantTarget.row && to.col === enPassantTarget.col) {
             tempBoard[from.row][to.col] = null;
         }
 
         tempBoard[to.row][to.col] = piece;
         tempBoard[from.row][from.col] = null;
-        
+
         return !isKingInCheck(tempBoard, color);
     });
 };
@@ -261,25 +261,25 @@ const filterLegalMoves = (board: BoardState, color: Color, moves: Position[], fr
 export const getValidMoves = (board: BoardState, pos: Position, enPassantTarget: Position | null, allowSelfCheck: boolean, isPremove = false): Position[] => {
     const piece = board[pos.row][pos.col];
     if (!piece) return [];
-    
+
     let moves = getMovesForPieceType(board, pos, piece.type, enPassantTarget, false, isPremove);
-    
+
     if (piece.power) {
         // Pass enPassantTarget for pawn power moves
         const powerMoves = getMovesForPieceType(board, pos, piece.power, enPassantTarget, false, isPremove);
         moves.push(...powerMoves);
     }
-    
+
     const uniqueMoves = Array.from(new Set(moves.map(m => `${m.row},${m.col}`)))
         .map(s => {
             const [row, col] = s.split(',').map(Number);
             return { row, col };
         });
-    
+
     if (isPremove) {
         return uniqueMoves;
     }
-        
+
     if (allowSelfCheck) {
         return uniqueMoves;
     }
@@ -345,7 +345,7 @@ export const hasLegalMoves = (board: BoardState, color: Color, enPassantTarget: 
         for (let c = 0; c < 8; c++) {
             const piece = board[r][c];
             if (piece && piece.color === color) {
-                if (getValidMoves(board, {row: r, col: c}, enPassantTarget, false).length > 0) {
+                if (getValidMoves(board, { row: r, col: c }, enPassantTarget, false).length > 0) {
                     return true;
                 }
             }
@@ -381,12 +381,12 @@ export const generateBoardKey = (board: BoardState, turn: Color, enPassantTarget
     const pieceToChar = (p: Piece) => {
         let char = '';
         switch (p.type) {
-            case PieceType.Pawn:   char = 'p'; break;
+            case PieceType.Pawn: char = 'p'; break;
             case PieceType.Knight: char = 'n'; break;
             case PieceType.Bishop: char = 'b'; break;
-            case PieceType.Rook:   char = 'r'; break;
-            case PieceType.Queen:  char = 'q'; break;
-            case PieceType.King:   char = 'k'; break;
+            case PieceType.Rook: char = 'r'; break;
+            case PieceType.Queen: char = 'q'; break;
+            case PieceType.King: char = 'k'; break;
         }
         return p.color === Color.White ? char.toUpperCase() : char;
     };
@@ -417,7 +417,7 @@ export const generateBoardKey = (board: BoardState, turn: Color, enPassantTarget
     }
 
     key += `|${turn[0]}`;
-    
+
     if (enPassantTarget) {
         const file = 'abcdefgh'[enPassantTarget.col];
         const rank = 8 - enPassantTarget.row;
@@ -430,20 +430,20 @@ export const generateBoardKey = (board: BoardState, turn: Color, enPassantTarget
 };
 
 export const getNotation = (
-    board: BoardState, 
-    from: Position, 
-    to: Position, 
-    piece: Piece, 
-    captured: Piece | null, 
+    board: BoardState,
+    from: Position,
+    to: Position,
+    piece: Piece,
+    captured: Piece | null,
     promotion: PieceType | null,
     isForcePower: boolean = false
 ): string => {
     const cols = 'abcdefgh';
     const rows = '87654321';
-    
+
     const fromSquare = `${cols[from.col]}${rows[from.row]}`;
     const toSquare = `${cols[to.col]}${rows[to.row]}`;
-    
+
     let pieceChar = '';
     switch (piece.originalType) { // Use original type for notation
         case PieceType.King: pieceChar = 'K'; break;
@@ -455,9 +455,9 @@ export const getNotation = (
     }
 
     const captureChar = captured ? 'x' : '-';
-    
+
     let notation = `${pieceChar}${fromSquare}${captureChar}${toSquare}`;
-    
+
     if (promotion) {
         let promChar = '';
         switch (promotion) {
@@ -468,26 +468,27 @@ export const getNotation = (
         }
         notation += `=${promChar}`;
     }
-    
+
     if (isForcePower) {
         notation += '^';
     }
-    
+
     return notation;
 };
 
 // A simple move applicator for the review system that doesn't require full validation
 export const applyMoveToBoard = (board: BoardState, move: Move): BoardState => {
-    const newBoard = board.map(row => [...row]);
+    if (!board || !Array.isArray(board)) return createInitialBoard();
+    const newBoard = board.map(row => (Array.isArray(row) ? [...row] : Array(8).fill(null)));
     const piece = { ...newBoard[move.from.row][move.from.col]! };
-    
+
     // Update piece state
     piece.hasMoved = true;
     if (move.promotion) {
         piece.type = move.promotion;
         piece.originalType = move.promotion; // In this game variant, promotion changes identity
     }
-    
+
     // Handle Capture Logic for Board Update (removing captured piece)
     // Standard capture is overwriting target. 
     // En Passant: target is empty but capture happens.
@@ -495,16 +496,16 @@ export const applyMoveToBoard = (board: BoardState, move: Move): BoardState => {
         // En Passant capture
         newBoard[move.from.row][move.to.col] = null;
     }
-    
+
     // Move the piece
     newBoard[move.to.row][move.to.col] = piece;
     newBoard[move.from.row][move.from.col] = null;
-    
+
     // Update Power from move history if available (for correct replay)
     // Priority 1: Explicit consumption flag
     if (move.powerConsumed) {
         piece.power = null;
-    } 
+    }
     // Priority 2: Explicitly provided afterPower (if not undefined)
     else if (move.afterPower !== undefined) {
         piece.power = move.afterPower;
@@ -526,6 +527,6 @@ export const applyMoveToBoard = (board: BoardState, move: Move): BoardState => {
             newBoard[row][rookFromCol] = null;
         }
     }
-    
+
     return newBoard;
 }

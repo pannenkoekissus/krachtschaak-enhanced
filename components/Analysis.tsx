@@ -42,46 +42,112 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
     const [draggedPiece, setDraggedPiece] = useState<Position | null>(null);
 
     // Navigation Tree
-    const initialRootState = initialState || {
-        board: createInitialBoard(),
-        turn: Color.White,
-        status: 'playing',
-        winner: null,
-        promotionData: null,
-        capturedPieces: { white: [], black: [] },
-        enPassantTarget: null,
-        halfmoveClock: 0,
-        positionHistory: {},
-        ambiguousEnPassantData: null,
-        drawOffer: null,
-        playerTimes: null,
-        turnStartTime: null,
-        moveDeadline: null,
-        timerSettings: null,
-        ratingCategory: 'unlimited' as any,
-        players: {},
-        playerColors: { white: null, black: null },
-        initialRatings: null,
-        isRated: false,
-        rematchOffer: null,
-        nextGameId: null,
-        ratingChange: null,
-        moveHistory: []
+    const initialRootState: GameState = (initialState && (!initialState.moveHistory || initialState.moveHistory.length === 0))
+        ? initialState
+        : {
+            board: createInitialBoard(),
+            turn: Color.White,
+            status: 'playing',
+            winner: null,
+            promotionData: null,
+            capturedPieces: { white: [], black: [] },
+            enPassantTarget: null,
+            halfmoveClock: 0,
+            positionHistory: {},
+            ambiguousEnPassantData: null,
+            drawOffer: null,
+            playerTimes: null,
+            turnStartTime: null,
+            moveDeadline: null,
+            timerSettings: null,
+            ratingCategory: 'unlimited' as any,
+            players: initialState?.players || {},
+            playerColors: initialState?.playerColors || { white: null, black: null },
+            initialRatings: initialState?.initialRatings || null,
+            isRated: initialState?.isRated || false,
+            rematchOffer: null,
+            nextGameId: null,
+            ratingChange: null,
+            moveHistory: []
+        };
+
+    // Build initial tree if move history exists
+    const buildInitialTree = () => {
+        const rootId = 'root';
+        const rootNode: AnalysisTreeNode = {
+            id: rootId,
+            gameState: initialRootState,
+            notation: null,
+            children: [],
+            parentId: null
+        };
+        const initialNodes: Record<string, AnalysisTreeNode> = { [rootId]: rootNode };
+        let leafId = rootId;
+
+        if (initialState?.moveHistory && initialState.moveHistory.length > 0) {
+            let lastId = rootId;
+            let currentBoard = initialRootState.board;
+            let currentTurn = initialRootState.turn;
+            let currentCaptured = { ...initialRootState.capturedPieces };
+
+            for (const move of initialState.moveHistory) {
+                const newNodeId = Math.random().toString(36).substr(2, 9);
+
+                // Safety check for board integrity
+                if (!currentBoard || !Array.isArray(currentBoard)) {
+                    currentBoard = createInitialBoard();
+                }
+
+                const nextBoard = applyMoveToBoard(currentBoard, move);
+                const nextTurn = currentTurn === Color.White ? Color.Black : Color.White;
+
+                const nextState: GameState = {
+                    ...initialRootState,
+                    board: nextBoard,
+                    turn: nextTurn,
+                    lastMove: move,
+                    moveHistory: initialState.moveHistory.slice(0, initialState.moveHistory.indexOf(move) + 1),
+                    enPassantTarget: move.piece === PieceType.Pawn && Math.abs(move.from.row - move.to.row) === 2
+                        ? { row: (move.from.row + move.to.row) / 2, col: move.from.col }
+                        : null,
+                    capturedPieces: move.captured ? {
+                        ...currentCaptured,
+                        [move.color === Color.White ? Color.Black : Color.White]: [...currentCaptured[move.color === Color.White ? Color.Black : Color.White], { type: move.captured, color: move.color === Color.White ? Color.Black : Color.White, originalType: move.captured, isKing: move.captured === PieceType.King, hasMoved: true }]
+                    } : currentCaptured
+                };
+
+                initialNodes[newNodeId] = {
+                    id: newNodeId,
+                    gameState: nextState,
+                    notation: move.notation,
+                    children: [],
+                    parentId: lastId,
+                    lastVisited: true
+                };
+                initialNodes[lastId].children.push(newNodeId);
+
+                lastId = newNodeId;
+                currentBoard = nextBoard;
+                currentTurn = nextTurn;
+                currentCaptured = nextState.capturedPieces;
+            }
+            leafId = lastId;
+        }
+
+        return { initialNodes, leafId };
     };
 
-    const [nodes, setNodes] = useState<Record<string, AnalysisTreeNode>>(() => {
-        const rootId = 'root';
-        return {
-            [rootId]: {
-                id: rootId,
-                gameState: initialRootState,
-                notation: null,
-                children: [],
-                parentId: null
-            }
-        };
-    });
-    const [currentNodeId, setCurrentNodeId] = useState<string>('root');
+    // Initialize states from a single buildInitialTree call to ensure IDs match
+    const [initialTree] = useState(() => buildInitialTree());
+    const [nodes, setNodes] = useState<Record<string, AnalysisTreeNode>>(initialTree.initialNodes);
+    const [currentNodeId, setCurrentNodeId] = useState<string>(initialTree.leafId);
+
+    // Initial sync
+    useEffect(() => {
+        if (nodes[currentNodeId]) {
+            applyState(nodes[currentNodeId].gameState);
+        }
+    }, []);
 
     // UI State
     const [highlightedSquares, setHighlightedSquares] = useState<Position[]>([]);
@@ -106,6 +172,9 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
         requestIdRef.current = null;
         setEngineThinking(false);
     };
+
+    const moveListRef = useRef<HTMLDivElement>(null);
+    const currentMoveRef = useRef<HTMLDivElement>(null);
 
     const handleGetEngineMove = () => {
         if (engineThinking) {
@@ -162,7 +231,15 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
 
     useEffect(() => {
         updateValidMoves();
-    }, [updateValidMoves]);
+        // Auto-scroll to current move
+        if (currentMoveRef.current && moveListRef.current) {
+            currentMoveRef.current.scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest',
+                inline: 'nearest'
+            });
+        }
+    }, [updateValidMoves, currentNodeId]);
 
     const getCurrentState = (): GameState => ({
         board, turn, status, winner, promotionData, capturedPieces,
@@ -285,7 +362,11 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
 
     const getCurrentLine = () => {
         const line: AnalysisTreeNode[] = [];
+
+        // 1. Walk up to root to get the history
         let curr = nodes[currentNodeId];
+        if (!curr) return [];
+
         while (curr && curr.id !== 'root') {
             line.unshift(curr);
             if (curr.parentId) {
@@ -294,6 +375,18 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
                 break;
             }
         }
+
+        // 2. Walk down from current node to get the "continuation"
+        // We follow the last visited child, or the first one if none were specifically visited
+        let future = nodes[currentNodeId];
+        while (future && future.children.length > 0) {
+            const nextId = future.children.find(id => nodes[id]?.lastVisited) || future.children[0];
+            const nextNode = nodes[nextId];
+            if (!nextNode) break;
+            line.push(nextNode);
+            future = nextNode;
+        }
+
         return line;
     };
 
@@ -545,25 +638,80 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
                     <button onClick={handleRedo} className="p-2 hover:bg-gray-600 rounded text-xs px-2">Next</button>
                 </div>
 
-                <div className="flex-grow overflow-y-auto mb-4 bg-gray-900 p-2 rounded font-mono text-sm">
+                <div ref={moveListRef} className="flex-grow overflow-y-auto mb-4 bg-gray-900 p-3 rounded font-sans text-sm custom-scrollbar" id="move-list-container">
                     {currentLine.length === 0 && <p className="text-gray-500 italic text-center py-4">No moves yet</p>}
-                    <div className="flex flex-wrap gap-2">
-                        {currentLine.map((n, i) => (
-                            <div
-                                key={n.id}
-                                className={`p-1 px-2 cursor-pointer hover:bg-gray-700 rounded transition-colors flex flex-col ${currentNodeId === n.id ? 'bg-green-900 text-green-100 font-bold border border-green-500' : 'text-gray-300'}`}
-                                onClick={() => goToNode(n.id)}
-                            >
-                                <span className="text-[10px] text-gray-500">{Math.floor(i / 2) + 1}{i % 2 === 0 ? '.' : '...'}</span>
-                                {n.notation}
-                            </div>
-                        ))}
+
+                    <div className="flex flex-wrap items-start content-start gap-x-1 gap-y-2">
+                        {currentLine.map((n, i) => {
+                            const startingColor = nodes['root'].gameState.turn;
+                            const isWhiteMove = startingColor === Color.White ? i % 2 === 0 : i % 2 !== 0;
+                            const moveNumber = startingColor === Color.White
+                                ? Math.floor(i / 2) + 1
+                                : Math.floor((i + 1) / 2) + 1;
+
+                            const parentId = n.parentId;
+                            const hasVariations = parentId ? nodes[parentId].children.length > 1 : false;
+                            const isSelected = currentNodeId === n.id;
+
+                            // Find current node index in the line to determine if this move is in the "future"
+                            const currentNodeInLineIdx = currentLine.findIndex(node => node.id === currentNodeId);
+                            const isFutureMove = i > currentNodeInLineIdx;
+
+                            return (
+                                <React.Fragment key={n.id}>
+                                    {/* Move Number Label */}
+                                    {(isWhiteMove || i === 0) && (
+                                        <span className="text-gray-500 font-bold min-w-[1.5rem] mt-1 pr-1">
+                                            {moveNumber}{isWhiteMove ? '.' : '...'}
+                                        </span>
+                                    )}
+
+                                    {/* Move Button */}
+                                    <div
+                                        ref={isSelected ? currentMoveRef : null}
+                                        className={`group relative p-1 px-2 cursor-pointer hover:bg-gray-700 rounded transition-all flex items-center gap-1 min-h-[1.5rem]
+                                            ${isSelected ? 'bg-green-600 text-white font-bold shadow-md ring-1 ring-green-400 z-10 scale-105' :
+                                                isFutureMove ? 'text-gray-400 bg-gray-800/40 hover:text-white' :
+                                                    'text-gray-300 hover:text-white hover:bg-gray-700/50'}`}
+                                        onClick={() => goToNode(n.id)}
+                                    >
+                                        <span>{n.notation}</span>
+
+                                        {/* Branch Indicator - Sibling exists (Incoming Variation) */}
+                                        {hasVariations && (
+                                            <span
+                                                className={`text-[10px] flex items-center justify-center w-3 h-3 rounded-full 
+                                                    ${isSelected ? 'bg-green-800 text-green-200' : 'bg-blue-900 text-blue-300'}`}
+                                                title="Alternative variation available"
+                                            >
+                                                ⑂
+                                            </span>
+                                        )}
+
+                                        {/* Branch Indicator - Multiple children (Outgoing Fork) */}
+                                        {n.children.length > 1 && (
+                                            <span
+                                                className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-purple-400'}`}
+                                                title={`${n.children.length} continuations available`}
+                                            ></span>
+                                        )}
+
+                                        {/* Hover variations preview indicator */}
+                                        {!isSelected && hasVariations && (
+                                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-400 rounded-full animate-pulse shadow-sm"></div>
+                                        )}
+                                    </div>
+                                </React.Fragment>
+                            );
+                        })}
                     </div>
 
                     {/* Variations Display */}
                     {(() => {
                         const currentNode = nodes[currentNodeId];
-                        if (currentNode.children.length > 1 || (currentNode.parentId && nodes[currentNode.parentId].children.length > 1)) {
+                        if (!currentNode) return null;
+
+                        if (currentNode.children.length > 1 || (currentNode.parentId && nodes[currentNode.parentId]?.children.length > 1)) {
                             const parent = currentNode.parentId ? nodes[currentNode.parentId] : null;
                             const variations = parent ? parent.children : [];
 

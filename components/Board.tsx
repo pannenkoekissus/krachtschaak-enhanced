@@ -120,8 +120,8 @@ const Board: React.FC<BoardProps> = ({
             className={`grid grid-cols-8 grid-rows-8 aspect-square border-4 border-gray-600 shadow-2xl relative ${isFlipped ? 'rotate-180' : ''}`}
             onContextMenu={onBoardContextMenu}
         >
-            {board.map((row, rowIndex) =>
-                row.map((_, colIndex) => (
+            {board && Array.isArray(board) && board.map((row, rowIndex) =>
+                Array.isArray(row) && row.map((_, colIndex) => (
                     <div key={`${rowIndex}-${colIndex}`} className={`${isFlipped ? 'rotate-180' : ''}`}>
                         {renderSquare(rowIndex, colIndex)}
                     </div>

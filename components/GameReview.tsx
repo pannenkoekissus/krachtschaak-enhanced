@@ -200,13 +200,10 @@ const GameReview: React.FC<GameReviewProps> = ({ game, onBack, onAnalyze }) => {
     };
 
     const startAnalysisHere = () => {
-        const turn = (currentMoveIndex + 1) % 2 === 0 ? Color.White : Color.Black;
         const analysisState: GameState = {
             ...game,
-            board: displayBoard,
-            turn: turn,
             status: 'playing',
-            moveHistory: moves.slice(0, currentMoveIndex + 1)
+            // We'll let the Analysis component handle rebuilding the tree from moveHistory
         };
         onAnalyze(analysisState);
     };
@@ -359,7 +356,7 @@ const GameReview: React.FC<GameReviewProps> = ({ game, onBack, onAnalyze }) => {
                         {formatTimerSettingText(timerSettings)} • {isRated ? `Rated (${ratingCategory})` : 'Unrated'}
                     </p>
                     <button onClick={startAnalysisHere} className="w-full mt-4 px-4 py-3 bg-green-600 hover:bg-green-700 rounded-lg font-semibold transition-colors">
-                        Analyze from Here
+                        Analyse Game
                     </button>
                     <button onClick={onBack} className="w-full mt-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors">
                         Back to Lobby
