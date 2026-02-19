@@ -177,12 +177,20 @@ const App: React.FC = () => {
         }
 
         const hasStatusChanged = prevStatus.current !== status;
-        const hasMoveChanged = lastMove && (prevLastMove.current !== lastMove);
+
+        const isSameMove = (m1: any, m2: any) => {
+            if (!m1 || !m2) return m1 === m2;
+            return m1.from.row === m2.from.row && m1.from.col === m2.from.col &&
+                m1.to.row === m2.to.row && m1.to.col === m2.to.col;
+        };
+        const hasMoveChanged = lastMove && !isSameMove(prevLastMove.current, lastMove);
 
         // Captured Logic (Check if count of captured pieces increased)
         const whiteCapturedCount = capturedPieces.white ? capturedPieces.white.length : 0;
         const blackCapturedCount = capturedPieces.black ? capturedPieces.black.length : 0;
-        const hasCapture = whiteCapturedCount > prevCapturedCounts.current.white || blackCapturedCount > prevCapturedCounts.current.black;
+
+        // Capture is only relevant if a move just happened
+        const hasCapture = hasMoveChanged && (whiteCapturedCount > prevCapturedCounts.current.white || blackCapturedCount > prevCapturedCounts.current.black);
 
         // Game Over Sounds
         if (hasStatusChanged) {
@@ -221,7 +229,7 @@ const App: React.FC = () => {
         prevStatus.current = status;
         prevLastMove.current = lastMove;
         prevCapturedCounts.current = { white: whiteCapturedCount, black: blackCapturedCount };
-    }, [status, lastMove, winner, gameMode, myOnlineColor, board, turn, capturedPieces, reviewingGame]);
+    }, [status, lastMove, winner, gameMode, myOnlineColor, board, turn, capturedPieces, reviewingGame, soundsEnabled]);
 
 
     // Local Game Custom Time State

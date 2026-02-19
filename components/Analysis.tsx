@@ -222,7 +222,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
 
     const updateValidMoves = useCallback(() => {
         if (selectedPiece && (status === 'playing' || status === 'analysis')) {
-            const moves = getValidMoves(board, selectedPiece, enPassantTarget, false);
+            const moves = getValidMoves(board, selectedPiece, enPassantTarget, true);
             setValidMoves(moves);
         } else {
             setValidMoves([]);
