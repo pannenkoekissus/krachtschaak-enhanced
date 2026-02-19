@@ -28,6 +28,35 @@ export const createInitialBoard = (): BoardState => {
     return board;
 };
 
+export const sanitizePiece = (p: any): Piece | null => {
+    if (p && typeof p === 'object' && p.type && p.color) {
+        return {
+            type: p.type,
+            color: p.color,
+            power: p.power || null,
+            originalType: p.originalType || p.type,
+            isKing: !!p.isKing,
+            hasMoved: typeof p.hasMoved === 'boolean' ? p.hasMoved : false,
+        };
+    }
+    return null;
+};
+
+export const sanitizeBoard = (rawBoard: any): BoardState => {
+    const safeBoard: BoardState = Array(8).fill(null).map(() => Array(8).fill(null));
+    if (rawBoard && typeof rawBoard === 'object') {
+        for (let r = 0; r < 8; r++) {
+            const rawRow = (rawBoard as any)[r];
+            if (rawRow && typeof rawRow === 'object') {
+                for (let c = 0; c < 8; c++) {
+                    safeBoard[r][c] = sanitizePiece((rawRow as any)[c]);
+                }
+            }
+        }
+    }
+    return safeBoard;
+};
+
 const isWithinBoard = (row: number, col: number): boolean => {
     return row >= 0 && row < 8 && col >= 0 && col < 8;
 };
@@ -478,8 +507,8 @@ export const getNotation = (
 
 // A simple move applicator for the review system that doesn't require full validation
 export const applyMoveToBoard = (board: BoardState, move: Move): BoardState => {
-    if (!board || !Array.isArray(board)) return createInitialBoard();
-    const newBoard = board.map(row => (Array.isArray(row) ? [...row] : Array(8).fill(null)));
+    const newBoard = sanitizeBoard(board);
+    if (!newBoard[move.from.row] || !newBoard[move.from.row][move.from.col]) return newBoard;
     const piece = { ...newBoard[move.from.row][move.from.col]! };
 
     // Update piece state

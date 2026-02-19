@@ -90,7 +90,7 @@ const GameOverlay: React.FC<GameOverlayProps> = ({
                 break;
         }
 
-        const buttonText = gameMode === 'local' ? 'Play Again' : 'Back to Menu';
+        const buttonText = gameMode === 'local' ? 'Play Again' : gameMode === 'analysis' ? 'Back to start' : 'Back to Menu';
         const whiteUid = playerColors?.white;
         const blackUid = playerColors?.black;
         const whitePlayer = whiteUid ? players[whiteUid] : null;

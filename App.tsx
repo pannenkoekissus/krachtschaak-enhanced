@@ -12,7 +12,7 @@ import BoardEditor from './components/BoardEditor';
 import Analysis from './components/Analysis';
 import ConfirmationModal from './components/ConfirmationModal';
 import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, GameMode, TimerSettings, PlayerInfo, SentChallenge, Move, ChatMessage, LobbyGame } from './types';
-import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation } from './utils/game';
+import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, sanitizePiece } from './utils/game';
 import { getRatingCategory, RatingCategory, RATING_CATEGORIES } from './utils/ratings';
 import { isFirebaseConfigured, auth, db } from './firebaseConfig';
 import SettingsModal from './components/SettingsModal';
@@ -72,6 +72,8 @@ const App: React.FC = () => {
 
     const [gameMode, setGameMode] = useState<GameMode>('menu');
     const [showLocalSetup, setShowLocalSetup] = useState(false);
+    const [lastEditedBoard, setLastEditedBoard] = useState<BoardState | null>(null);
+    const [lastEditedTurn, setLastEditedTurn] = useState<Color>(Color.White);
     const [showSettings, setShowSettings] = useState(false);
 
     // Online state
@@ -479,42 +481,14 @@ const App: React.FC = () => {
     }, [gameMode, gameRef]);
 
     const loadGameState = useCallback((state: GameState | null) => {
-        if (!state) {
-            return;
-        }
-
-        const sanitizePiece = (p: any): Piece | null => {
-            if (p && typeof p === 'object' && p.type && p.color) {
-                return {
-                    type: p.type,
-                    color: p.color,
-                    power: p.power || null,
-                    originalType: p.originalType || p.type,
-                    isKing: !!p.isKing,
-                    hasMoved: typeof p.hasMoved === 'boolean' ? p.hasMoved : false,
-                };
-            }
-            return null;
-        };
+        if (!state) return;
 
         const sanitizePieceArray = (arr: any[] | undefined): Piece[] => {
             if (!Array.isArray(arr)) return [];
             return arr.map(sanitizePiece).filter((p): p is Piece => p !== null);
         };
 
-        const rawBoard = state.board;
-        const safeBoard: BoardState = Array(8).fill(null).map(() => Array(8).fill(null));
-        // Check if rawBoard is an object or array (Firebase can return objects for sparse arrays)
-        if (rawBoard && typeof rawBoard === 'object') {
-            for (let r = 0; r < 8; r++) {
-                const rawRow = (rawBoard as any)[r];
-                if (rawRow && typeof rawRow === 'object') {
-                    for (let c = 0; c < 8; c++) {
-                        safeBoard[r][c] = sanitizePiece((rawRow as any)[c]);
-                    }
-                }
-            }
-        }
+        const safeBoard = sanitizeBoard(state.board);
         setBoard(safeBoard);
 
         const rawCaptured = state.capturedPieces;
@@ -2253,6 +2227,8 @@ const App: React.FC = () => {
     };
 
     const handleStartAnalysisFromEditor = (editedBoard: BoardState, startingTurn: Color) => {
+        setLastEditedBoard(editedBoard);
+        setLastEditedTurn(startingTurn);
         const initialState: GameState = {
             board: editedBoard,
             turn: startingTurn,
@@ -2711,7 +2687,7 @@ const App: React.FC = () => {
         }
 
         if (gameMode === 'board_editor') {
-            return <BoardEditor onStartAnalysis={handleStartAnalysisFromEditor} onCancel={handleBackToMenu} />;
+            return <BoardEditor initialBoard={lastEditedBoard || undefined} initialTurn={lastEditedTurn} onStartAnalysis={handleStartAnalysisFromEditor} onCancel={handleBackToMenu} />;
         }
 
         if (gameMode === 'menu') {

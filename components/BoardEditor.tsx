@@ -5,16 +5,15 @@ import Board from './Board';
 import PieceComponent from './Piece';
 
 interface BoardEditorProps {
+    initialBoard?: BoardState;
+    initialTurn?: Color;
     onStartAnalysis: (board: BoardState, turn: Color) => void;
     onCancel: () => void;
 }
 
-const BoardEditor: React.FC<BoardEditorProps> = ({ onStartAnalysis, onCancel }) => {
-    const [board, setBoard] = useState<BoardState>(() => {
-        const b = Array(8).fill(null).map(() => Array(8).fill(null));
-        return b;
-    });
-    const [turn, setTurn] = useState<Color>(Color.White);
+const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, onStartAnalysis, onCancel }) => {
+    const [board, setBoard] = useState<BoardState>(() => initialBoard || Array(8).fill(null).map(() => Array(8).fill(null)));
+    const [turn, setTurn] = useState<Color>(initialTurn || Color.White);
     const [selectedPalettePiece, setSelectedPalettePiece] = useState<{ type: PieceType, color: Color } | null>(null);
     const [selectedPower, setSelectedPower] = useState<PieceType | null>(null);
 

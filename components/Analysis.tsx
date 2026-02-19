@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, Move } from '../types';
-import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard } from '../utils/game';
+import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard } from '../utils/game';
+import { playMoveSound, playCaptureSound, playWinSound, playDrawSound, playLossSound } from '../utils/sounds';
 import Board from './Board';
 import GameOverlay from './GameOverlay';
 import PieceComponent from './Piece';
@@ -22,13 +23,13 @@ interface AnalysisTreeNode {
 
 const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
     // Current state of analysis
-    const [board, setBoard] = useState<BoardState>(() => initialState?.board || createInitialBoard());
+    const [board, setBoard] = useState<BoardState>(() => sanitizeBoard(initialState?.board || createInitialBoard()));
     const [turn, setTurn] = useState<Color>(initialState?.turn || Color.White);
     const [capturedPieces, setCapturedPieces] = useState<Record<Color, Piece[]>>(initialState?.capturedPieces || { white: [], black: [] });
     const [enPassantTarget, setEnPassantTarget] = useState<Position | null>(initialState?.enPassantTarget || null);
     const [halfmoveClock, setHalfmoveClock] = useState(initialState?.halfmoveClock || 0);
     const [positionHistory, setPositionHistory] = useState<Record<string, number>>(initialState?.positionHistory || {});
-    const [status, setStatus] = useState<GameStatus>(initialState?.status || 'playing');
+    const [status, setStatus] = useState<GameStatus>('playing');
     const [winner, setWinner] = useState<string | null>(initialState?.winner || null);
     const [lastMove, setLastMove] = useState<{ from: Position, to: Position } | null>(initialState?.lastMove || null);
     const [moveHistory, setMoveHistory] = useState<Move[]>(initialState?.moveHistory || []);
@@ -40,36 +41,35 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
     const [ambiguousEnPassantData, setAmbiguousEnPassantData] = useState<{ from: Position, to: Position } | null>(null);
     const [isForcePowerMode, setIsForcePowerMode] = useState(false);
     const [draggedPiece, setDraggedPiece] = useState<Position | null>(null);
+    const [boardOrientation, setBoardOrientation] = useState<Color>(Color.White);
 
     // Navigation Tree
-    const initialRootState: GameState = (initialState && (!initialState.moveHistory || initialState.moveHistory.length === 0))
-        ? initialState
-        : {
-            board: createInitialBoard(),
-            turn: Color.White,
-            status: 'playing',
-            winner: null,
-            promotionData: null,
-            capturedPieces: { white: [], black: [] },
-            enPassantTarget: null,
-            halfmoveClock: 0,
-            positionHistory: {},
-            ambiguousEnPassantData: null,
-            drawOffer: null,
-            playerTimes: null,
-            turnStartTime: null,
-            moveDeadline: null,
-            timerSettings: null,
-            ratingCategory: 'unlimited' as any,
-            players: initialState?.players || {},
-            playerColors: initialState?.playerColors || { white: null, black: null },
-            initialRatings: initialState?.initialRatings || null,
-            isRated: initialState?.isRated || false,
-            rematchOffer: null,
-            nextGameId: null,
-            ratingChange: null,
-            moveHistory: []
-        };
+    const initialRootState: GameState = {
+        board: sanitizeBoard(initialState?.board || createInitialBoard()),
+        turn: initialState?.turn || Color.White,
+        status: 'playing',
+        winner: initialState?.winner || null,
+        promotionData: initialState?.promotionData || null,
+        capturedPieces: initialState?.capturedPieces || { white: [], black: [] },
+        enPassantTarget: initialState?.enPassantTarget || null,
+        halfmoveClock: initialState?.halfmoveClock || 0,
+        positionHistory: initialState?.positionHistory || {},
+        ambiguousEnPassantData: initialState?.ambiguousEnPassantData || null,
+        drawOffer: initialState?.drawOffer || null,
+        playerTimes: initialState?.playerTimes || null,
+        turnStartTime: initialState?.turnStartTime || null,
+        moveDeadline: initialState?.moveDeadline || null,
+        timerSettings: initialState?.timerSettings || null,
+        ratingCategory: initialState?.ratingCategory || 'unlimited' as any,
+        players: initialState?.players || {},
+        playerColors: initialState?.playerColors || { white: null, black: null },
+        initialRatings: initialState?.initialRatings || null,
+        isRated: initialState?.isRated || false,
+        rematchOffer: initialState?.rematchOffer || null,
+        nextGameId: initialState?.nextGameId || null,
+        ratingChange: initialState?.ratingChange || null,
+        moveHistory: initialState?.moveHistory || []
+    };
 
     // Build initial tree if move history exists
     const buildInitialTree = () => {
@@ -221,7 +221,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
     }, []);
 
     const updateValidMoves = useCallback(() => {
-        if (selectedPiece && (status === 'playing' || status === 'analysis')) {
+        if (selectedPiece && status !== 'promotion' && status !== 'ambiguous_en_passant') {
             const moves = getValidMoves(board, selectedPiece, enPassantTarget, true);
             setValidMoves(moves);
         } else {
@@ -409,16 +409,22 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
         let newStatus: GameStatus = 'playing';
         let newWinner: string | null = null;
 
-        const hasStandardLegalMoves = hasLegalMoves(currentBoard, nextTurn, nextEnPassantTarget);
-        const canPlayerCaptureKing = canCaptureKing(currentBoard, nextTurn);
+        const capturedKing = newCaptured.white.some(p => p.isKing) || newCaptured.black.some(p => p.isKing);
+        if (capturedKing) {
+            newStatus = 'kingCaptured';
+            newWinner = turn === Color.White ? 'White' : 'Black';
+        } else {
+            const hasStandardLegalMoves = hasLegalMoves(currentBoard, nextTurn, nextEnPassantTarget);
+            const canPlayerCaptureKing = canCaptureKing(currentBoard, nextTurn);
 
-        if (!hasStandardLegalMoves && !canPlayerCaptureKing) {
-            const isPlayerInCheck = isKingInCheck(currentBoard, nextTurn);
-            if (isPlayerInCheck) {
-                newStatus = 'checkmate';
-                newWinner = turn === Color.White ? 'White' : 'Black';
-            } else {
-                newStatus = 'stalemate';
+            if (!hasStandardLegalMoves && !canPlayerCaptureKing) {
+                const isPlayerInCheck = isKingInCheck(currentBoard, nextTurn);
+                if (isPlayerInCheck) {
+                    newStatus = 'checkmate';
+                    newWinner = turn === Color.White ? 'White' : 'Black';
+                } else {
+                    newStatus = 'stalemate';
+                }
             }
         }
 
@@ -440,6 +446,20 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
             promotionData: null,
             ambiguousEnPassantData: null
         };
+
+        // Play sounds
+        if (newStatus === 'checkmate' || newStatus === 'kingCaptured') {
+            playWinSound();
+        } else if (newStatus === 'stalemate') {
+            playDrawSound();
+        } else {
+            const isCapture = newCaptured.white.length > capturedPieces.white.length || newCaptured.black.length > capturedPieces.black.length;
+            if (isCapture) {
+                playCaptureSound();
+            } else {
+                playMoveSound();
+            }
+        }
 
         commitNewState(newState, notation);
     };
@@ -519,7 +539,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
     };
 
     const handleSquareClick = (row: number, col: number) => {
-        if (status !== 'playing') return;
+        if (status === 'promotion' || status === 'ambiguous_en_passant') return;
 
         if (selectedPiece) {
             if (selectedPiece.row === row && selectedPiece.col === col) {
@@ -593,9 +613,9 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
                     validMoves={validMoves}
                     onSquareClick={handleSquareClick}
                     turn={turn}
-                    playerColor={Color.White}
-                    gameMode="local"
-                    isInteractionDisabled={status !== 'playing'}
+                    playerColor={boardOrientation}
+                    gameMode="online_playing"
+                    isInteractionDisabled={status === 'promotion' || status === 'ambiguous_en_passant'}
                     onPieceDragStart={(e, r, c) => {
                         handleSquareClick(r, c);
                         setDraggedPiece({ row: r, col: c });
@@ -755,6 +775,12 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
                             className={`flex-1 py-2 rounded-lg font-bold text-sm transition-all ${isForcePowerMode ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}
                         >
                             {isForcePowerMode ? 'FORCE POWER ON' : 'FORCE POWER OFF'}
+                        </button>
+                        <button
+                            onClick={() => setBoardOrientation(prev => prev === Color.White ? Color.Black : Color.White)}
+                            className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-bold text-sm transition-all"
+                        >
+                            FLIP BOARD
                         </button>
                     </div>
 
