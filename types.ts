@@ -75,7 +75,7 @@ export interface PromotionData {
   powerAfterPromotion: PieceType | null;
 }
 
-export type GameMode = 'menu' | 'local' | 'online_lobby' | 'online_playing' | 'online_spectating';
+export type GameMode = 'menu' | 'local' | 'online_lobby' | 'online_playing' | 'online_spectating' | 'analysis' | 'board_editor';
 
 export type TimerSettings = { initialTime: number; increment: number; } | { daysPerMove: number; } | null;
 

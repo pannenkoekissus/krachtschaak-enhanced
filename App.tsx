@@ -8,6 +8,8 @@ import OnlineLobby from './components/OnlineLobby';
 import GameReview from './components/GameReview';
 import Auth from './components/Auth';
 import PowerLegend from './components/PowerLegend';
+import BoardEditor from './components/BoardEditor';
+import Analysis from './components/Analysis';
 import ConfirmationModal from './components/ConfirmationModal';
 import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, GameMode, TimerSettings, PlayerInfo, SentChallenge, Move, ChatMessage, LobbyGame } from './types';
 import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation } from './utils/game';
@@ -90,6 +92,7 @@ const App: React.FC = () => {
     const [draggedPiece, setDraggedPiece] = useState<Position | null>(null);
     const [rejoinCountdown, setRejoinCountdown] = useState<number | null>(null);
     const [reviewingGame, setReviewingGame] = useState<GameState | null>(null);
+    const [analysisState, setAnalysisState] = useState<GameState | null>(null);
     const [showPowerLegend, setShowPowerLegend] = useState(false);
     const [showConfirmation, setShowConfirmation] = useState<'draw' | 'resign' | 'move' | 'premove' | null>(null);
     const [pendingMove, setPendingMove] = useState<{ from: Position, to: Position } | null>(null);
@@ -1695,7 +1698,7 @@ const App: React.FC = () => {
     const handleSquareClick = useCallback((row: number, col: number) => {
         const isMyTurn = gameMode !== 'online_playing' || turn === myOnlineColor;
 
-        if (status !== 'playing' || localPromotionState || localAmbiguousEnPassantState) return;
+        if ((status !== 'playing' && gameMode !== 'analysis') || localPromotionState || localAmbiguousEnPassantState) return;
 
         // Premove Logic
         if (!isMyTurn && premovesEnabled) {
@@ -1881,7 +1884,7 @@ const App: React.FC = () => {
     }, [finalizeTurn, gameMode, localPromotionState]);
 
     const handleUndo = () => {
-        if (gameMode !== 'local' || history.length <= 1) return;
+        if ((gameMode !== 'local' && gameMode !== 'analysis') || history.length <= 1) return;
         const newHistory = history.slice(0, -1);
         const lastState = newHistory[newHistory.length - 1];
         loadGameState(lastState);
@@ -2204,7 +2207,7 @@ const App: React.FC = () => {
         // Don't clear selected piece immediately to allow premove logic to see it
     };
 
-    const isInteractionDisabled = status !== 'playing' || !!localPromotionState || !!localAmbiguousEnPassantState || (gameMode === 'online_playing' && turn !== myOnlineColor && !premovesEnabled) || gameMode === 'online_spectating';
+    const isInteractionDisabled = (status !== 'playing' && gameMode !== 'analysis') || !!localPromotionState || !!localAmbiguousEnPassantState || (gameMode === 'online_playing' && turn !== myOnlineColor && !premovesEnabled) || gameMode === 'online_spectating';
 
     const handleReviewGame = (gameToReview: GameState) => {
         setGameMode('menu'); // Exit the active game/lobby view
@@ -2218,6 +2221,47 @@ const App: React.FC = () => {
         } else {
             setGameMode('menu');
         }
+    };
+
+    const handleStartBoardEditor = () => {
+        setGameMode('board_editor');
+    };
+
+    const handleStartAnalysisFromEditor = (editedBoard: BoardState, startingTurn: Color) => {
+        const initialState: GameState = {
+            board: editedBoard,
+            turn: startingTurn,
+            status: 'playing',
+            winner: null,
+            promotionData: null,
+            capturedPieces: { white: [], black: [] },
+            enPassantTarget: null,
+            halfmoveClock: 0,
+            positionHistory: {},
+            ambiguousEnPassantData: null,
+            drawOffer: null,
+            playerTimes: null,
+            turnStartTime: null,
+            moveDeadline: null,
+            timerSettings: null,
+            ratingCategory: RatingCategory.Unlimited,
+            players: {},
+            playerColors: { white: null, black: null },
+            initialRatings: null,
+            isRated: false,
+            rematchOffer: null,
+            nextGameId: null,
+            ratingChange: null,
+            moveHistory: []
+        };
+        setAnalysisState(initialState);
+        setGameMode('analysis');
+    };
+
+    const handleStartAnalysisFromPosition = (gameState: GameState) => {
+        setReviewingGame(null);
+        setAnalysisState(gameState);
+        setGameMode('analysis');
     };
 
     const renderGame = () => {
@@ -2504,7 +2548,9 @@ const App: React.FC = () => {
 
                     {activeTab === 'controls' && (
                         <div className="flex-grow flex flex-col overflow-y-auto">
-                            <h1 className="text-2xl font-bold text-center mb-1 text-green-400">Krachtschaak</h1>
+                            <h1 className="text-2xl font-bold text-center mb-1 text-green-400">
+                                {gameMode === 'analysis' ? 'Analysis Mode' : 'Krachtschaak'}
+                            </h1>
                             <p className="text-center text-gray-400 mb-4 capitalize text-sm">
                                 {formatTimerSettingText(timerSettings)} • {isRated ? `Rated (${ratingCategory})` : 'Unrated'}
                             </p>
@@ -2555,7 +2601,7 @@ const App: React.FC = () => {
                                         )}
                                     </div>
                                 )}
-                                {gameMode === 'local' && (<button onClick={handleUndo} disabled={history.length <= 1} className="w-full mt-4 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-semibold transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed text-sm">Undo Move</button>)}
+                                {(gameMode === 'local' || gameMode === 'analysis') && (<button onClick={handleUndo} disabled={history.length <= 1} className="w-full mt-4 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-semibold transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed text-sm">Undo Move</button>)}
                                 {status === 'playing' && (<button onClick={handleResign} className="w-full mt-4 px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg font-semibold transition-colors text-sm">Resign</button>)}
                                 <button onClick={handleBackToMenu} className="w-full mt-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-semibold transition-colors text-sm">
                                     {gameMode === 'online_playing' ? 'Back to Lobby' : 'Back to Menu'}
@@ -2627,7 +2673,15 @@ const App: React.FC = () => {
 
     const renderContent = () => {
         if (reviewingGame) {
-            return <GameReview game={reviewingGame} onBack={handleBackFromReview} />;
+            return <GameReview game={reviewingGame} onBack={handleBackFromReview} onAnalyze={handleStartAnalysisFromPosition} />;
+        }
+
+        if (gameMode === 'analysis') {
+            return <Analysis initialState={analysisState || undefined} onBack={handleBackToMenu} />;
+        }
+
+        if (gameMode === 'board_editor') {
+            return <BoardEditor onStartAnalysis={handleStartAnalysisFromEditor} onCancel={handleBackToMenu} />;
         }
 
         if (gameMode === 'menu') {
@@ -2653,6 +2707,12 @@ const App: React.FC = () => {
                             className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 rounded-xl text-xl font-bold transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-3"
                         >
                             <span>🌐</span> Online Play
+                        </button>
+                        <button
+                            onClick={handleStartBoardEditor}
+                            className="w-full py-4 bg-gray-700 hover:bg-gray-600 rounded-xl text-xl font-bold transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-3"
+                        >
+                            <span>🧱</span> Board Editor
                         </button>
                         {currentUser && (
                             <button

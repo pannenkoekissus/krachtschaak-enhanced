@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { GameState, Color, BoardState, Piece, Move } from '../types';
+import { GameState, Color, BoardState, Piece, Move, Position } from '../types';
 import Board from './Board';
 import PieceComponent from './Piece';
 import { createInitialBoard, applyMoveToBoard } from '../utils/game';
@@ -9,6 +9,7 @@ import KrachtschaakAI from '../engine';
 interface GameReviewProps {
     game: GameState;
     onBack: () => void;
+    onAnalyze: (state: GameState) => void;
 }
 
 const formatTimerSettingText = (settings: GameState['timerSettings']) => {
@@ -17,7 +18,7 @@ const formatTimerSettingText = (settings: GameState['timerSettings']) => {
     return `${settings.initialTime / 60} min | ${settings.increment} sec`;
 };
 
-const GameReview: React.FC<GameReviewProps> = ({ game, onBack }) => {
+const GameReview: React.FC<GameReviewProps> = ({ game, onBack, onAnalyze }) => {
     // We reconstruct the board state history locally for review
     const [currentMoveIndex, setCurrentMoveIndex] = useState(-1); // -1 means initial board
     const [boards, setBoards] = useState<BoardState[]>([]);
@@ -26,13 +27,13 @@ const GameReview: React.FC<GameReviewProps> = ({ game, onBack }) => {
     // engineDepth removed: engine will search until user interaction
     const [engineSuggestion, setEngineSuggestion] = useState<string | null>(null);
     const [engineThinking, setEngineThinking] = useState(false);
-    
+
     const workerRef = React.useRef<Worker | null>(null);
     const requestIdRef = React.useRef<number | null>(null);
 
     const terminateWorker = () => {
         if (workerRef.current) {
-            try { workerRef.current.terminate(); } catch (e) {}
+            try { workerRef.current.terminate(); } catch (e) { }
             workerRef.current = null;
         }
         requestIdRef.current = null;
@@ -60,12 +61,12 @@ const GameReview: React.FC<GameReviewProps> = ({ game, onBack }) => {
         return () => {
             // terminate worker on unmount to free resources
             if (workerRef.current) {
-                try { workerRef.current.terminate(); } catch (e) {}
+                try { workerRef.current.terminate(); } catch (e) { }
                 workerRef.current = null;
             }
         };
     }, []);
-    
+
     const sanitizePieceArray = (arr: any[] | undefined): Piece[] => {
         if (!Array.isArray(arr)) return [];
         return arr.map(sanitizePiece).filter((p): p is Piece => p !== null);
@@ -75,7 +76,7 @@ const GameReview: React.FC<GameReviewProps> = ({ game, onBack }) => {
         white: sanitizePieceArray(game.capturedPieces?.white),
         black: sanitizePieceArray(game.capturedPieces?.black),
     };
-    
+
     const sanitizedPlayers = game.players || {};
     // --- END SANITIZATION ---
 
@@ -99,7 +100,7 @@ const GameReview: React.FC<GameReviewProps> = ({ game, onBack }) => {
     const { status, winner, playerColors, initialRatings, ratingChange, isRated, ratingCategory, timerSettings } = game;
 
     const getResultMessage = () => {
-        switch(status) {
+        switch (status) {
             case 'kingCaptured': return `${winner} wins by capturing the king!`;
             case 'resignation': return `${winner} wins by resignation.`;
             case 'checkmate': return `${winner} wins by checkmate!`;
@@ -187,7 +188,7 @@ const GameReview: React.FC<GameReviewProps> = ({ game, onBack }) => {
                 if (msg.type === 'error') {
                     setEngineSuggestion('Error');
                     setEngineThinking(false);
-                    try { workerRef.current?.terminate(); } catch (e) {}
+                    try { workerRef.current?.terminate(); } catch (e) { }
                     workerRef.current = null;
                     requestIdRef.current = null;
                 }
@@ -198,10 +199,34 @@ const GameReview: React.FC<GameReviewProps> = ({ game, onBack }) => {
         workerRef.current.postMessage({ type: 'start', board: currentBoard, turn, maxDepth: engineDepth, requestId });
     };
 
+    const startAnalysisHere = () => {
+        const turn = (currentMoveIndex + 1) % 2 === 0 ? Color.White : Color.Black;
+        const analysisState: GameState = {
+            ...game,
+            board: displayBoard,
+            turn: turn,
+            status: 'playing',
+            moveHistory: moves.slice(0, currentMoveIndex + 1)
+        };
+        onAnalyze(analysisState);
+    };
+
+    const [selectedPiece, setSelectedPiece] = React.useState<Position | null>(null);
+    const [draggedPiece, setDraggedPiece] = React.useState<Position | null>(null);
+
+    const handleSquareClick = (row: number, col: number) => {
+        // Just start analysis here if they try to move
+        startAnalysisHere();
+    };
+
+    const handleDragStart = (e: React.DragEvent, row: number, col: number) => {
+        startAnalysisHere();
+    };
+
     return (
         <div className="min-h-screen flex flex-col md:flex-row items-center justify-center p-4 gap-8">
             <div className="w-full max-w-lg md:max-w-md lg:max-w-lg xl:max-w-2xl relative flex flex-col gap-4">
-                 <div className="bg-gray-800 p-2 rounded flex justify-center gap-4">
+                <div className="bg-gray-800 p-2 rounded flex justify-center gap-4">
                     <button onClick={() => changeIndex(-1)} disabled={currentMoveIndex === -1} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50">&lt;&lt;</button>
                     <button onClick={() => handleStep(-1)} disabled={currentMoveIndex === -1} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50">&lt;</button>
                     <span className="py-2 font-mono w-24 text-center text-lg font-bold">
@@ -211,29 +236,29 @@ const GameReview: React.FC<GameReviewProps> = ({ game, onBack }) => {
                     <button onClick={() => changeIndex(moves.length - 1)} disabled={currentMoveIndex === moves.length - 1} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50">&gt;&gt;</button>
                 </div>
 
-                <Board 
+                <Board
                     board={displayBoard}
-                    selectedPiece={null}
+                    selectedPiece={selectedPiece}
                     validMoves={[]}
-                    onSquareClick={() => {}}
-                    turn={Color.White} // doesn't matter
+                    onSquareClick={handleSquareClick}
+                    turn={(currentMoveIndex + 1) % 2 === 0 ? Color.White : Color.Black}
                     playerColor={Color.White}
-                    gameMode="online_playing"
-                    isInteractionDisabled={true}
-                    onPieceDragStart={() => {}}
-                    onPieceDragEnd={() => {}}
-                    onSquareDrop={() => {}}
-                    draggedPiece={null}
+                    gameMode="local"
+                    isInteractionDisabled={false}
+                    onPieceDragStart={handleDragStart}
+                    onPieceDragEnd={() => setDraggedPiece(null)}
+                    onSquareDrop={() => { }}
+                    draggedPiece={draggedPiece}
                     premove={null}
                     lastMove={lastMove ? { from: lastMove.from, to: lastMove.to } : null}
                     highlightedSquares={[]}
                     arrows={[]}
-                    onBoardMouseDown={() => {}}
-                    onBoardMouseUp={() => {}}
+                    onBoardMouseDown={() => { }}
+                    onBoardMouseUp={() => { }}
                     onBoardContextMenu={(e) => e.preventDefault()}
                 />
             </div>
-             <div className="w-full md:w-80 bg-gray-800 p-4 rounded-lg shadow-xl flex flex-col max-h-[90vh] overflow-y-auto">
+            <div className="w-full md:w-80 bg-gray-800 p-4 rounded-lg shadow-xl flex flex-col max-h-[90vh] overflow-y-auto">
                 <h2 className="text-2xl font-bold text-center mb-2 text-green-400">Game Review</h2>
                 <p className="text-center text-gray-300 mb-4">{getResultMessage()}</p>
 
@@ -268,31 +293,31 @@ const GameReview: React.FC<GameReviewProps> = ({ game, onBack }) => {
 
                 <div className="bg-gray-700 p-3 rounded-lg mb-4">
                     <h3 className="text-lg font-bold truncate">
-                       White: {whitePlayer?.displayName || 'N/A'} {isRated && `(${initialRatings?.white})`}
+                        White: {whitePlayer?.displayName || 'N/A'} {isRated && `(${initialRatings?.white})`}
                     </h3>
                     {isRated && ratingChange && (
                         <p className={ratingChange.white >= 0 ? 'text-green-400' : 'text-red-400'}>
-                             Rating change: {ratingChange.white >= 0 ? '+' : ''}{ratingChange.white}
+                            Rating change: {ratingChange.white >= 0 ? '+' : ''}{ratingChange.white}
                         </p>
                     )}
                     <h3 className="text-lg font-bold border-b border-t my-2 border-gray-600 py-1">Captured</h3>
-                    <div className="flex flex-wrap gap-1 min-h-[40px]">{sanitizedCapturedPieces.black.map((p, i) => p && <div key={i} className="w-8 h-8"><PieceComponent piece={p}/></div>)}</div>
+                    <div className="flex flex-wrap gap-1 min-h-[40px]">{sanitizedCapturedPieces.black.map((p, i) => p && <div key={i} className="w-8 h-8"><PieceComponent piece={p} /></div>)}</div>
                 </div>
-                 <div className="bg-gray-700 p-3 rounded-lg mb-4">
+                <div className="bg-gray-700 p-3 rounded-lg mb-4">
                     <h3 className="text-lg font-bold truncate">
                         Black: {blackPlayer?.displayName || 'N/A'} {isRated && `(${initialRatings?.black})`}
                     </h3>
-                     {isRated && ratingChange && (
+                    {isRated && ratingChange && (
                         <p className={ratingChange.black >= 0 ? 'text-green-400' : 'text-red-400'}>
                             Rating change: {ratingChange.black >= 0 ? '+' : ''}{ratingChange.black}
                         </p>
                     )}
                     <h3 className="text-lg font-bold border-b border-t my-2 border-gray-600 py-1">Captured</h3>
-                    <div className="flex flex-wrap gap-1 min-h-[40px]">{sanitizedCapturedPieces.white.map((p, i) => p && <div key={i} className="w-8 h-8"><PieceComponent piece={p}/></div>)}</div>
+                    <div className="flex flex-wrap gap-1 min-h-[40px]">{sanitizedCapturedPieces.white.map((p, i) => p && <div key={i} className="w-8 h-8"><PieceComponent piece={p} /></div>)}</div>
                 </div>
 
                 <div className="flex-grow overflow-y-auto bg-gray-900 p-2 rounded font-mono text-sm mb-4 min-h-[150px]">
-                     <table className="w-full text-left">
+                    <table className="w-full text-left">
                         <thead>
                             <tr className="text-gray-500 border-b border-gray-700">
                                 <th className="pb-1 w-10">#</th>
@@ -308,15 +333,15 @@ const GameReview: React.FC<GameReviewProps> = ({ game, onBack }) => {
                                     rows.push(
                                         <tr key={i} className={`border-b border-gray-800 last:border-0 ${isCurrentRow ? 'bg-gray-700' : ''}`}>
                                             <td className="py-1 text-gray-500">{Math.floor(i / 2) + 1}.</td>
-                                            <td 
+                                            <td
                                                 className={`py-1 cursor-pointer hover:text-white ${currentMoveIndex === i ? 'text-yellow-300 font-bold' : 'text-gray-300'}`}
                                                 onClick={() => changeIndex(i)}
                                             >
                                                 {moves[i].notation}
                                             </td>
-                                            <td 
+                                            <td
                                                 className={`py-1 cursor-pointer hover:text-white ${currentMoveIndex === i + 1 ? 'text-yellow-300 font-bold' : 'text-gray-300'}`}
-                                                onClick={() => { if (moves[i+1]) changeIndex(i + 1); }}
+                                                onClick={() => { if (moves[i + 1]) changeIndex(i + 1); }}
                                             >
                                                 {moves[i + 1]?.notation || ''}
                                             </td>
@@ -332,7 +357,10 @@ const GameReview: React.FC<GameReviewProps> = ({ game, onBack }) => {
                 <div className="mt-auto pt-4">
                     <p className="text-center text-gray-400 mb-4 capitalize">
                         {formatTimerSettingText(timerSettings)} • {isRated ? `Rated (${ratingCategory})` : 'Unrated'}
-                     </p>
+                    </p>
+                    <button onClick={startAnalysisHere} className="w-full mt-4 px-4 py-3 bg-green-600 hover:bg-green-700 rounded-lg font-semibold transition-colors">
+                        Analyze from Here
+                    </button>
                     <button onClick={onBack} className="w-full mt-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors">
                         Back to Lobby
                     </button>

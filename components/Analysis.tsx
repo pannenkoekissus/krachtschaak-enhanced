@@ -1,0 +1,647 @@
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, Move } from '../types';
+import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard } from '../utils/game';
+import Board from './Board';
+import GameOverlay from './GameOverlay';
+import PieceComponent from './Piece';
+
+interface AnalysisProps {
+    initialState?: GameState;
+    onBack: () => void;
+}
+
+interface AnalysisTreeNode {
+    id: string;
+    gameState: GameState;
+    notation: string | null;
+    children: string[];
+    parentId: string | null;
+    lastVisited?: boolean;
+}
+
+const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
+    // Current state of analysis
+    const [board, setBoard] = useState<BoardState>(() => initialState?.board || createInitialBoard());
+    const [turn, setTurn] = useState<Color>(initialState?.turn || Color.White);
+    const [capturedPieces, setCapturedPieces] = useState<Record<Color, Piece[]>>(initialState?.capturedPieces || { white: [], black: [] });
+    const [enPassantTarget, setEnPassantTarget] = useState<Position | null>(initialState?.enPassantTarget || null);
+    const [halfmoveClock, setHalfmoveClock] = useState(initialState?.halfmoveClock || 0);
+    const [positionHistory, setPositionHistory] = useState<Record<string, number>>(initialState?.positionHistory || {});
+    const [status, setStatus] = useState<GameStatus>(initialState?.status || 'playing');
+    const [winner, setWinner] = useState<string | null>(initialState?.winner || null);
+    const [lastMove, setLastMove] = useState<{ from: Position, to: Position } | null>(initialState?.lastMove || null);
+    const [moveHistory, setMoveHistory] = useState<Move[]>(initialState?.moveHistory || []);
+
+    // Selection and interaction
+    const [selectedPiece, setSelectedPiece] = useState<Position | null>(null);
+    const [validMoves, setValidMoves] = useState<Position[]>([]);
+    const [promotionData, setPromotionData] = useState<PromotionData | null>(null);
+    const [ambiguousEnPassantData, setAmbiguousEnPassantData] = useState<{ from: Position, to: Position } | null>(null);
+    const [isForcePowerMode, setIsForcePowerMode] = useState(false);
+    const [draggedPiece, setDraggedPiece] = useState<Position | null>(null);
+
+    // Navigation Tree
+    const initialRootState = initialState || {
+        board: createInitialBoard(),
+        turn: Color.White,
+        status: 'playing',
+        winner: null,
+        promotionData: null,
+        capturedPieces: { white: [], black: [] },
+        enPassantTarget: null,
+        halfmoveClock: 0,
+        positionHistory: {},
+        ambiguousEnPassantData: null,
+        drawOffer: null,
+        playerTimes: null,
+        turnStartTime: null,
+        moveDeadline: null,
+        timerSettings: null,
+        ratingCategory: 'unlimited' as any,
+        players: {},
+        playerColors: { white: null, black: null },
+        initialRatings: null,
+        isRated: false,
+        rematchOffer: null,
+        nextGameId: null,
+        ratingChange: null,
+        moveHistory: []
+    };
+
+    const [nodes, setNodes] = useState<Record<string, AnalysisTreeNode>>(() => {
+        const rootId = 'root';
+        return {
+            [rootId]: {
+                id: rootId,
+                gameState: initialRootState,
+                notation: null,
+                children: [],
+                parentId: null
+            }
+        };
+    });
+    const [currentNodeId, setCurrentNodeId] = useState<string>('root');
+
+    // UI State
+    const [highlightedSquares, setHighlightedSquares] = useState<Position[]>([]);
+    const [arrows, setArrows] = useState<{ from: Position; to: Position }[]>([]);
+    const [rightClickStartSquare, setRightClickStartSquare] = useState<Position | null>(null);
+
+    // Engine State
+    const [engineThinking, setEngineThinking] = useState(false);
+    const [engineSuggestion, setEngineSuggestion] = useState<string | null>(null);
+    const [engineDepth, setEngineDepth] = useState(3);
+    const workerRef = useRef<Worker | null>(null);
+    const requestIdRef = useRef<number | null>(null);
+
+    const stopWorker = () => {
+        if (workerRef.current) {
+            try {
+                workerRef.current.postMessage({ type: 'stop', requestId: requestIdRef.current });
+            } catch (e) { }
+            workerRef.current.terminate();
+            workerRef.current = null;
+        }
+        requestIdRef.current = null;
+        setEngineThinking(false);
+    };
+
+    const handleGetEngineMove = () => {
+        if (engineThinking) {
+            stopWorker();
+            return;
+        }
+
+        setEngineThinking(true);
+        setEngineSuggestion(null);
+
+        const requestId = Date.now();
+        requestIdRef.current = requestId;
+
+        if (!workerRef.current) {
+            workerRef.current = new Worker(new URL('../engine.worker.ts', import.meta.url), { type: 'module' });
+            workerRef.current.onmessage = (ev) => {
+                const msg = ev.data || {};
+                if (msg.requestId !== requestIdRef.current) return;
+
+                if (msg.type === 'update') {
+                    setEngineSuggestion(`${msg.move.notation} (depth ${msg.depth})`);
+                }
+                if (msg.type === 'done') {
+                    if (msg.move) setEngineSuggestion(msg.move.notation);
+                    setEngineThinking(false);
+                    requestIdRef.current = null;
+                }
+                if (msg.type === 'error') {
+                    setEngineSuggestion('Error');
+                    setEngineThinking(false);
+                    workerRef.current?.terminate();
+                    workerRef.current = null;
+                }
+            };
+        }
+
+        workerRef.current.postMessage({ type: 'start', board, turn, maxDepth: engineDepth, requestId });
+    };
+
+    useEffect(() => {
+        return () => {
+            if (workerRef.current) workerRef.current.terminate();
+        };
+    }, []);
+
+    const updateValidMoves = useCallback(() => {
+        if (selectedPiece && (status === 'playing' || status === 'analysis')) {
+            const moves = getValidMoves(board, selectedPiece, enPassantTarget, false);
+            setValidMoves(moves);
+        } else {
+            setValidMoves([]);
+        }
+    }, [selectedPiece, board, enPassantTarget, status]);
+
+    useEffect(() => {
+        updateValidMoves();
+    }, [updateValidMoves]);
+
+    const getCurrentState = (): GameState => ({
+        board, turn, status, winner, promotionData, capturedPieces,
+        enPassantTarget, halfmoveClock, positionHistory,
+        ambiguousEnPassantData, drawOffer: null, playerTimes: null,
+        turnStartTime: null, moveDeadline: null, timerSettings: null,
+        ratingCategory: 'unlimited' as any, players: {},
+        playerColors: { white: null, black: null }, initialRatings: null,
+        isRated: false, rematchOffer: null, nextGameId: null,
+        ratingChange: null, moveHistory
+    });
+
+    const commitNewState = (newState: GameState, notation: string) => {
+        const newNodeId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
+
+        // Check if this move already exists as a child of the current node
+        const currentNode = nodes[currentNodeId];
+        const existingChildId = currentNode.children.find(childId => {
+            const child = nodes[childId];
+            return child.notation === notation;
+        });
+
+        if (existingChildId) {
+            setCurrentNodeId(existingChildId);
+            applyState(nodes[existingChildId].gameState);
+            return;
+        }
+
+        const newNode: AnalysisTreeNode = {
+            id: newNodeId,
+            gameState: newState,
+            notation: notation,
+            children: [],
+            parentId: currentNodeId
+        };
+
+        setNodes(prev => ({
+            ...prev,
+            [currentNodeId]: {
+                ...prev[currentNodeId],
+                children: [...prev[currentNodeId].children, newNodeId]
+            },
+            [newNodeId]: newNode
+        }));
+
+        setCurrentNodeId(newNodeId);
+        applyState(newState);
+        stopWorker();
+    };
+
+    const applyState = (state: GameState) => {
+        setBoard(state.board);
+        setTurn(state.turn);
+        setStatus(state.status);
+        setWinner(state.winner);
+        setCapturedPieces(state.capturedPieces);
+        setEnPassantTarget(state.enPassantTarget);
+        setHalfmoveClock(state.halfmoveClock);
+        setPositionHistory(state.positionHistory);
+        setMoveHistory(state.moveHistory || []);
+        setPromotionData(state.promotionData || null);
+        setAmbiguousEnPassantData(state.ambiguousEnPassantData || null);
+        setLastMove(state.lastMove || null);
+        setSelectedPiece(null);
+        setValidMoves([]);
+        setHighlightedSquares([]);
+        setArrows([]);
+        setDraggedPiece(null);
+    };
+
+    const handleUndo = () => {
+        const currentNode = nodes[currentNodeId];
+        if (currentNode.parentId) {
+            goToNode(currentNode.parentId);
+        }
+    };
+
+    const handleRedo = () => {
+        const currentNode = nodes[currentNodeId];
+        if (currentNode.children.length > 0) {
+            // Find the child that was last visited, or the first one
+            const lastVisitedChild = currentNode.children.find(id => nodes[id].lastVisited) || currentNode.children[0];
+            goToNode(lastVisitedChild);
+        }
+    };
+
+    const goToNode = (nodeId: string) => {
+        if (nodes[nodeId]) {
+            // Mark path from root as last visited
+            setNodes(prev => {
+                const newNodes = { ...prev };
+                // Also unmark siblings as last visited for redo logic
+                const parentId = newNodes[nodeId].parentId;
+                if (parentId) {
+                    newNodes[parentId].children.forEach(childId => {
+                        newNodes[childId] = { ...newNodes[childId], lastVisited: false };
+                    });
+                }
+                newNodes[nodeId] = { ...newNodes[nodeId], lastVisited: true };
+                return newNodes;
+            });
+            setCurrentNodeId(nodeId);
+            applyState(nodes[nodeId].gameState);
+        }
+    };
+
+    const promoteVariation = (nodeId: string) => {
+        const node = nodes[nodeId];
+        if (!node.parentId) return;
+
+        setNodes(prev => {
+            const parent = prev[node.parentId!];
+            const newChildren = [nodeId, ...parent.children.filter(id => id !== nodeId)];
+            return {
+                ...prev,
+                [node.parentId!]: { ...parent, children: newChildren }
+            };
+        });
+    };
+
+    const getCurrentLine = () => {
+        const line: AnalysisTreeNode[] = [];
+        let curr = nodes[currentNodeId];
+        while (curr && curr.id !== 'root') {
+            line.unshift(curr);
+            if (curr.parentId) {
+                curr = nodes[curr.parentId];
+            } else {
+                break;
+            }
+        }
+        return line;
+    };
+
+    const currentLine = getCurrentLine();
+
+    const finalizeTurn = (
+        currentBoard: BoardState,
+        nextEnPassantTarget: Position | null,
+        resetClock: boolean,
+        newCaptured: typeof capturedPieces,
+        move: { from: Position; to: Position },
+        promotion?: PieceType | null,
+    ) => {
+        const nextTurn = turn === Color.White ? Color.Black : Color.White;
+        const newHalfmoveClock = resetClock ? 0 : halfmoveClock + 1;
+        const key = generateBoardKey(currentBoard, nextTurn, nextEnPassantTarget);
+        const newCount = (positionHistory[key] || 0) + 1;
+        const newPositionHistory = { ...positionHistory, [key]: newCount };
+
+        let newStatus: GameStatus = 'playing';
+        let newWinner: string | null = null;
+
+        const hasStandardLegalMoves = hasLegalMoves(currentBoard, nextTurn, nextEnPassantTarget);
+        const canPlayerCaptureKing = canCaptureKing(currentBoard, nextTurn);
+
+        if (!hasStandardLegalMoves && !canPlayerCaptureKing) {
+            const isPlayerInCheck = isKingInCheck(currentBoard, nextTurn);
+            if (isPlayerInCheck) {
+                newStatus = 'checkmate';
+                newWinner = turn === Color.White ? 'White' : 'Black';
+            } else {
+                newStatus = 'stalemate';
+            }
+        }
+
+        const notation = getNotation(board, move.from, move.to, board[move.from.row][move.from.col]!, null, promotion || null, isForcePowerMode);
+        const newMoveHistory = [...moveHistory, { ...move, notation, piece: board[move.from.row][move.from.col]!.type, color: turn, captured: board[move.to.row][move.to.col]?.type, promotion: promotion || undefined }];
+
+        const newState: GameState = {
+            ...getCurrentState(),
+            board: currentBoard,
+            turn: nextTurn,
+            halfmoveClock: newHalfmoveClock,
+            positionHistory: newPositionHistory,
+            enPassantTarget: nextEnPassantTarget,
+            status: newStatus,
+            winner: newWinner,
+            capturedPieces: newCaptured,
+            moveHistory: newMoveHistory,
+            lastMove: move,
+            promotionData: null,
+            ambiguousEnPassantData: null
+        };
+
+        commitNewState(newState, notation);
+    };
+
+    const movePiece = (from: Position, to: Position) => {
+        const newBoard = board.map(row => [...row]);
+        const pieceToMove = { ...newBoard[from.row][from.col]! };
+        const capturedPieceOnTarget = newBoard[to.row][to.col];
+        let resetHalfmoveClock = pieceToMove.type === PieceType.Pawn;
+
+        const newCapturedPieces = {
+            white: [...capturedPieces.white],
+            black: [...capturedPieces.black],
+        };
+
+        const wasPowerMove = isPowerMove(board, from, to, enPassantTarget);
+        const isEnPassantCapture = (pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn) && enPassantTarget && to.row === enPassantTarget.row && to.col === enPassantTarget.col && !capturedPieceOnTarget;
+
+        if (isEnPassantCapture && pieceToMove.power === PieceType.Pawn && [PieceType.Queen, PieceType.Bishop, PieceType.King].includes(pieceToMove.originalType) && !isForcePowerMode) {
+            setAmbiguousEnPassantData({ from, to });
+            setStatus('ambiguous_en_passant');
+            return;
+        }
+
+        let actualCapturedPiece = capturedPieceOnTarget;
+        if (isEnPassantCapture) {
+            actualCapturedPiece = newBoard[from.row][to.col];
+            newBoard[from.row][to.col] = null;
+        }
+
+        if (actualCapturedPiece) {
+            resetHalfmoveClock = true;
+            newCapturedPieces[actualCapturedPiece.color].push(actualCapturedPiece);
+            if (actualCapturedPiece.isKing) {
+                // Game Over logic in analysis? Usually just move and set status
+            } else {
+                pieceToMove.power = actualCapturedPiece.originalType;
+            }
+        }
+
+        if (isForcePowerMode || wasPowerMove) {
+            pieceToMove.power = null;
+        }
+
+        const promotionRank = turn === Color.White ? 0 : 7;
+        if (to.row === promotionRank && (pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn)) {
+            setPromotionData({ from, position: to, promotingPiece: pieceToMove, powerAfterPromotion: null });
+            setStatus('promotion');
+            return;
+        }
+
+        // Special handling for Power-move consumption if it wasn't a standard move and not explicit power move?
+        // Actually isPowerMove handles it. If it's a power move, power is already consumed above.
+
+        pieceToMove.hasMoved = true;
+        newBoard[to.row][to.col] = pieceToMove;
+        newBoard[from.row][from.col] = null;
+
+        // Castling
+        if (pieceToMove.type === PieceType.King && Math.abs(from.col - to.col) === 2) {
+            const isKingside = to.col > from.col;
+            const rookFromCol = isKingside ? 7 : 0;
+            const rookToCol = isKingside ? 5 : 3;
+            const rook = newBoard[from.row][rookFromCol];
+            if (rook) {
+                newBoard[from.row][rookToCol] = { ...rook, hasMoved: true };
+                newBoard[from.row][rookFromCol] = null;
+            }
+        }
+
+        let nextEnPassantTarget: Position | null = null;
+        if (pieceToMove.type === PieceType.Pawn && Math.abs(from.row - to.row) === 2) {
+            nextEnPassantTarget = { row: (from.row + to.row) / 2, col: from.col };
+        }
+
+        finalizeTurn(newBoard, nextEnPassantTarget, resetHalfmoveClock, newCapturedPieces, { from, to });
+    };
+
+    const handleSquareClick = (row: number, col: number) => {
+        if (status !== 'playing') return;
+
+        if (selectedPiece) {
+            if (selectedPiece.row === row && selectedPiece.col === col) {
+                setSelectedPiece(null);
+            } else if (validMoves.some(m => m.row === row && m.col === col)) {
+                movePiece(selectedPiece, { row, col });
+            } else {
+                const piece = board[row][col];
+                if (piece && piece.color === turn) {
+                    setSelectedPiece({ row, col });
+                } else {
+                    setSelectedPiece(null);
+                }
+            }
+        } else {
+            const piece = board[row][col];
+            if (piece && piece.color === turn) {
+                setSelectedPiece({ row, col });
+            }
+        }
+    };
+
+    const handlePromotion = (type: PieceType) => {
+        if (!promotionData) return;
+        const { from, position, promotingPiece } = promotionData;
+        const newBoard = board.map(r => [...r]);
+        newBoard[position.row][position.col] = { ...promotingPiece, type, hasMoved: true, power: null };
+        newBoard[from.row][from.col] = null;
+        finalizeTurn(newBoard, null, true, capturedPieces, { from, to: position }, type);
+    };
+
+    const resolveAmbiguousEnPassant = (choice: 'move' | 'capture') => {
+        if (!ambiguousEnPassantData) return;
+        const { from, to } = ambiguousEnPassantData;
+        const newBoard = board.map(r => [...r]);
+        const pieceToMove = { ...newBoard[from.row][from.col]! };
+        const newCaptured = { ...capturedPieces };
+
+        if (choice === 'capture') {
+            const captured = newBoard[from.row][to.col]!;
+            newCaptured[captured.color].push(captured);
+            pieceToMove.power = captured.originalType;
+            newBoard[from.row][to.col] = null;
+        } else {
+            pieceToMove.power = PieceType.Pawn;
+        }
+
+        pieceToMove.hasMoved = true;
+        newBoard[to.row][to.col] = pieceToMove;
+        newBoard[from.row][from.col] = null;
+
+        finalizeTurn(newBoard, null, true, newCaptured, { from, to });
+    };
+
+    return (
+        <div className="min-h-screen flex flex-col md:flex-row items-center justify-center p-2 md:p-4 gap-4 md:gap-8 bg-gray-900 text-white">
+            <div className="w-full max-w-lg md:max-w-md lg:max-w-lg xl:max-w-2xl relative">
+                <GameOverlay
+                    status={status}
+                    winner={winner}
+                    onRestart={() => goToNode('root')}
+                    onPromote={handlePromotion}
+                    promotionData={promotionData}
+                    onResolveAmbiguousEnPassant={resolveAmbiguousEnPassant}
+                    gameMode="analysis"
+                    isMyTurnForAction={true}
+                />
+                <Board
+                    board={board}
+                    selectedPiece={selectedPiece}
+                    validMoves={validMoves}
+                    onSquareClick={handleSquareClick}
+                    turn={turn}
+                    playerColor={Color.White}
+                    gameMode="local"
+                    isInteractionDisabled={status !== 'playing'}
+                    onPieceDragStart={(e, r, c) => {
+                        handleSquareClick(r, c);
+                        setDraggedPiece({ row: r, col: c });
+                    }}
+                    onPieceDragEnd={() => setDraggedPiece(null)}
+                    onSquareDrop={(e, r, c) => handleSquareClick(r, c)}
+                    draggedPiece={draggedPiece}
+                    premove={null}
+                    lastMove={lastMove}
+                    highlightedSquares={highlightedSquares}
+                    arrows={arrows}
+                    onBoardMouseDown={(e, r, c) => {
+                        if (e.button === 0) setHighlightedSquares([]);
+                        if (e.button === 2) {
+                            e.preventDefault();
+                            setRightClickStartSquare({ row: r, col: c });
+                        }
+                    }}
+                    onBoardMouseUp={(e, r, c) => {
+                        if (e.button === 2 && rightClickStartSquare) {
+                            const end = { row: r, col: c };
+                            if (rightClickStartSquare.row === end.row && rightClickStartSquare.col === end.col) {
+                                setHighlightedSquares(prev => prev.some(s => s.row === end.row && s.col === end.col) ? prev.filter(s => s.row !== end.row || s.col !== end.col) : [...prev, end]);
+                            } else {
+                                setArrows(prev => prev.some(a => a.from.row === rightClickStartSquare.row && a.from.col === rightClickStartSquare.col && a.to.row === end.row && a.to.col === end.col) ? prev.filter(a => a.from.row !== rightClickStartSquare.row || a.from.col !== rightClickStartSquare.col || a.to.row !== end.row || a.to.col !== end.col) : [...prev, { from: rightClickStartSquare, to: end }]);
+                            }
+                        }
+                    }}
+                    onBoardContextMenu={(e) => e.preventDefault()}
+                />
+            </div>
+
+            <div className="w-full md:w-96 bg-gray-800 p-4 rounded-xl shadow-2xl flex flex-col h-[600px]">
+                <h2 className="text-2xl font-bold text-center text-green-400 mb-2">Analysis Board</h2>
+
+                <div className="flex justify-between items-center mb-4 bg-gray-700 p-2 rounded">
+                    <button onClick={() => goToNode('root')} className="p-2 hover:bg-gray-600 rounded text-xs px-2">Start</button>
+                    <button onClick={handleUndo} className="p-2 hover:bg-gray-600 rounded text-xs px-2">Prev</button>
+                    <span className="font-bold text-xs">Depth: {currentLine.length}</span>
+                    <button onClick={handleRedo} className="p-2 hover:bg-gray-600 rounded text-xs px-2">Next</button>
+                </div>
+
+                <div className="flex-grow overflow-y-auto mb-4 bg-gray-900 p-2 rounded font-mono text-sm">
+                    {currentLine.length === 0 && <p className="text-gray-500 italic text-center py-4">No moves yet</p>}
+                    <div className="flex flex-wrap gap-2">
+                        {currentLine.map((n, i) => (
+                            <div
+                                key={n.id}
+                                className={`p-1 px-2 cursor-pointer hover:bg-gray-700 rounded transition-colors flex flex-col ${currentNodeId === n.id ? 'bg-green-900 text-green-100 font-bold border border-green-500' : 'text-gray-300'}`}
+                                onClick={() => goToNode(n.id)}
+                            >
+                                <span className="text-[10px] text-gray-500">{Math.floor(i / 2) + 1}{i % 2 === 0 ? '.' : '...'}</span>
+                                {n.notation}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Variations Display */}
+                    {(() => {
+                        const currentNode = nodes[currentNodeId];
+                        if (currentNode.children.length > 1 || (currentNode.parentId && nodes[currentNode.parentId].children.length > 1)) {
+                            const parent = currentNode.parentId ? nodes[currentNode.parentId] : null;
+                            const variations = parent ? parent.children : [];
+
+                            if (variations.length > 1) {
+                                return (
+                                    <div className="mt-4 border-t border-gray-700 pt-2">
+                                        <p className="text-xs font-bold text-gray-500 uppercase mb-2">Variations at this point:</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {variations.map(vId => (
+                                                <div key={vId} className="flex flex-col gap-1">
+                                                    <button
+                                                        onClick={() => goToNode(vId)}
+                                                        className={`p-1 px-3 rounded text-xs transition-colors ${vId === currentNodeId ? 'bg-blue-600 text-white font-bold' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}
+                                                    >
+                                                        {nodes[vId].notation}
+                                                    </button>
+                                                    {vId !== variations[0] && (
+                                                        <button
+                                                            onClick={() => promoteVariation(vId)}
+                                                            className="text-[9px] text-gray-500 hover:text-green-500 text-center uppercase font-bold"
+                                                            title="Promote to main line"
+                                                        >
+                                                            ↑ Main
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            }
+                        }
+                        return null;
+                    })()}
+                </div>
+
+                <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between gap-2">
+                        <button
+                            onClick={() => setIsForcePowerMode(!isForcePowerMode)}
+                            className={`flex-1 py-2 rounded-lg font-bold text-sm transition-all ${isForcePowerMode ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}
+                        >
+                            {isForcePowerMode ? 'FORCE POWER ON' : 'FORCE POWER OFF'}
+                        </button>
+                    </div>
+
+                    <div className="bg-gray-700 p-3 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                            <label className="text-xs font-bold text-gray-400">DEPTH: {engineDepth}</label>
+                            <input
+                                type="range" min="1" max="100" value={engineDepth}
+                                onChange={(e) => setEngineDepth(parseInt(e.target.value))}
+                                className="w-2/3 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+                            />
+                        </div>
+                        <button
+                            onClick={handleGetEngineMove}
+                            className={`w-full py-2 rounded-lg font-bold text-sm transition-all ${engineThinking ? 'bg-red-600 animate-pulse' : 'bg-blue-600 hover:bg-blue-500'}`}
+                        >
+                            {engineThinking ? 'STOP ENGINE' : 'ENGINE ANALYSIS'}
+                        </button>
+                        {engineSuggestion && (
+                            <div className="mt-2 p-2 bg-gray-900 rounded border border-green-500 text-center">
+                                <span className="text-green-400 font-bold">{engineSuggestion}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    <button
+                        onClick={onBack}
+                        className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-colors mt-auto"
+                    >
+                        Exit Analysis
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default Analysis;
