@@ -359,7 +359,7 @@ const GameReview: React.FC<GameReviewProps> = ({ game, onBack, onAnalyze }) => {
                         Analyse Game
                     </button>
                     <button onClick={onBack} className="w-full mt-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors">
-                        Back to Lobby
+                        Back
                     </button>
                 </div>
             </div>

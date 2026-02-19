@@ -93,6 +93,8 @@ const App: React.FC = () => {
     const [rejoinCountdown, setRejoinCountdown] = useState<number | null>(null);
     const [reviewingGame, setReviewingGame] = useState<GameState | null>(null);
     const [analysisState, setAnalysisState] = useState<GameState | null>(null);
+    const [reviewReturnTo, setReviewReturnTo] = useState<{ mode: GameMode, lobbyView: any } | null>(null);
+    const [analysisReturnTo, setAnalysisReturnTo] = useState<{ mode: GameMode, lobbyView: any, reviewingGame: GameState | null } | null>(null);
     const [showPowerLegend, setShowPowerLegend] = useState(false);
     const [showConfirmation, setShowConfirmation] = useState<'draw' | 'resign' | 'move' | 'premove' | null>(null);
     const [pendingMove, setPendingMove] = useState<{ from: Position, to: Position } | null>(null);
@@ -1094,6 +1096,15 @@ const App: React.FC = () => {
             }
         }
 
+        if (analysisReturnTo) {
+            setGameMode(analysisReturnTo.mode);
+            setLobbyView(analysisReturnTo.lobbyView);
+            setReviewingGame(analysisReturnTo.reviewingGame);
+            setAnalysisState(null);
+            setAnalysisReturnTo(null);
+            return;
+        }
+
         // Navigation Logic: Return to Lobby if logged in and online game, else Main Menu
         if (gameMode === 'online_playing' || gameMode === 'online_spectating') {
             setGameMode('online_lobby');
@@ -1111,7 +1122,7 @@ const App: React.FC = () => {
         setShowLocalSetup(false);
         randomizeNextGameColor();
         setChatMessages([]);
-    }, [gameId, myOnlineColor, currentUser, randomizeNextGameColor, gameMode, status, gameRef, timerSettings, ratingCategory]);
+    }, [gameId, myOnlineColor, currentUser, randomizeNextGameColor, gameMode, status, gameRef, timerSettings, ratingCategory, analysisReturnTo, lobbyView, reviewingGame]);
 
     const handleStartOnline = () => {
         if (currentUser) {
@@ -2210,16 +2221,22 @@ const App: React.FC = () => {
     const isInteractionDisabled = (status !== 'playing' && gameMode !== 'analysis') || !!localPromotionState || !!localAmbiguousEnPassantState || (gameMode === 'online_playing' && turn !== myOnlineColor && !premovesEnabled) || gameMode === 'online_spectating';
 
     const handleReviewGame = (gameToReview: GameState) => {
-        setGameMode('menu'); // Exit the active game/lobby view
+        setReviewReturnTo({ mode: gameMode, lobbyView: lobbyView });
         setReviewingGame(gameToReview);
     };
 
     const handleBackFromReview = () => {
         setReviewingGame(null);
-        if (currentUser && isFirebaseConfigured) {
-            setGameMode('online_lobby');
+        if (reviewReturnTo) {
+            setGameMode(reviewReturnTo.mode);
+            setLobbyView(reviewReturnTo.lobbyView);
+            setReviewReturnTo(null);
         } else {
-            setGameMode('menu');
+            if (currentUser && isFirebaseConfigured) {
+                setGameMode('online_lobby');
+            } else {
+                setGameMode('menu');
+            }
         }
     };
 
@@ -2254,11 +2271,13 @@ const App: React.FC = () => {
             ratingChange: null,
             moveHistory: []
         };
+        setAnalysisReturnTo({ mode: gameMode, lobbyView: lobbyView, reviewingGame: null });
         setAnalysisState(initialState);
         setGameMode('analysis');
     };
 
     const handleStartAnalysisFromPosition = (gameState: GameState) => {
+        setAnalysisReturnTo({ mode: gameMode, lobbyView: lobbyView, reviewingGame: reviewingGame });
         setReviewingGame(null);
         setAnalysisState(gameState);
         setGameMode('analysis');
@@ -2369,6 +2388,9 @@ const App: React.FC = () => {
                             onDeclineRematch={handleDeclineRematch}
                             nextGameId={nextGameId}
                             onCancelRematch={onCancelRematch}
+                            onAnalyse={handleStartAnalysisFromPosition}
+                            onReview={handleReviewGame}
+                            currentGameState={currentGameState}
                         />
                         <Board
                             board={board} selectedPiece={selectedPiece} validMoves={validMoves}
@@ -2825,6 +2847,7 @@ const App: React.FC = () => {
                     onGameCreated={randomizeNextGameColor}
                     myRatings={myRatings}
                     onReview={handleReviewGame}
+                    onAnalyse={handleStartAnalysisFromPosition}
                     premovesEnabled={premovesEnabled}
                     setPremovesEnabled={setPremovesEnabled}
                     moveConfirmationEnabled={moveConfirmationEnabled}

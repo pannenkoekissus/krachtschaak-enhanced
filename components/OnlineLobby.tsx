@@ -34,6 +34,7 @@ interface OnlineLobbyProps {
     currentLobbyTab: LobbyTab;
     setCurrentLobbyTab: (tab: LobbyTab) => void;
     onSpectate: (gameId: string) => void;
+    onAnalyse: (game: GameState) => void;
 }
 
 const formatTime = (totalSeconds: number | null): string => {
@@ -171,7 +172,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
     premovesEnabled, setPremovesEnabled, moveConfirmationEnabled, setMoveConfirmationEnabled,
     drawConfirmationEnabled, setDrawConfirmationEnabled, resignConfirmationEnabled, setResignConfirmationEnabled,
     showPowerPieces, setShowPowerPieces, showPowerRings, setShowPowerRings, showOriginalType, setShowOriginalType, soundsEnabled, setSoundsEnabled,
-    currentLobbyTab, setCurrentLobbyTab, onSpectate
+    currentLobbyTab, setCurrentLobbyTab, onSpectate, onAnalyse
 }) => {
     const [openGames, setOpenGames] = useState<LobbyGame[]>([]);
     const [myCurrentGames, setMyCurrentGames] = useState<ActiveGameSummary[]>([]);
@@ -1123,7 +1124,10 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                                         <p className="text-sm text-gray-300">{renderTimerSetting(data.timerSettings)} ({data.ratingCategory}, {data.isRated ? 'Rated' : 'Unrated'})</p>
                                     </div>
                                     <p className={`font-bold text-lg ${result.color}`}>{result.text}</p>
-                                    <button onClick={() => onReview(data)} className="px-4 py-2 ml-4 bg-blue-600 hover:bg-blue-700 rounded font-semibold transition-colors">Review Game</button>
+                                    <div className="flex gap-2 ml-4">
+                                        <button onClick={() => onReview(data)} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded font-semibold transition-colors text-xs">Review</button>
+                                        <button onClick={() => onAnalyse(data)} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded font-semibold transition-colors text-xs">Analyse</button>
+                                    </div>
                                 </div>
                             );
                         })}
