@@ -85,6 +85,7 @@ const Piece: React.FC<PieceComponentProps> = ({
             draggable="true"
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
+            style={{ forcedColorAdjust: 'none' } as any}
         >
             <img
                 src={svgs[piece.color][piece.type]}
