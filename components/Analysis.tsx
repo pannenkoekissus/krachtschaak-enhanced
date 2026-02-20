@@ -21,6 +21,12 @@ interface AnalysisTreeNode {
     lastVisited?: boolean;
 }
 
+const formatTimerSettingText = (settings: GameState['timerSettings']) => {
+    if (!settings) return 'Unlimited';
+    if ('daysPerMove' in settings) return `${settings.daysPerMove} day${settings.daysPerMove > 1 ? 's' : ''} / move`;
+    return `${settings.initialTime / 60} min | ${settings.increment} sec`;
+};
+
 const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
     // Current state of analysis
     const [board, setBoard] = useState<BoardState>(() => sanitizeBoard(initialState?.board || createInitialBoard()));
@@ -44,31 +50,34 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
     const [boardOrientation, setBoardOrientation] = useState<Color>(Color.White);
 
     // Navigation Tree
+    // If we have move history, the root should be the STARTING position (before any moves),
+    // not the final board position passed in initialState.
+    const hasMoveHistory = initialState?.moveHistory && initialState.moveHistory.length > 0;
     const initialRootState: GameState = {
-        board: sanitizeBoard(initialState?.board || createInitialBoard()),
-        turn: initialState?.turn || Color.White,
+        board: hasMoveHistory ? createInitialBoard() : sanitizeBoard(initialState?.board || createInitialBoard()),
+        turn: hasMoveHistory ? Color.White : (initialState?.turn || Color.White),
         status: 'playing',
-        winner: initialState?.winner || null,
-        promotionData: initialState?.promotionData || null,
-        capturedPieces: initialState?.capturedPieces || { white: [], black: [] },
-        enPassantTarget: initialState?.enPassantTarget || null,
-        halfmoveClock: initialState?.halfmoveClock || 0,
-        positionHistory: initialState?.positionHistory || {},
-        ambiguousEnPassantData: initialState?.ambiguousEnPassantData || null,
-        drawOffer: initialState?.drawOffer || null,
+        winner: null,
+        promotionData: null,
+        capturedPieces: hasMoveHistory ? { white: [], black: [] } : (initialState?.capturedPieces || { white: [], black: [] }),
+        enPassantTarget: null,
+        halfmoveClock: 0,
+        positionHistory: hasMoveHistory ? {} : (initialState?.positionHistory || {}),
+        ambiguousEnPassantData: null,
+        drawOffer: null,
         playerTimes: initialState?.playerTimes || null,
-        turnStartTime: initialState?.turnStartTime || null,
-        moveDeadline: initialState?.moveDeadline || null,
+        turnStartTime: null,
+        moveDeadline: null,
         timerSettings: initialState?.timerSettings || null,
         ratingCategory: initialState?.ratingCategory || 'unlimited' as any,
         players: initialState?.players || {},
         playerColors: initialState?.playerColors || { white: null, black: null },
         initialRatings: initialState?.initialRatings || null,
         isRated: initialState?.isRated || false,
-        rematchOffer: initialState?.rematchOffer || null,
-        nextGameId: initialState?.nextGameId || null,
+        rematchOffer: null,
+        nextGameId: null,
         ratingChange: initialState?.ratingChange || null,
-        moveHistory: initialState?.moveHistory || []
+        moveHistory: []
     };
 
     // Build initial tree if move history exists
@@ -148,6 +157,32 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
             applyState(nodes[currentNodeId].gameState);
         }
     }, []);
+
+    const getResultMessage = () => {
+        const game = initialState;
+        if (!game) return "Analysis Mode";
+        switch (game.status) {
+            case 'kingCaptured': return `${game.winner} wins by capturing the king!`;
+            case 'resignation': return `${game.winner} wins by resignation.`;
+            case 'checkmate': return `${game.winner} wins by checkmate!`;
+            case 'stalemate': return `Stalemate! It's a draw.`;
+            case 'draw_threefold': return `Draw by threefold repetition.`;
+            case 'draw_fiftyMove': return `Draw by 50-move rule.`;
+            case 'draw_agreement': return `Draw by agreement.`;
+            case 'timeout': return `${game.winner} wins on time!`;
+            case 'opponent_disconnected': return `${game.winner} wins, opponent disconnected.`;
+            default: return "Game Analysis";
+        }
+    };
+
+    const sanitizedPlayers = initialState?.players || {};
+    const whitePlayer = initialState?.playerColors?.white ? sanitizedPlayers[initialState.playerColors.white] : null;
+    const blackPlayer = initialState?.playerColors?.black ? sanitizedPlayers[initialState.playerColors.black] : null;
+    const isRated = initialState?.isRated || false;
+    const ratingChange = initialState?.ratingChange;
+    const initialRatings = initialState?.initialRatings;
+    const ratingCategory = initialState?.ratingCategory;
+    const timerSettings = initialState?.timerSettings;
 
     // UI State
     const [highlightedSquares, setHighlightedSquares] = useState<Position[]>([]);
@@ -241,6 +276,34 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
         }
     }, [updateValidMoves, currentNodeId]);
 
+    const handleUndo = useCallback(() => {
+        const currentNode = nodes[currentNodeId];
+        if (currentNode.parentId) {
+            goToNode(currentNode.parentId, false); // No sound for undo
+        }
+    }, [currentNodeId, nodes]);
+
+    const handleRedo = useCallback(() => {
+        const currentNode = nodes[currentNodeId];
+        if (currentNode.children.length > 0) {
+            const lastVisitedChild = currentNode.children.find(id => nodes[id].lastVisited) || currentNode.children[0];
+            goToNode(lastVisitedChild, true); // Sound for redo
+        }
+    }, [currentNodeId, nodes]);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+            if (e.key === 'ArrowLeft') {
+                handleUndo();
+            } else if (e.key === 'ArrowRight') {
+                handleRedo();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [handleUndo, handleRedo]);
+
     const getCurrentState = (): GameState => ({
         board, turn, status, winner, promotionData, capturedPieces,
         enPassantTarget, halfmoveClock, positionHistory,
@@ -288,6 +351,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
         setCurrentNodeId(newNodeId);
         applyState(newState);
         stopWorker();
+        playMoveSound(); // Always play sound for new move
     };
 
     const applyState = (state: GameState) => {
@@ -310,28 +374,11 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
         setDraggedPiece(null);
     };
 
-    const handleUndo = () => {
-        const currentNode = nodes[currentNodeId];
-        if (currentNode.parentId) {
-            goToNode(currentNode.parentId);
-        }
-    };
-
-    const handleRedo = () => {
-        const currentNode = nodes[currentNodeId];
-        if (currentNode.children.length > 0) {
-            // Find the child that was last visited, or the first one
-            const lastVisitedChild = currentNode.children.find(id => nodes[id].lastVisited) || currentNode.children[0];
-            goToNode(lastVisitedChild);
-        }
-    };
-
-    const goToNode = (nodeId: string) => {
+    const goToNode = (nodeId: string, playSound = true) => {
         if (nodes[nodeId]) {
             // Mark path from root as last visited
             setNodes(prev => {
                 const newNodes = { ...prev };
-                // Also unmark siblings as last visited for redo logic
                 const parentId = newNodes[nodeId].parentId;
                 if (parentId) {
                     newNodes[parentId].children.forEach(childId => {
@@ -341,6 +388,22 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
                 newNodes[nodeId] = { ...newNodes[nodeId], lastVisited: true };
                 return newNodes;
             });
+
+            if (playSound) {
+                const state = nodes[nodeId].gameState;
+                const history = state.moveHistory || [];
+                if (history.length > 0) {
+                    const lastMoveInState = history[history.length - 1];
+                    if (lastMoveInState.captured) {
+                        playCaptureSound();
+                    } else {
+                        playMoveSound();
+                    }
+                } else {
+                    playMoveSound();
+                }
+            }
+
             setCurrentNodeId(nodeId);
             applyState(nodes[nodeId].gameState);
         }
@@ -600,7 +663,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
                 <GameOverlay
                     status={status}
                     winner={winner}
-                    onRestart={() => goToNode('root')}
+                    onRestart={() => goToNode('root', false)}
                     onPromote={handlePromotion}
                     promotionData={promotionData}
                     onResolveAmbiguousEnPassant={resolveAmbiguousEnPassant}
@@ -648,17 +711,50 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
                 />
             </div>
 
-            <div className="w-full md:w-96 bg-gray-800 p-4 rounded-xl shadow-2xl flex flex-col h-[600px]">
+            <div className="w-full md:w-96 bg-gray-800 p-4 rounded-xl shadow-2xl flex flex-col h-[85vh] min-h-[400px]">
                 <h2 className="text-2xl font-bold text-center text-green-400 mb-2">Analysis Board</h2>
 
-                <div className="flex justify-between items-center mb-4 bg-gray-700 p-2 rounded">
-                    <button onClick={() => goToNode('root')} className="p-2 hover:bg-gray-600 rounded text-xs px-2">Start</button>
+                <div className="flex justify-between items-center mb-3 bg-gray-700 p-2 rounded">
+                    <button onClick={() => goToNode('root', false)} className="p-2 hover:bg-gray-600 rounded text-xs px-2">Start</button>
                     <button onClick={handleUndo} className="p-2 hover:bg-gray-600 rounded text-xs px-2">Prev</button>
                     <span className="font-bold text-xs">Depth: {currentLine.length}</span>
                     <button onClick={handleRedo} className="p-2 hover:bg-gray-600 rounded text-xs px-2">Next</button>
                 </div>
 
-                <div ref={moveListRef} className="flex-grow overflow-y-auto mb-4 bg-gray-900 p-3 rounded font-sans text-sm custom-scrollbar" id="move-list-container">
+                {initialState && (
+                    <div className="mb-3 bg-gray-700 p-2 rounded text-xs space-y-1">
+                        <p className="text-center text-gray-300 text-xs font-semibold mb-1">{getResultMessage()}</p>
+                        <div className="flex justify-between items-center border-b border-gray-600 pb-1">
+                            <span className="text-gray-400">White:</span>
+                            <span className="font-bold flex items-center gap-1">
+                                {whitePlayer?.displayName || 'N/A'}
+                                {isRated && <span className="text-gray-500">({initialRatings?.white})</span>}
+                                {isRated && ratingChange && (
+                                    <span className={`text-[10px] font-bold ${ratingChange.white >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        {ratingChange.white >= 0 ? '+' : ''}{ratingChange.white}
+                                    </span>
+                                )}
+                            </span>
+                        </div>
+                        <div className="flex justify-between items-center border-b border-gray-600 pb-1">
+                            <span className="text-gray-400">Black:</span>
+                            <span className="font-bold flex items-center gap-1">
+                                {blackPlayer?.displayName || 'N/A'}
+                                {isRated && <span className="text-gray-500">({initialRatings?.black})</span>}
+                                {isRated && ratingChange && (
+                                    <span className={`text-[10px] font-bold ${ratingChange.black >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        {ratingChange.black >= 0 ? '+' : ''}{ratingChange.black}
+                                    </span>
+                                )}
+                            </span>
+                        </div>
+                        <div className="pt-1 text-center text-[10px] text-gray-500 italic">
+                            {formatTimerSettingText(timerSettings)} • {isRated ? `Rated (${ratingCategory})` : 'Unrated'}
+                        </div>
+                    </div>
+                )}
+
+                <div ref={moveListRef} className="overflow-y-auto mb-3 bg-gray-900 p-3 rounded font-sans text-sm custom-scrollbar min-h-[100px] max-h-[250px]" id="move-list-container">
                     {currentLine.length === 0 && <p className="text-gray-500 italic text-center py-4">No moves yet</p>}
 
                     <div className="flex flex-wrap items-start content-start gap-x-1 gap-y-2">
@@ -693,7 +789,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
                                             ${isSelected ? 'bg-green-600 text-white font-bold shadow-md ring-1 ring-green-400 z-10 scale-105' :
                                                 isFutureMove ? 'text-gray-400 bg-gray-800/40 hover:text-white' :
                                                     'text-gray-300 hover:text-white hover:bg-gray-700/50'}`}
-                                        onClick={() => goToNode(n.id)}
+                                        onClick={() => goToNode(n.id, false)}
                                     >
                                         <span>{n.notation}</span>
 
@@ -725,48 +821,80 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
                             );
                         })}
                     </div>
-
-                    {/* Variations Display */}
-                    {(() => {
-                        const currentNode = nodes[currentNodeId];
-                        if (!currentNode) return null;
-
-                        if (currentNode.children.length > 1 || (currentNode.parentId && nodes[currentNode.parentId]?.children.length > 1)) {
-                            const parent = currentNode.parentId ? nodes[currentNode.parentId] : null;
-                            const variations = parent ? parent.children : [];
-
-                            if (variations.length > 1) {
-                                return (
-                                    <div className="mt-4 border-t border-gray-700 pt-2">
-                                        <p className="text-xs font-bold text-gray-500 uppercase mb-2">Variations at this point:</p>
-                                        <div className="flex flex-wrap gap-2">
-                                            {variations.map(vId => (
-                                                <div key={vId} className="flex flex-col gap-1">
-                                                    <button
-                                                        onClick={() => goToNode(vId)}
-                                                        className={`p-1 px-3 rounded text-xs transition-colors ${vId === currentNodeId ? 'bg-blue-600 text-white font-bold' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}
-                                                    >
-                                                        {nodes[vId].notation}
-                                                    </button>
-                                                    {vId !== variations[0] && (
-                                                        <button
-                                                            onClick={() => promoteVariation(vId)}
-                                                            className="text-[9px] text-gray-500 hover:text-green-500 text-center uppercase font-bold"
-                                                            title="Promote to main line"
-                                                        >
-                                                            ↑ Main
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                );
-                            }
-                        }
-                        return null;
-                    })()}
                 </div>
+
+                {/* Variations & Continuations Panel */}
+                {(() => {
+                    const currentNode = nodes[currentNodeId];
+                    if (!currentNode) return null;
+
+                    const parent = currentNode.parentId ? nodes[currentNode.parentId] : null;
+                    const siblingVariations = parent && parent.children.length > 1 ? parent.children : [];
+                    const childVariations = currentNode.children.length > 1 ? currentNode.children : [];
+
+                    if (siblingVariations.length === 0 && childVariations.length === 0) return null;
+
+                    return (
+                        <div className="mb-3 rounded-lg overflow-hidden border border-gray-600 bg-gray-900/80 shadow-lg flex-1 overflow-y-auto custom-scrollbar min-h-[150px]">
+                            {siblingVariations.length > 1 && (
+                                <div className="p-3 border-b border-gray-700 bg-blue-900/20">
+                                    <p className="text-xs font-bold text-blue-400 uppercase mb-2 tracking-wider">⑂ Variations</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {siblingVariations.map(vId => (
+                                            <div key={vId} className="flex flex-col gap-1">
+                                                <button
+                                                    onClick={() => goToNode(vId, true)}
+                                                    className={`py-2 px-4 rounded-md text-sm font-semibold transition-all ${vId === currentNodeId
+                                                        ? 'bg-blue-600 text-white shadow-md ring-1 ring-blue-400'
+                                                        : 'bg-gray-700 text-gray-300 hover:bg-blue-700 hover:text-white'}`}
+                                                >
+                                                    {nodes[vId].notation}
+                                                </button>
+                                                {vId !== siblingVariations[0] && (
+                                                    <button
+                                                        onClick={() => promoteVariation(vId)}
+                                                        className="text-[10px] text-gray-500 hover:text-green-400 text-center uppercase font-bold py-0.5"
+                                                        title="Promote to main line"
+                                                    >
+                                                        ↑ Main
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {childVariations.length > 1 && (
+                                <div className="p-3 bg-purple-900/20">
+                                    <p className="text-xs font-bold text-purple-400 uppercase mb-2 tracking-wider">▸ Continuations</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {childVariations.map(cId => (
+                                            <div key={cId} className="flex flex-col gap-1">
+                                                <button
+                                                    onClick={() => goToNode(cId, true)}
+                                                    className={`py-2 px-4 rounded-md text-sm font-semibold transition-all ${nodes[cId].lastVisited
+                                                        ? 'bg-purple-600 text-white shadow-md ring-1 ring-purple-400'
+                                                        : 'bg-gray-700 text-gray-300 hover:bg-purple-700 hover:text-white'}`}
+                                                >
+                                                    {nodes[cId].notation}
+                                                </button>
+                                                {cId !== childVariations[0] && (
+                                                    <button
+                                                        onClick={() => promoteVariation(cId)}
+                                                        className="text-[10px] text-gray-500 hover:text-purple-400 text-center uppercase font-bold py-0.5"
+                                                        title="Promote to main line"
+                                                    >
+                                                        ↑ Main
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
 
                 <div className="flex flex-col gap-3">
                     <div className="flex items-center justify-between gap-2">
