@@ -715,10 +715,11 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
                 <h2 className="text-2xl font-bold text-center text-green-400 mb-2">Analysis Board</h2>
 
                 <div className="flex justify-between items-center mb-3 bg-gray-700 p-2 rounded">
-                    <button onClick={() => goToNode('root', false)} className="p-2 hover:bg-gray-600 rounded text-xs px-2">Start</button>
-                    <button onClick={handleUndo} className="p-2 hover:bg-gray-600 rounded text-xs px-2">Prev</button>
+                    <button onClick={() => goToNode('root', false)} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50">&lt;&lt;</button>
+                    <button onClick={handleUndo} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50">&lt;</button>
                     <span className="font-bold text-xs">Depth: {currentLine.length}</span>
-                    <button onClick={handleRedo} className="p-2 hover:bg-gray-600 rounded text-xs px-2">Next</button>
+                    <button onClick={handleRedo} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50">&gt;</button>
+                    <button onClick={() => goToNode(currentLine[currentLine.length - 1].id, false)} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50">&gt;&gt;</button>
                 </div>
 
                 {initialState && (
