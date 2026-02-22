@@ -266,13 +266,22 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
 
     useEffect(() => {
         updateValidMoves();
-        // Auto-scroll to current move
+        // Auto-scroll to current move within the move list only
         if (currentMoveRef.current && moveListRef.current) {
-            currentMoveRef.current.scrollIntoView({
-                behavior: 'smooth',
-                block: 'nearest',
-                inline: 'nearest'
-            });
+            const moveElement = currentMoveRef.current;
+            const container = moveListRef.current;
+
+            const elementTop = moveElement.offsetTop;
+            const elementHeight = moveElement.offsetHeight;
+            const containerScrollTop = container.scrollTop;
+            const containerHeight = container.clientHeight;
+
+            // Scroll if element is above or below visible area
+            if (elementTop < containerScrollTop) {
+                container.scrollTop = elementTop;
+            } else if (elementTop + elementHeight > containerScrollTop + containerHeight) {
+                container.scrollTop = elementTop + elementHeight - containerHeight;
+            }
         }
     }, [updateValidMoves, currentNodeId]);
 
@@ -553,23 +562,45 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
             newBoard[from.row][to.col] = null;
         }
 
+        let acquiredPower: PieceType | null = null;
         if (actualCapturedPiece) {
             resetHalfmoveClock = true;
             newCapturedPieces[actualCapturedPiece.color].push(actualCapturedPiece);
             if (actualCapturedPiece.isKing) {
                 // Game Over logic in analysis? Usually just move and set status
             } else {
-                pieceToMove.power = actualCapturedPiece.originalType;
+                acquiredPower = actualCapturedPiece.originalType;
             }
         }
 
-        if (isForcePowerMode || wasPowerMove) {
-            pieceToMove.power = null;
+        // Only clear power if NOT a capture
+        let powerAfterMove = pieceToMove.power;
+        if (actualCapturedPiece && acquiredPower) {
+            powerAfterMove = acquiredPower;
+        } else if (isForcePowerMode || wasPowerMove) {
+            powerAfterMove = null;
         }
+        pieceToMove.power = powerAfterMove;
 
         const promotionRank = turn === Color.White ? 0 : 7;
         if (to.row === promotionRank && (pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn)) {
-            setPromotionData({ from, position: to, promotingPiece: pieceToMove, powerAfterPromotion: null });
+            // Determine power after promotion, mirroring App.tsx logic
+            let promotionPowerAfterMove: PieceType | null = null;
+            const isCapturingPawnOnPromotionRank = actualCapturedPiece && actualCapturedPiece?.originalType === PieceType.Pawn;
+
+            if (isCapturingPawnOnPromotionRank) {
+                promotionPowerAfterMove = null;
+            } else if (actualCapturedPiece) {
+                promotionPowerAfterMove = actualCapturedPiece.originalType === PieceType.Pawn ? null : actualCapturedPiece.originalType;
+            } else {
+                if (pieceToMove.originalType === PieceType.Pawn && !wasPowerMove) {
+                    promotionPowerAfterMove = pieceToMove.power === PieceType.Pawn ? null : pieceToMove.power;
+                } else {
+                    promotionPowerAfterMove = null;
+                }
+            }
+
+            setPromotionData({ from, position: to, promotingPiece: pieceToMove, powerAfterPromotion: promotionPowerAfterMove });
             setStatus('promotion');
             return;
         }
@@ -627,9 +658,9 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
 
     const handlePromotion = (type: PieceType) => {
         if (!promotionData) return;
-        const { from, position, promotingPiece } = promotionData;
+        const { from, position, promotingPiece, powerAfterPromotion } = promotionData;
         const newBoard = board.map(r => [...r]);
-        newBoard[position.row][position.col] = { ...promotingPiece, type, hasMoved: true, power: null };
+        newBoard[position.row][position.col] = { ...promotingPiece, type, hasMoved: true, power: powerAfterPromotion };
         newBoard[from.row][from.col] = null;
         finalizeTurn(newBoard, null, true, capturedPieces, { from, to: position }, type);
     };
