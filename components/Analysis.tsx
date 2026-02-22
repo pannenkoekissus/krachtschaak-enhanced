@@ -13,6 +13,9 @@ interface AnalysisProps {
     initialState?: GameState;
     onBack: () => void;
     analysisId?: string;
+    analysisOwnerUserId?: string;
+    analysisFolderId?: string;
+    analysisSharedFolders?: Record<string, any>;
     currentUser?: { uid: string };
     onBackToAnalysisManager?: () => void;
 }
@@ -27,7 +30,7 @@ interface AnalysisTreeNode {
     comment?: string;
 }
 
-const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, currentUser, onBackToAnalysisManager }) => {
+const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, analysisOwnerUserId, analysisFolderId, analysisSharedFolders, currentUser, onBackToAnalysisManager }) => {
 
 const formatTimerSettingText = (settings: GameState['timerSettings']) => {
     if (!settings) return 'Unlimited';
@@ -216,7 +219,8 @@ for (let i = 0; i < initialState.moveHistory.length; i++) {
             const loadSavedAnalysis = async () => {
                 try {
                     setIsLoadingAnalysis(true);
-                    const saved = await loadAnalysis(currentUser.uid, analysisId);
+                    const ownerUserId = analysisOwnerUserId || currentUser.uid;
+                    const saved = await loadAnalysis(ownerUserId, analysisId);
                     if (saved) {
                         // Rebuild the tree from saved nodes, ensuring proper structure
                         const newNodes: Record<string, AnalysisTreeNode> = {};
@@ -252,7 +256,7 @@ for (let i = 0; i < initialState.moveHistory.length; i++) {
             };
             loadSavedAnalysis();
         }
-    }, [analysisId, currentUser?.uid, loadedOnceFromFirebase]);
+    }, [analysisId, analysisOwnerUserId, analysisFolderId, currentUser?.uid, loadedOnceFromFirebase]);
 
     // Stop worker on unmount
     useEffect(() => {
@@ -468,12 +472,19 @@ for (let i = 0; i < initialState.moveHistory.length; i++) {
         try {
             setIsSaving(true);
             const analysisToSave = analysisId || generateId();
+            const saveToUserId = analysisOwnerUserId || currentUser.uid;
+
+            // Clean folder ID: remove "shared_" prefix if present
+            const cleanFolderId = selectedFolderId?.startsWith('shared_')
+                ? selectedFolderId.replace('shared_', '')
+                : selectedFolderId;
+            const finalFolderId = analysisFolderId || cleanFolderId;
 
             // Get the root node
             const rootId = 'root';
             const analysisData: SavedAnalysis = {
                 name: saveName,
-                folderId: selectedFolderId,
+                folderId: finalFolderId,
                 nodes: nodes,
                 rootNodeId: rootId,
                 createdAt: Date.now(),
@@ -482,7 +493,7 @@ for (let i = 0; i < initialState.moveHistory.length; i++) {
                 // per-node comments are stored inside `nodes`
             } as any;
 
-            await saveAnalysis(currentUser.uid, analysisToSave, analysisData);
+            await saveAnalysis(saveToUserId, analysisToSave, analysisData);
             setSaveModalOpen(false);
             // Show success message (you could use a toast notification here)
             alert('Analysis saved successfully!');
@@ -1231,6 +1242,17 @@ for (let i = 0; i < initialState.moveHistory.length; i++) {
                                         {(folder as AnalysisFolder).name}
                                     </option>
                                 ))}
+                                {/* Add shared folders with edit permission */}
+                                {analysisSharedFolders && Object.entries(analysisSharedFolders).map(([folderId, folder]: [string, any]) => {
+                                    if (folder.permission === 'edit') {
+                                        return (
+                                            <option key={`shared_${folderId}`} value={`shared_${folderId}`}>
+                                                🔗 {folder.name} (shared)
+                                            </option>
+                                        );
+                                    }
+                                    return null;
+                                })}
                             </select>
                         </div>
                         <div className="flex gap-2">

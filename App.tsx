@@ -15,6 +15,7 @@ import ConfirmationModal from './components/ConfirmationModal';
 import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, GameMode, TimerSettings, PlayerInfo, SentChallenge, Move, ChatMessage, LobbyGame } from './types';
 import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, sanitizePiece } from './utils/game';
 import { getRatingCategory, RatingCategory, RATING_CATEGORIES } from './utils/ratings';
+import { getSharedFolders } from './utils/analysisFirebase';
 import { isFirebaseConfigured, auth, db } from './firebaseConfig';
 import SettingsModal from './components/SettingsModal';
 
@@ -99,6 +100,9 @@ const App: React.FC = () => {
     const [reviewReturnTo, setReviewReturnTo] = useState<{ mode: GameMode, lobbyView: any } | null>(null);
     const [analysisReturnTo, setAnalysisReturnTo] = useState<{ mode: GameMode, lobbyView: any, reviewingGame: GameState | null } | null>(null);
     const [analysisId, setAnalysisId] = useState<string | null>(null);
+    const [analysisOwnerUserId, setAnalysisOwnerUserId] = useState<string | null>(null);
+    const [analysisFolderId, setAnalysisFolderId] = useState<string | null>(null);
+    const [analysisSharedFolders, setAnalysisSharedFolders] = useState<Record<string, any>>({});
     const [showPowerLegend, setShowPowerLegend] = useState(false);
     const [showConfirmation, setShowConfirmation] = useState<'draw' | 'resign' | 'move' | 'premove' | null>(null);
     const [pendingMove, setPendingMove] = useState<{ from: Position, to: Position } | null>(null);
@@ -2271,6 +2275,17 @@ const App: React.FC = () => {
         setGameMode('analysis');
     };
 
+    // Load shared folders when entering analysis mode
+    useEffect(() => {
+        if (gameMode === 'analysis' && currentUser?.uid) {
+            getSharedFolders(currentUser.uid).then(folders => {
+                setAnalysisSharedFolders(folders);
+            }).catch(err => {
+                console.error('Failed to load shared folders:', err);
+            });
+        }
+    }, [gameMode, currentUser?.uid]);
+
     const renderGame = () => {
         if (status === 'waiting' && gameMode === 'online_playing') {
             return (
@@ -2701,6 +2716,9 @@ const App: React.FC = () => {
                     }
                 }}
                 analysisId={analysisId || undefined}
+                analysisOwnerUserId={analysisOwnerUserId || undefined}
+                analysisFolderId={analysisFolderId || undefined}
+                analysisSharedFolders={analysisSharedFolders}
                 currentUser={currentUser}
                 onBackToAnalysisManager={() => {
                     setGameMode('analysis_manager');
@@ -2709,8 +2727,10 @@ const App: React.FC = () => {
         }
 
         if (gameMode === 'analysis_manager') {
-            return <AnalysisManager userId={currentUser?.uid || ''} onSelectAnalysis={(id) => {
+            return <AnalysisManager userId={currentUser?.uid || ''} onSelectAnalysis={(id, ownerUserId, folderId) => {
                 setAnalysisId(id);
+                setAnalysisOwnerUserId(ownerUserId || currentUser?.uid || null);
+                setAnalysisFolderId(folderId || null);
                 setGameMode('analysis');
             }} onBack={() => {
                 if (analysisReturnTo) {

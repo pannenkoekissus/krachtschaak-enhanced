@@ -11,17 +11,23 @@ import {
   moveAnalysisToFolder,
   generateId,
   AnalysisFolder,
-  SavedAnalysis
+  SavedAnalysis,
+  shareFolder,
+  unshareFolder,
+  getSharedFolders,
+  getFolderShares,
+  updateFolderShare,
+  FolderShare
 } from '../utils/analysisFirebase';
 
 interface AnalysisManagerProps {
   userId: string;
-  onSelectAnalysis: (analysisId: string) => void;
+  onSelectAnalysis: (analysisId: string, ownerUserId?: string, folderId?: string) => void;
   onBack: () => void;
 }
 
 interface ModalState {
-  type: 'create_folder' | 'create_analysis' | 'rename_folder' | 'rename_analysis' | null;
+  type: 'create_folder' | 'create_analysis' | 'rename_folder' | 'rename_analysis' | 'share_folder' | null;
   targetId?: string; // For rename operations
   targetName?: string;
 }
@@ -38,11 +44,32 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sharedFolders, setSharedFolders] = useState<Record<string, AnalysisFolder & { folderId: string; ownerUserId: string }>>({});
+  const [folderShares, setFolderShares] = useState<FolderShare[]>([]);
+  const [sharePermission, setSharePermission] = useState<'read' | 'edit'>('read');
+  const [shareUsername, setShareUsername] = useState('');
+  const [sharingFolderId, setSharingFolderId] = useState<string | null>(null);
+  const [sharedFolderAnalyses, setSharedFolderAnalyses] = useState<Record<string, SavedAnalysis>>({});
+
+  // Check if selected folder is shared
+  const isSelectedFolderShared = selectedFolderId?.startsWith('shared_');
+  const cleanFolderId = isSelectedFolderShared ? selectedFolderId.replace('shared_', '') : selectedFolderId;
+  const selectedSharedFolder = isSelectedFolderShared
+    ? sharedFolders[cleanFolderId]
+    : null;
+  const userCanEditSharedFolder = selectedSharedFolder?.permission === 'edit';
 
   // Load data on mount
   useEffect(() => {
     loadData();
   }, [userId]);
+
+  // Load shared folder analyses when a shared folder is selected
+  useEffect(() => {
+    if (isSelectedFolderShared && selectedSharedFolder) {
+      loadSharedFolderAnalyses();
+    }
+  }, [isSelectedFolderShared, cleanFolderId]);
 
   const loadData = async () => {
     try {
@@ -50,8 +77,10 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
       setError(null);
       const foldersData = await getAllFolders(userId);
       const analysesData = await getAllAnalyses(userId);
+      const sharedFoldersData = await getSharedFolders(userId);
       setFolders(foldersData);
       setAnalyses(analysesData);
+      setSharedFolders(sharedFoldersData);
       // Default to showing root folder
       setSelectedFolderId(null);
     } catch (err) {
@@ -59,6 +88,18 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
       setError('Failed to load analyses');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSharedFolderAnalyses = async () => {
+    if (!selectedSharedFolder) return;
+    try {
+      // Import the function we added
+      const { getAnalysesBySharedFolder } = await import('../utils/analysisFirebase');
+      const ownerAnalyses = await getAnalysesBySharedFolder(userId, cleanFolderId, selectedSharedFolder.ownerUserId, selectedSharedFolder.permission);
+      setSharedFolderAnalyses(ownerAnalyses);
+    } catch (err) {
+      console.error('Error loading shared folder analyses:', err);
     }
   };
 
@@ -166,10 +207,64 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
     }
   };
 
+  const handleShareFolder = async () => {
+    if (!shareUsername.trim() || !sharingFolderId) return;
+    try {
+      await shareFolder(userId, sharingFolderId, shareUsername, sharePermission);
+      // Reload shares for this folder
+      const shares = await getFolderShares(userId, sharingFolderId);
+      setFolderShares(shares);
+      setShareUsername('');
+      setSharePermission('read');
+    } catch (err) {
+      console.error('Error sharing folder:', err);
+      setError(err instanceof Error ? err.message : 'Failed to share folder');
+    }
+  };
+
+  const handleUnshareFolder = async (recipientUserId: string) => {
+    if (!sharingFolderId) return;
+    try {
+      await unshareFolder(userId, sharingFolderId, recipientUserId);
+      const shares = await getFolderShares(userId, sharingFolderId);
+      setFolderShares(shares);
+    } catch (err) {
+      console.error('Error unsharing folder:', err);
+      setError('Failed to unshare folder');
+    }
+  };
+
+  const handleUpdateSharePermission = async (recipientUserId: string, newPermission: 'read' | 'edit') => {
+    if (!sharingFolderId) return;
+    try {
+      await updateFolderShare(userId, sharingFolderId, recipientUserId, newPermission);
+      const shares = await getFolderShares(userId, sharingFolderId);
+      setFolderShares(shares);
+    } catch (err) {
+      console.error('Error updating share permission:', err);
+      setError('Failed to update permission');
+    }
+  };
+
+  const openShareModal = async (folderId: string) => {
+    setSharingFolderId(folderId);
+    try {
+      const shares = await getFolderShares(userId, folderId);
+      setFolderShares(shares);
+    } catch (err) {
+      console.error('Error loading shares:', err);
+    }
+    setModal({ type: 'share_folder', targetId: folderId });
+  };
+
   // Get analyses for current folder (treat missing folderId as null)
-  const currentAnalyses = Object.entries(analyses)
-    .filter(([, analysis]: [string, SavedAnalysis]) => (analysis.folderId ?? null) === selectedFolderId)
-    .sort(([, a]: [string, SavedAnalysis], [, b]: [string, SavedAnalysis]) => b.updatedAt - a.updatedAt);
+  // For shared folders, we use sharedFolderAnalyses instead of analyses
+  const currentAnalyses = isSelectedFolderShared
+    ? Object.entries(sharedFolderAnalyses)
+        .sort(([, a]: [string, SavedAnalysis], [, b]: [string, SavedAnalysis]) => b.updatedAt - a.updatedAt)
+    : Object.entries(analyses)
+        .filter(([, analysis]: [string, SavedAnalysis]) => (analysis.folderId ?? null) === selectedFolderId)
+        .sort(([, a]: [string, SavedAnalysis], [, b]: [string, SavedAnalysis]) => b.updatedAt - a.updatedAt);
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString();
@@ -266,6 +361,16 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            openShareModal(folderId);
+                          }}
+                          className="p-1 text-xs bg-blue-700 hover:bg-blue-600 rounded"
+                          title="Share"
+                        >
+                          🔗
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setModal({ type: 'rename_folder', targetId: folderId });
                             setInputValue(folder.name);
                           }}
@@ -290,6 +395,37 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                 </div>
               ))}
           </div>
+
+          {/* Shared with me folders */}
+          {Object.keys(sharedFolders).length > 0 && (
+            <div className="mt-6 pt-4 border-t border-gray-600">
+              <div className="text-xs font-semibold text-gray-400 mb-2">SHARED WITH ME</div>
+              <div className="space-y-2">
+                {Object.entries(sharedFolders)
+                  .sort(([, a]: any, [, b]: any) => b.updatedAt - a.updatedAt)
+                  .map(([sharedFolderId, sharedFolder]: any) => (
+                    <div
+                      key={sharedFolderId}
+                      className={`p-3 rounded text-sm transition-colors ${
+                        selectedFolderId === `shared_${sharedFolderId}`
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-700 hover:bg-gray-600'
+                      }`}
+                    >
+                      <div onClick={() => setSelectedFolderId(`shared_${sharedFolderId}`)} className="cursor-pointer">
+                        <div className="font-semibold">🔗 {sharedFolder.name}</div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          by {sharedFolder.ownerUserId}
+                          <span className={`ml-2 ${sharedFolder.permission === 'edit' ? 'text-green-400' : 'text-yellow-400'}`}>
+                            • {sharedFolder.permission === 'edit' ? 'Edit' : 'Read'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right panel: Analyses */}
@@ -298,8 +434,18 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
             <h2 className="text-xl font-bold text-green-400 mb-3">
               {selectedFolderId === null
                 ? 'Unsorted Analyses'
+                : isSelectedFolderShared
+                ? `${selectedSharedFolder?.name || 'Analyses'} (shared)`
                 : folders[selectedFolderId]?.name || 'Analyses'}
             </h2>
+            {selectedSharedFolder && (
+              <div className="text-xs text-gray-400 mb-2">
+                Owned by: <span className="text-gray-300">{selectedSharedFolder.ownerUserId}</span> •
+                Permission: <span className={selectedSharedFolder.permission === 'edit' ? 'text-green-400' : 'text-yellow-400'}>
+                  {selectedSharedFolder.permission === 'edit' ? 'Can Edit' : 'Read Only'}
+                </span>
+              </div>
+            )}
           </div>
 
           {currentAnalyses.length === 0 ? (
@@ -315,7 +461,13 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                 >
                   <div className="flex items-center justify-between">
                     <div
-                      onClick={() => onSelectAnalysis(analysisId)}
+                      onClick={() => {
+                        if (isSelectedFolderShared && selectedSharedFolder) {
+                          onSelectAnalysis(analysisId, selectedSharedFolder.ownerUserId, cleanFolderId);
+                        } else {
+                          onSelectAnalysis(analysisId, undefined, selectedFolderId || undefined);
+                        }
+                      }}
                       className="flex-1 cursor-pointer"
                     >
                       <h3 className="font-semibold text-white hover:text-green-400 transition-colors">
@@ -335,7 +487,12 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                         handleMoveAnalysis(analysisId, newFolderId);
                       }}
                       value={analysis.folderId || 'null'}
-                      className="mx-2 px-2 py-1 text-xs bg-gray-600 text-white rounded border border-gray-500"
+                      disabled={isSelectedFolderShared && !userCanEditSharedFolder}
+                      className={`mx-2 px-2 py-1 text-xs rounded border border-gray-500 ${
+                        isSelectedFolderShared && !userCanEditSharedFolder
+                          ? 'bg-gray-500 text-gray-400 cursor-not-allowed'
+                          : 'bg-gray-600 text-white'
+                      }`}
                     >
                       <option value="null">Unsorted</option>
                       {Object.entries(folders).map(([folderId, folder]: [string, AnalysisFolder]) => (
@@ -347,27 +504,34 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
 
                     {/* Action buttons */}
                     <div className="flex gap-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setModal({ type: 'rename_analysis', targetId: analysisId });
-                          setInputValue(analysis.name);
-                        }}
-                        className="px-2 py-1 text-xs bg-blue-700 hover:bg-blue-600 rounded font-semibold"
-                        title="Rename"
-                      >
-                        Rename
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteAnalysis(analysisId);
-                        }}
-                        className="px-2 py-1 text-xs bg-red-700 hover:bg-red-600 rounded font-semibold"
-                        title="Delete"
-                      >
-                        Delete
-                      </button>
+                      {(!isSelectedFolderShared || userCanEditSharedFolder) && (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setModal({ type: 'rename_analysis', targetId: analysisId });
+                              setInputValue(analysis.name);
+                            }}
+                            className="px-2 py-1 text-xs bg-blue-700 hover:bg-blue-600 rounded font-semibold"
+                            title="Rename"
+                          >
+                            Rename
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteAnalysis(analysisId);
+                            }}
+                            className="px-2 py-1 text-xs bg-red-700 hover:bg-red-600 rounded font-semibold"
+                            title="Delete"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
+                      {isSelectedFolderShared && !userCanEditSharedFolder && (
+                        <div className="text-xs text-yellow-400 font-semibold">Read-only</div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -378,7 +542,7 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
       </div>
 
       {/* Modal */}
-      {modal.type && (
+      {modal.type && modal.type !== 'share_folder' && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
             <h3 className="text-lg font-bold mb-4 capitalize">
@@ -420,6 +584,91 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                 className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-500 rounded font-semibold transition-colors"
               >
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Folder Modal */}
+      {modal.type === 'share_folder' && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold mb-4">Share Folder</h3>
+
+            {/* Current Shares */}
+            {folderShares.length > 0 && (
+              <div className="mb-4 p-3 bg-gray-700 rounded">
+                <div className="text-sm font-semibold text-gray-300 mb-2">Shared with:</div>
+                <div className="space-y-2">
+                  {folderShares.map((share) => (
+                    <div key={share.recipientUserId} className="flex items-center justify-between p-2 bg-gray-600 rounded">
+                      <div>
+                        <div className="text-sm font-semibold">{share.recipientUsername}</div>
+                        <div className="text-xs text-gray-400">{share.permission === 'edit' ? 'Can Edit' : 'Read Only'}</div>
+                      </div>
+                      <div className="flex gap-1">
+                        <select
+                          value={share.permission}
+                          onChange={(e) => handleUpdateSharePermission(share.recipientUserId, e.target.value as 'read' | 'edit')}
+                          className="text-xs bg-gray-700 text-white rounded px-2 py-1 border border-gray-500"
+                        >
+                          <option value="read">Read</option>
+                          <option value="edit">Edit</option>
+                        </select>
+                        <button
+                          onClick={() => handleUnshareFolder(share.recipientUserId)}
+                          className="px-2 py-1 text-xs bg-red-700 hover:bg-red-600 rounded"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Add new share */}
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-300 mb-2">Add User</label>
+              <input
+                type="text"
+                value={shareUsername}
+                onChange={(e) => setShareUsername(e.target.value)}
+                placeholder="Username"
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 mb-2"
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') handleShareFolder();
+                }}
+              />
+              <select
+                value={sharePermission}
+                onChange={(e) => setSharePermission(e.target.value as 'read' | 'edit')}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white mb-3"
+              >
+                <option value="read">Read Only</option>
+                <option value="edit">Can Edit</option>
+              </select>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setModal({ type: null });
+                  setShareUsername('');
+                  setSharePermission('read');
+                  setSharingFolderId(null);
+                }}
+                className="flex-1 px-3 py-2 bg-gray-600 hover:bg-gray-500 rounded font-semibold transition-colors"
+              >
+                Close
+              </button>
+              <button
+                onClick={handleShareFolder}
+                className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded font-semibold transition-colors"
+              >
+                Share
               </button>
             </div>
           </div>
