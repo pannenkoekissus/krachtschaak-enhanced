@@ -1,8 +1,10 @@
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, Move } from '../types';
 import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard } from '../utils/game';
 import { playMoveSound, playCaptureSound, playWinSound, playDrawSound, playLossSound } from '../utils/sounds';
+import { saveAnalysis, loadAnalysis, generateId, AnalysisFolder, SavedAnalysis } from '../utils/analysisFirebase';
+import { getAllFolders } from '../utils/analysisFirebase';
 import Board from './Board';
 import GameOverlay from './GameOverlay';
 import PieceComponent from './Piece';
@@ -10,6 +12,9 @@ import PieceComponent from './Piece';
 interface AnalysisProps {
     initialState?: GameState;
     onBack: () => void;
+    analysisId?: string;
+    currentUser?: { uid: string };
+    onBackToAnalysisManager?: () => void;
 }
 
 interface AnalysisTreeNode {
@@ -19,7 +24,10 @@ interface AnalysisTreeNode {
     children: string[];
     parentId: string | null;
     lastVisited?: boolean;
+    comment?: string;
 }
+
+const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, currentUser, onBackToAnalysisManager }) => {
 
 const formatTimerSettingText = (settings: GameState['timerSettings']) => {
     if (!settings) return 'Unlimited';
@@ -27,18 +35,11 @@ const formatTimerSettingText = (settings: GameState['timerSettings']) => {
     return `${settings.initialTime / 60} min | ${settings.increment} sec`;
 };
 
-const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
-    // Current state of analysis
-    const [board, setBoard] = useState<BoardState>(() => sanitizeBoard(initialState?.board || createInitialBoard()));
-    const [turn, setTurn] = useState<Color>(initialState?.turn || Color.White);
-    const [capturedPieces, setCapturedPieces] = useState<Record<Color, Piece[]>>(initialState?.capturedPieces || { white: [], black: [] });
-    const [enPassantTarget, setEnPassantTarget] = useState<Position | null>(initialState?.enPassantTarget || null);
-    const [halfmoveClock, setHalfmoveClock] = useState(initialState?.halfmoveClock || 0);
-    const [positionHistory, setPositionHistory] = useState<Record<string, number>>(initialState?.positionHistory || {});
-    const [status, setStatus] = useState<GameStatus>('playing');
-    const [winner, setWinner] = useState<string | null>(initialState?.winner || null);
-    const [lastMove, setLastMove] = useState<{ from: Position, to: Position } | null>(initialState?.lastMove || null);
-    const [moveHistory, setMoveHistory] = useState<Move[]>(initialState?.moveHistory || []);
+    const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+    const [folders, setFolders] = useState<Record<string, AnalysisFolder>>({});
+    const [isSaving, setIsSaving] = useState(false);
+    const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
+    const [loadedOnceFromFirebase, setLoadedOnceFromFirebase] = useState(false);
 
     // Selection and interaction
     const [selectedPiece, setSelectedPiece] = useState<Position | null>(null);
@@ -49,36 +50,75 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
     const [draggedPiece, setDraggedPiece] = useState<Position | null>(null);
     const [boardOrientation, setBoardOrientation] = useState<Color>(Color.White);
 
-    // Navigation Tree
-    // If we have move history, the root should be the STARTING position (before any moves),
-    // not the final board position passed in initialState.
-    const hasMoveHistory = initialState?.moveHistory && initialState.moveHistory.length > 0;
-    const initialRootState: GameState = {
-        board: hasMoveHistory ? createInitialBoard() : sanitizeBoard(initialState?.board || createInitialBoard()),
-        turn: hasMoveHistory ? Color.White : (initialState?.turn || Color.White),
-        status: 'playing',
-        winner: null,
-        promotionData: null,
-        capturedPieces: hasMoveHistory ? { white: [], black: [] } : (initialState?.capturedPieces || { white: [], black: [] }),
-        enPassantTarget: null,
-        halfmoveClock: 0,
-        positionHistory: hasMoveHistory ? {} : (initialState?.positionHistory || {}),
-        ambiguousEnPassantData: null,
-        drawOffer: null,
-        playerTimes: initialState?.playerTimes || null,
-        turnStartTime: null,
-        moveDeadline: null,
-        timerSettings: initialState?.timerSettings || null,
-        ratingCategory: initialState?.ratingCategory || 'unlimited' as any,
-        players: initialState?.players || {},
-        playerColors: initialState?.playerColors || { white: null, black: null },
-        initialRatings: initialState?.initialRatings || null,
-        isRated: initialState?.isRated || false,
-        rematchOffer: null,
-        nextGameId: null,
-        ratingChange: initialState?.ratingChange || null,
-        moveHistory: []
+// Normalize loaded game state and ensure explicit empty squares
+const normalizeGameState = (raw: any): GameState => {
+    let lastMove = raw?.lastMove ?? null;
+    if (!lastMove && moveHistory.length > 0) {
+        const lastHistoryItem = moveHistory[moveHistory.length - 1];
+        if (lastHistoryItem && lastHistoryItem.from && lastHistoryItem.to) {
+            lastMove = { from: lastHistoryItem.from, to: lastHistoryItem.to };
+        }
+    }
+    const board = sanitizeBoard(raw?.board || createInitialBoard());
+    return {
+        board,
+        turn: raw?.turn ?? Color.White,
+        status: raw?.status ?? 'playing',
+        winner: raw?.winner ?? null,
+        promotionData: raw?.promotionData ?? null,
+        capturedPieces: raw?.capturedPieces ?? { white: [], black: [] },
+        enPassantTarget: raw?.enPassantTarget ?? null,
+        halfmoveClock: raw?.halfmoveClock ?? 0,
+        positionHistory: raw?.positionHistory ?? {},
+        ambiguousEnPassantData: raw?.ambiguousEnPassantData ?? null,
+        drawOffer: raw?.drawOffer ?? null,
+        playerTimes: raw?.playerTimes ?? null,
+        turnStartTime: raw?.turnStartTime ?? null,
+        moveDeadline: raw?.moveDeadline ?? null,
+        timerSettings: raw?.timerSettings ?? null,
+        ratingCategory: raw?.ratingCategory ?? 'unlimited' as any,
+        players: raw?.players ?? {},
+        playerColors: raw?.playerColors ?? { white: null, black: null },
+        initialRatings: raw?.initialRatings ?? null,
+        isRated: raw?.isRated ?? false,
+        rematchOffer: raw?.rematchOffer ?? null,
+        nextGameId: raw?.nextGameId ?? null,
+        ratingChange: raw?.ratingChange ?? null,
+        moveHistory: raw?.moveHistory ?? [],
+        lastMove: lastMove ?? null // <--- DEZE REGEL TOEVOEGEN
     };
+};
+
+// Navigation Tree
+// If we have move history, the root should be the STARTING position (before any moves),
+// not the final board position passed in initialState.
+const hasMoveHistory = initialState?.moveHistory && initialState.moveHistory.length > 0;
+const initialRootState: GameState = {
+    board: hasMoveHistory ? createInitialBoard() : sanitizeBoard(initialState?.board || createInitialBoard()),
+    turn: hasMoveHistory ? Color.White : (initialState?.turn || Color.White),
+    status: 'playing',
+    winner: null,
+    promotionData: null,
+    capturedPieces: hasMoveHistory ? { white: [], black: [] } : (initialState?.capturedPieces || { white: [], black: [] }),
+    enPassantTarget: null,
+    halfmoveClock: 0,
+    positionHistory: hasMoveHistory ? {} : (initialState?.positionHistory || {}),
+    ambiguousEnPassantData: null,
+    drawOffer: null,
+    playerTimes: initialState?.playerTimes || null,
+    turnStartTime: null,
+    moveDeadline: null,
+    timerSettings: initialState?.timerSettings || null,
+    ratingCategory: initialState?.ratingCategory || 'unlimited' as any,
+    players: initialState?.players || {},
+    playerColors: initialState?.playerColors || { white: null, black: null },
+    initialRatings: initialState?.initialRatings || null,
+    isRated: initialState?.isRated || false,
+    rematchOffer: null,
+    nextGameId: null,
+    ratingChange: initialState?.ratingChange || null,
+    moveHistory: []
+};
 
     // Build initial tree if move history exists
     const buildInitialTree = () => {
@@ -89,6 +129,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
             notation: null,
             children: [],
             parentId: null
+        ,    comment: ''
         };
         const initialNodes: Record<string, AnalysisTreeNode> = { [rootId]: rootNode };
         let leafId = rootId;
@@ -99,31 +140,34 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
             let currentTurn = initialRootState.turn;
             let currentCaptured = { ...initialRootState.capturedPieces };
 
-            for (const move of initialState.moveHistory) {
-                const newNodeId = Math.random().toString(36).substr(2, 9);
+            // Gebruik een index (i) voor 100% nauwkeurigheid
+for (let i = 0; i < initialState.moveHistory.length; i++) {
+    const move = initialState.moveHistory[i];
+    const newNodeId = Math.random().toString(36).substr(2, 9);
 
-                // Safety check for board integrity
-                if (!currentBoard || !Array.isArray(currentBoard)) {
-                    currentBoard = createInitialBoard();
-                }
+    // Safety check for board integrity
+    if (!currentBoard || !Array.isArray(currentBoard)) {
+        currentBoard = createInitialBoard();
+    }
 
-                const nextBoard = applyMoveToBoard(currentBoard, move);
-                const nextTurn = currentTurn === Color.White ? Color.Black : Color.White;
-
-                const nextState: GameState = {
-                    ...initialRootState,
-                    board: nextBoard,
-                    turn: nextTurn,
-                    lastMove: move,
-                    moveHistory: initialState.moveHistory.slice(0, initialState.moveHistory.indexOf(move) + 1),
-                    enPassantTarget: move.piece === PieceType.Pawn && Math.abs(move.from.row - move.to.row) === 2
-                        ? { row: (move.from.row + move.to.row) / 2, col: move.from.col }
-                        : null,
-                    capturedPieces: move.captured ? {
-                        ...currentCaptured,
-                        [move.color === Color.White ? Color.Black : Color.White]: [...currentCaptured[move.color === Color.White ? Color.Black : Color.White], { type: move.captured, color: move.color === Color.White ? Color.Black : Color.White, originalType: move.captured, isKing: move.captured === PieceType.King, hasMoved: true }]
-                    } : currentCaptured
-                };
+    const nextBoard = applyMoveToBoard(currentBoard, move);
+    const nextTurn = currentTurn === Color.White ? Color.Black : Color.White;
+    var ActualLastMove = move;
+    const nextState: GameState = {
+        ...initialRootState,
+        board: nextBoard,
+        turn: nextTurn,
+        lastMove: move,
+        // VERBETERD: Gebruik i + 1 in plaats van indexOf(move)
+        moveHistory: initialState.moveHistory.slice(0, i + 1),
+        enPassantTarget: move.piece === PieceType.Pawn && Math.abs(move.from.row - move.to.row) === 2
+            ? { row: (move.from.row + move.to.row) / 2, col: move.from.col }
+            : null,
+        capturedPieces: move.captured ? {
+            ...currentCaptured,
+            [move.color === Color.White ? Color.Black : Color.White]: [...currentCaptured[move.color === Color.White ? Color.Black : Color.White], { type: move.captured, color: move.color === Color.White ? Color.Black : Color.White, originalType: move.captured, isKing: move.captured === PieceType.King, hasMoved: true }]
+        } : currentCaptured
+    };
 
                 initialNodes[newNodeId] = {
                     id: newNodeId,
@@ -131,7 +175,8 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
                     notation: move.notation,
                     children: [],
                     parentId: lastId,
-                    lastVisited: true
+                    lastVisited: i === initialState.moveHistory.length - 1,
+                    comment: ''
                 };
                 initialNodes[lastId].children.push(newNodeId);
 
@@ -146,17 +191,90 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
         return { initialNodes, leafId };
     };
 
-    // Initialize states from a single buildInitialTree call to ensure IDs match
-    const [initialTree] = useState(() => buildInitialTree());
+    // Build initial tree based on initialState - rebuilds when initialState changes
+    const initialTree = useMemo(() => buildInitialTree(), [initialState]);
+
+    // Initialize and manage nodes and currentNodeId
     const [nodes, setNodes] = useState<Record<string, AnalysisTreeNode>>(initialTree.initialNodes);
     const [currentNodeId, setCurrentNodeId] = useState<string>(initialTree.leafId);
 
-    // Initial sync
+    // Reset tree when initialState changes (for new analyses only, not when loading from Firebase)
     useEffect(() => {
-        if (nodes[currentNodeId]) {
-            applyState(nodes[currentNodeId].gameState);
+        if (!analysisId) {
+            setNodes(initialTree.initialNodes);
+            setCurrentNodeId(initialTree.leafId);
+            // Sync board state with new tree for new analyses
+            if (initialTree.initialNodes[initialTree.leafId]) {
+                applyState(initialTree.initialNodes[initialTree.leafId].gameState);
+            }
         }
+    }, [initialTree, analysisId]);
+
+    // Load analysis if analysisId is provided — only once per mount
+    useEffect(() => {
+        if (analysisId && currentUser?.uid && !loadedOnceFromFirebase) {
+            const loadSavedAnalysis = async () => {
+                try {
+                    setIsLoadingAnalysis(true);
+                    const saved = await loadAnalysis(currentUser.uid, analysisId);
+                    if (saved) {
+                        // Rebuild the tree from saved nodes, ensuring proper structure
+                        const newNodes: Record<string, AnalysisTreeNode> = {};
+
+                        for (const [id, node] of Object.entries(saved.nodes || {})) {
+                            const normalized = normalizeGameState((node as any).gameState || {});
+                            newNodes[id] = {
+                                id: (node as any).id || id,
+                                children: (node as any).children || [],
+                                parentId: (node as any).parentId || null,
+                                notation: (node as any).notation || null,
+                                gameState: normalized,
+                                lastVisited: (node as any).lastVisited !== false,
+                                comment: (node as any).comment || '',
+
+                            };
+                        }
+
+                        setNodes(newNodes);
+                        setCurrentNodeId((saved as any).lastNodeId || (saved as any).rootNodeId);
+                        if (newNodes[(saved as any).lastNodeId || (saved as any).rootNodeId]) {
+                            applyState(newNodes[(saved as any).lastNodeId || (saved as any).rootNodeId].gameState);
+                        }
+                        setSaveName((saved as any).name || '');
+                        // mark as loaded once so we don't re-query Firebase for this analysis
+                        setLoadedOnceFromFirebase(true);
+                    }
+                } catch (error) {
+                    console.error('Error loading analysis:', error);
+                } finally {
+                    setIsLoadingAnalysis(false);
+                }
+            };
+            loadSavedAnalysis();
+        }
+    }, [analysisId, currentUser?.uid, loadedOnceFromFirebase]);
+
+    // Stop worker on unmount
+    useEffect(() => {
+        return () => {
+            stopWorker();
+        };
     }, []);
+
+    // Load folders for save dialog
+    useEffect(() => {
+        if (currentUser?.uid) {
+            const loadFoldersList = async () => {
+                try {
+                    const foldersData = await getAllFolders(currentUser.uid);
+                    setFolders(foldersData);
+                } catch (error) {
+                    console.error('Error loading folders:', error);
+                }
+            };
+            loadFoldersList();
+        }
+    }, [currentUser?.uid]);
 
     const getResultMessage = () => {
         const game = initialState;
@@ -184,6 +302,20 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
     const ratingCategory = initialState?.ratingCategory;
     const timerSettings = initialState?.timerSettings;
 
+    // Game State
+    const [board, setBoard] = useState<BoardState>(initialTree.initialNodes[initialTree.leafId]?.gameState?.board || createInitialBoard());
+    const [turn, setTurn] = useState<Color>(initialTree.initialNodes[initialTree.leafId]?.gameState?.turn || Color.White);
+    const [status, setStatus] = useState<GameStatus>('playing');
+    const [winner, setWinner] = useState<string | null>(null);
+    const [capturedPieces, setCapturedPieces] = useState<{ white: Piece[]; black: Piece[] }>({ white: [], black: [] });
+    const [enPassantTarget, setEnPassantTarget] = useState<Position | null>(null);
+    const [halfmoveClock, setHalfmoveClock] = useState<number>(0);
+    const [positionHistory, setPositionHistory] = useState<Record<string, number>>({});
+    const [moveHistory, setMoveHistory] = useState<Move[]>([]);
+    const [lastMove, setLastMove] = useState<Move | null>(null);
+    const [saveName, setSaveName] = useState<string>('');
+    const [saveModalOpen, setSaveModalOpen] = useState(false);
+
     // UI State
     const [highlightedSquares, setHighlightedSquares] = useState<Position[]>([]);
     const [arrows, setArrows] = useState<{ from: Position; to: Position }[]>([]);
@@ -206,6 +338,29 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
         }
         requestIdRef.current = null;
         setEngineThinking(false);
+    };
+
+    const handleBackToManager = () => {
+        // Stop worker and clear state before navigating away
+        stopWorker();
+        setHighlightedSquares([]);
+        setArrows([]);
+        setSelectedPiece(null);
+        setValidMoves([]);
+        setPromotionData(null);
+        setAmbiguousEnPassantData(null);
+        setSaveModalOpen(false);
+        // reset to initial tree/state for a clean editor
+        setNodes(initialTree.initialNodes);
+        setCurrentNodeId(initialTree.leafId);
+        if (initialTree.initialNodes[initialTree.leafId]) {
+            applyState(initialTree.initialNodes[initialTree.leafId].gameState);
+        }
+        // clear temporary UI fields
+        setSaveName('');
+        setLoadedOnceFromFirebase(false);
+        // Call the callback
+        onBackToAnalysisManager?.();
     };
 
     const moveListRef = useRef<HTMLDivElement>(null);
@@ -257,6 +412,12 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
 
     const updateValidMoves = useCallback(() => {
         if (selectedPiece && status !== 'promotion' && status !== 'ambiguous_en_passant') {
+            // Validate board state
+            if (!board || !Array.isArray(board) || board.length !== 8 || !board.every(row => Array.isArray(row) && row.length === 8)) {
+                console.error('Invalid board state detected');
+                setValidMoves([]);
+                return;
+            }
             const moves = getValidMoves(board, selectedPiece, enPassantTarget, true);
             setValidMoves(moves);
         } else {
@@ -290,6 +451,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
         if (currentNode.parentId) {
             goToNode(currentNode.parentId, false); // No sound for undo
         }
+        if (nodes[nodes[currentNodeId].parentId].parentId === null) setLastMove(null); // Clear highlights if we're at the root
     }, [currentNodeId, nodes]);
 
     const handleRedo = useCallback(() => {
@@ -299,6 +461,38 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
             goToNode(lastVisitedChild, true); // Sound for redo
         }
     }, [currentNodeId, nodes]);
+
+    const handleSaveAnalysis = async () => {
+        if (!currentUser?.uid || !saveName.trim()) return;
+
+        try {
+            setIsSaving(true);
+            const analysisToSave = analysisId || generateId();
+
+            // Get the root node
+            const rootId = 'root';
+            const analysisData: SavedAnalysis = {
+                name: saveName,
+                folderId: selectedFolderId,
+                nodes: nodes,
+                rootNodeId: rootId,
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+                lastNodeId: currentNodeId,
+                // per-node comments are stored inside `nodes`
+            } as any;
+
+            await saveAnalysis(currentUser.uid, analysisToSave, analysisData);
+            setSaveModalOpen(false);
+            // Show success message (you could use a toast notification here)
+            alert('Analysis saved successfully!');
+        } catch (error) {
+            console.error('Error saving analysis:', error);
+            alert('Failed to save analysis');
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -346,6 +540,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
             notation: notation,
             children: [],
             parentId: currentNodeId
+            , comment: ''
         };
 
         setNodes(prev => ({
@@ -360,22 +555,22 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
         setCurrentNodeId(newNodeId);
         applyState(newState);
         stopWorker();
-        playMoveSound(); // Always play sound for new move
     };
 
     const applyState = (state: GameState) => {
-        setBoard(state.board);
-        setTurn(state.turn);
-        setStatus(state.status);
-        setWinner(state.winner);
-        setCapturedPieces(state.capturedPieces);
-        setEnPassantTarget(state.enPassantTarget);
-        setHalfmoveClock(state.halfmoveClock);
-        setPositionHistory(state.positionHistory);
-        setMoveHistory(state.moveHistory || []);
-        setPromotionData(state.promotionData || null);
-        setAmbiguousEnPassantData(state.ambiguousEnPassantData || null);
-        setLastMove(state.lastMove || null);
+        const safe = normalizeGameState(state || {});
+        setBoard(safe.board);
+        setTurn(safe.turn);
+        setStatus(safe.status);
+        setWinner(safe.winner);
+        setCapturedPieces(safe.capturedPieces || { white: [], black: [] });
+        setEnPassantTarget(safe.enPassantTarget);
+        setHalfmoveClock(safe.halfmoveClock || 0);
+        setPositionHistory(safe.positionHistory || {});
+        setMoveHistory(safe.moveHistory || []);
+        setPromotionData(safe.promotionData || null);
+        setAmbiguousEnPassantData(safe.ambiguousEnPassantData || null);
+        setLastMove((safe as any)?.lastMove || null);
         setSelectedPiece(null);
         setValidMoves([]);
         setHighlightedSquares([]);
@@ -434,7 +629,6 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
 
     const getCurrentLine = () => {
         const line: AnalysisTreeNode[] = [];
-
         // 1. Walk up to root to get the history
         let curr = nodes[currentNodeId];
         if (!curr) return [];
@@ -632,7 +826,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
         finalizeTurn(newBoard, nextEnPassantTarget, resetHalfmoveClock, newCapturedPieces, { from, to });
     };
 
-    const handleSquareClick = (row: number, col: number) => {
+    const handleSquareClick = useCallback((row: number, col: number) => {
         if (status === 'promotion' || status === 'ambiguous_en_passant') return;
 
         if (selectedPiece) {
@@ -654,7 +848,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
                 setSelectedPiece({ row, col });
             }
         }
-    };
+    }, [board, turn, status, selectedPiece, validMoves]);
 
     const handlePromotion = (type: PieceType) => {
         if (!promotionData) return;
@@ -740,6 +934,29 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
                     }}
                     onBoardContextMenu={(e) => e.preventDefault()}
                 />
+                {/* Per-node comment box (small, below the board) */}
+                <div className="mt-2">
+                    {nodes[currentNodeId] && (
+                        <div className="bg-gray-800 p-2 rounded text-sm">
+                            <label className="text-xs font-semibold mb-1 block text-gray-300">Comment for this move/position</label>
+                            <textarea
+                                value={nodes[currentNodeId].comment || ''}
+                                onChange={(e) => {
+                                    const text = e.target.value;
+                                    setNodes(prev => ({
+                                        ...prev,
+                                        [currentNodeId]: {
+                                            ...prev[currentNodeId],
+                                            comment: text
+                                        }
+                                    }));
+                                }}
+                                placeholder="Short comment"
+                                className="w-full h-16 p-2 bg-gray-900 border border-gray-700 rounded text-white placeholder-gray-400 resize-none text-sm"
+                            />
+                        </div>
+                    )}
+                </div>
             </div>
 
             <div className="w-full md:w-96 bg-gray-800 p-4 rounded-xl shadow-2xl flex flex-col h-[85vh] min-h-[400px]">
@@ -754,36 +971,39 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
                 </div>
 
                 {initialState && (
-                    <div className="mb-3 bg-gray-700 p-2 rounded text-xs space-y-1">
-                        <p className="text-center text-gray-300 text-xs font-semibold mb-1">{getResultMessage()}</p>
-                        <div className="flex justify-between items-center border-b border-gray-600 pb-1">
-                            <span className="text-gray-400">White:</span>
-                            <span className="font-bold flex items-center gap-1">
-                                {whitePlayer?.displayName || 'N/A'}
-                                {isRated && <span className="text-gray-500">({initialRatings?.white})</span>}
-                                {isRated && ratingChange && (
-                                    <span className={`text-[10px] font-bold ${ratingChange.white >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                        {ratingChange.white >= 0 ? '+' : ''}{ratingChange.white}
-                                    </span>
-                                )}
-                            </span>
+                    <>
+                        <div className="mb-3 bg-gray-700 p-2 rounded text-xs space-y-1">
+                            <p className="text-center text-gray-300 text-xs font-semibold mb-1">{getResultMessage()}</p>
+                            <div className="flex justify-between items-center border-b border-gray-600 pb-1">
+                                <span className="text-gray-400">White:</span>
+                                <span className="font-bold flex items-center gap-1">
+                                    {whitePlayer?.displayName || 'N/A'}
+                                    {isRated && <span className="text-gray-500">({initialRatings?.white})</span>}
+                                    {isRated && ratingChange && (
+                                        <span className={`text-[10px] font-bold ${ratingChange.white >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                            {ratingChange.white >= 0 ? '+' : ''}{ratingChange.white}
+                                        </span>
+                                    )}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center border-b border-gray-600 pb-1">
+                                <span className="text-gray-400">Black:</span>
+                                <span className="font-bold flex items-center gap-1">
+                                    {blackPlayer?.displayName || 'N/A'}
+                                    {isRated && <span className="text-gray-500">({initialRatings?.black})</span>}
+                                    {isRated && ratingChange && (
+                                        <span className={`text-[10px] font-bold ${ratingChange.black >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                            {ratingChange.black >= 0 ? '+' : ''}{ratingChange.black}
+                                        </span>
+                                    )}
+                                </span>
+                            </div>
+                            <div className="pt-1 text-center text-[10px] text-gray-500 italic">
+                                {formatTimerSettingText(timerSettings)} • {isRated ? `Rated (${ratingCategory})` : 'Unrated'}
+                            </div>
                         </div>
-                        <div className="flex justify-between items-center border-b border-gray-600 pb-1">
-                            <span className="text-gray-400">Black:</span>
-                            <span className="font-bold flex items-center gap-1">
-                                {blackPlayer?.displayName || 'N/A'}
-                                {isRated && <span className="text-gray-500">({initialRatings?.black})</span>}
-                                {isRated && ratingChange && (
-                                    <span className={`text-[10px] font-bold ${ratingChange.black >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                        {ratingChange.black >= 0 ? '+' : ''}{ratingChange.black}
-                                    </span>
-                                )}
-                            </span>
-                        </div>
-                        <div className="pt-1 text-center text-[10px] text-gray-500 italic">
-                            {formatTimerSettingText(timerSettings)} • {isRated ? `Rated (${ratingCategory})` : 'Unrated'}
-                        </div>
-                    </div>
+
+                    </>
                 )}
 
                 <div ref={moveListRef} className="overflow-y-auto mb-3 bg-gray-900 p-3 rounded font-sans text-sm custom-scrollbar min-h-[100px] max-h-[250px]" id="move-list-container">
@@ -967,13 +1187,70 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack }) => {
                     </div>
 
                     <button
-                        onClick={onBack}
+                        onClick={() => {
+                            setSaveModalOpen(true);
+                            if (!saveName) setSaveName('Analysis ' + new Date().toLocaleDateString());
+                        }}
+                        className="w-full py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-semibold transition-colors"
+                        disabled={!currentUser?.uid}
+                    >
+                        Save Analysis
+                    </button>
+
+                    <button
+                        onClick={onBackToAnalysisManager ? handleBackToManager : onBack}
                         className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-colors mt-auto"
                     >
-                        Exit Analysis
+                        {onBackToAnalysisManager ? 'Back to Manager' : 'Exit Analysis'}
                     </button>
                 </div>
             </div>
+
+            {/* Save Modal */}
+            {saveModalOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+                        <h3 className="text-lg font-bold mb-4">Save Analysis</h3>
+                        <input
+                            type="text"
+                            value={saveName}
+                            onChange={(e) => setSaveName(e.target.value)}
+                            placeholder="Analysis name"
+                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 mb-4"
+                        />
+                        <div className="mb-4">
+                            <label className="block text-sm font-semibold mb-2">Folder</label>
+                            <select
+                                value={selectedFolderId || 'null'}
+                                onChange={(e) => setSelectedFolderId(e.target.value === 'null' ? null : e.target.value)}
+                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                            >
+                                <option value="null">Unsorted</option>
+                                {Object.entries(folders).map(([folderId, folder]) => (
+                                    <option key={folderId} value={folderId}>
+                                        {(folder as AnalysisFolder).name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setSaveModalOpen(false)}
+                                className="flex-1 px-3 py-2 bg-gray-600 hover:bg-gray-500 rounded font-semibold transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSaveAnalysis}
+                                disabled={isSaving || !saveName.trim()}
+                                className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-500 rounded font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isSaving ? 'Saving...' : 'Save'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

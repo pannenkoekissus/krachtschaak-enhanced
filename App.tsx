@@ -10,6 +10,7 @@ import Auth from './components/Auth';
 import PowerLegend from './components/PowerLegend';
 import BoardEditor from './components/BoardEditor';
 import Analysis from './components/Analysis';
+import AnalysisManager from './components/AnalysisManager';
 import ConfirmationModal from './components/ConfirmationModal';
 import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, GameMode, TimerSettings, PlayerInfo, SentChallenge, Move, ChatMessage, LobbyGame } from './types';
 import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, sanitizePiece } from './utils/game';
@@ -97,6 +98,7 @@ const App: React.FC = () => {
     const [analysisState, setAnalysisState] = useState<GameState | null>(null);
     const [reviewReturnTo, setReviewReturnTo] = useState<{ mode: GameMode, lobbyView: any } | null>(null);
     const [analysisReturnTo, setAnalysisReturnTo] = useState<{ mode: GameMode, lobbyView: any, reviewingGame: GameState | null } | null>(null);
+    const [analysisId, setAnalysisId] = useState<string | null>(null);
     const [showPowerLegend, setShowPowerLegend] = useState(false);
     const [showConfirmation, setShowConfirmation] = useState<'draw' | 'resign' | 'move' | 'premove' | null>(null);
     const [pendingMove, setPendingMove] = useState<{ from: Position, to: Position } | null>(null);
@@ -2229,6 +2231,7 @@ const App: React.FC = () => {
     const handleStartAnalysisFromEditor = (editedBoard: BoardState, startingTurn: Color) => {
         setLastEditedBoard(editedBoard);
         setLastEditedTurn(startingTurn);
+        setAnalysisId(null);
         const initialState: GameState = {
             board: editedBoard,
             turn: startingTurn,
@@ -2263,6 +2266,7 @@ const App: React.FC = () => {
     const handleStartAnalysisFromPosition = (gameState: GameState) => {
         setAnalysisReturnTo({ mode: gameMode, lobbyView: lobbyView, reviewingGame: reviewingGame });
         setReviewingGame(null);
+        setAnalysisId(null);
         setAnalysisState(gameState);
         setGameMode('analysis');
     };
@@ -2683,7 +2687,41 @@ const App: React.FC = () => {
         }
 
         if (gameMode === 'analysis') {
-            return <Analysis initialState={analysisState || undefined} onBack={handleBackToMenu} />;
+            return <Analysis
+                initialState={analysisState || undefined}
+                onBack={() => {
+                    // Restore where we came from (menu, board_editor, game, or analysis_manager)
+                    if (analysisReturnTo) {
+                        setGameMode(analysisReturnTo.mode);
+                        setLobbyView(analysisReturnTo.lobbyView);
+                        setReviewingGame(analysisReturnTo.reviewingGame);
+                        setAnalysisReturnTo(null);
+                    } else {
+                        setGameMode('menu');
+                    }
+                }}
+                analysisId={analysisId || undefined}
+                currentUser={currentUser}
+                onBackToAnalysisManager={() => {
+                    setGameMode('analysis_manager');
+                }}
+            />;
+        }
+
+        if (gameMode === 'analysis_manager') {
+            return <AnalysisManager userId={currentUser?.uid || ''} onSelectAnalysis={(id) => {
+                setAnalysisId(id);
+                setGameMode('analysis');
+            }} onBack={() => {
+                if (analysisReturnTo) {
+                    setGameMode(analysisReturnTo.mode);
+                    setLobbyView(analysisReturnTo.lobbyView);
+                    setReviewingGame(analysisReturnTo.reviewingGame);
+                    setAnalysisReturnTo(null);
+                } else {
+                    setGameMode('menu');
+                }
+            }} />;
         }
 
         if (gameMode === 'board_editor') {
@@ -2721,6 +2759,25 @@ const App: React.FC = () => {
                             <span>🧱</span> Board Editor
                         </button>
                         {currentUser && (
+                            <>
+                                <button
+                                    onClick={() => {
+                                        setAnalysisReturnTo({ mode: gameMode, lobbyView, reviewingGame });
+                                        setGameMode('analysis_manager');
+                                    }}
+                                    className="w-full py-4 bg-gray-700 hover:bg-gray-600 rounded-xl text-xl font-bold transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-3"
+                                >
+                                    <span>📊</span> Analysis
+                                </button>
+                                <button
+                                    onClick={handleContinueOnlineGame}
+                                    className="w-full py-4 bg-green-600 hover:bg-green-500 rounded-xl text-xl font-bold transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-3"
+                                >
+                                    <span>▶️</span> Continue Game
+                                </button>
+                            </>
+                        )}
+                        {!currentUser && (
                             <button
                                 onClick={handleContinueOnlineGame}
                                 className="w-full py-4 bg-green-600 hover:bg-green-500 rounded-xl text-xl font-bold transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-3"
