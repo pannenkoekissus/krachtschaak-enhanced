@@ -259,17 +259,18 @@ export const getUserIdByUsername = async (username: string): Promise<string | nu
   }
 };
 
-// Get username by userId - this is more complex as usernames are not directly stored
-// For now, we'll use Firebase Auth or skip this and just use the user's uid
+// Get username by userId - fetch displayName from users/{uid}/displayName
 export const getUsernameByUserId = async (userId: string): Promise<string | null> => {
   try {
-    // Since we don't have a direct mapping from userId to username in the DB,
-    // we would need to store it or use a different approach
-    // For now, return the userId itself as a fallback
+    const snapshot = await db.ref(`/users/${userId}/displayName`).once('value');
+    const displayName = snapshot.val();
+    if (displayName) return displayName;
+    // Fallback to userId if displayName not found
     return userId;
   } catch (error) {
     console.error('Error getting username:', error);
-    throw error;
+    // Fallback to userId on error
+    return userId;
   }
 };
 

@@ -302,9 +302,9 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
         </div>
       )}
 
-      <div className="flex gap-4 flex-1 min-h-0">
+      <div className="flex gap-4 flex-1 min-h-0 flex-col md:flex-row">
         {/* Left sidebar: Folders */}
-        <div className="w-64 bg-gray-800 rounded-lg p-4 overflow-y-auto">
+        <div className="w-full md:w-40 lg:w-64 bg-gray-800 rounded-lg p-4 overflow-y-auto max-h-96 md:max-h-none">
           <div className="mb-4">
             <button
               onClick={() => {
@@ -415,7 +415,7 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                       <div onClick={() => setSelectedFolderId(`shared_${sharedFolderId}`)} className="cursor-pointer">
                         <div className="font-semibold">🔗 {sharedFolder.name}</div>
                         <div className="text-xs text-gray-400 mt-1">
-                          by {sharedFolder.ownerUserId}
+                        by {(sharedFolder as any).ownerUsername || sharedFolder.ownerUserId}
                           <span className={`ml-2 ${sharedFolder.permission === 'edit' ? 'text-green-400' : 'text-yellow-400'}`}>
                             • {sharedFolder.permission === 'edit' ? 'Edit' : 'Read'}
                           </span>
@@ -440,7 +440,7 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
             </h2>
             {selectedSharedFolder && (
               <div className="text-xs text-gray-400 mb-2">
-                Owned by: <span className="text-gray-300">{selectedSharedFolder.ownerUserId}</span> •
+                Owned by: <span className="text-gray-300">{(selectedSharedFolder as any).ownerUsername || selectedSharedFolder.ownerUserId}</span> •
                 Permission: <span className={selectedSharedFolder.permission === 'edit' ? 'text-green-400' : 'text-yellow-400'}>
                   {selectedSharedFolder.permission === 'edit' ? 'Can Edit' : 'Read Only'}
                 </span>
@@ -544,7 +544,7 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
       {/* Modal */}
       {modal.type && modal.type !== 'share_folder' && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">z
             <h3 className="text-lg font-bold mb-4 capitalize">
               {modal.type.replace('_', ' ')}
             </h3>
