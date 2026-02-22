@@ -20,7 +20,9 @@ export interface AnalysisFolder {
   createdAt: number;
   updatedAt: number;
   ownerUserId?: string;
+  ownerDisplayName?: string;
   isShared?: boolean;
+  isPublic?: boolean;
   permission?: 'read' | 'edit';
   sharedWith?: Record<string, string | 'read' | 'edit'>; // userId -> permission
 }
@@ -448,6 +450,93 @@ export const saveAnalysisToFolder = async (
     await db.ref(`/analyses/${userId}/${analysisId}`).set(sanitizedData);
   } catch (error) {
     console.error('Error saving analysis:', error);
+    throw error;
+  }
+};
+
+// ==================== PUBLIC FOLDER FUNCTIONS ====================
+
+// Make a folder public
+export const makePublic = async (
+  ownerUserId: string,
+  folderId: string
+): Promise<void> => {
+  try {
+    const folderSnapshot = await db.ref(`/analysisfolders/${ownerUserId}/${folderId}`).once('value');
+    const folder = folderSnapshot.val();
+    if (!folder) {
+      throw new Error('Folder not found');
+    }
+
+    const displayName = await getUsernameByUserId(ownerUserId);
+
+    // Set folder as public
+    await db.ref(`/analysisfolders/${ownerUserId}/${folderId}/isPublic`).set(true);
+    await db.ref(`/analysisfolders/${ownerUserId}/${folderId}/ownerDisplayName`).set(displayName);
+
+    // Add to public folders index
+    await db.ref(`/publicFolders/${folderId}`).set({
+      ownerUserId,
+      folderId,
+      name: folder.name,
+      ownerDisplayName: displayName,
+      createdAt: folder.createdAt,
+      isPublic: true
+    });
+  } catch (error) {
+    console.error('Error making folder public:', error);
+    throw error;
+  }
+};
+
+// Make a folder private
+export const makePrivate = async (
+  ownerUserId: string,
+  folderId: string
+): Promise<void> => {
+  try {
+    // Set folder as private
+    await db.ref(`/analysisfolders/${ownerUserId}/${folderId}/isPublic`).set(false);
+
+    // Remove from public folders index
+    await db.ref(`/publicFolders/${folderId}`).remove();
+  } catch (error) {
+    console.error('Error making folder private:', error);
+    throw error;
+  }
+};
+
+// Get all public folders
+export const getPublicFolders = async (): Promise<Record<string, AnalysisFolder & { folderId: string; ownerUserId: string }>> => {
+  try {
+    const snapshot = await db.ref(`/publicFolders`).once('value');
+    const publicFolders = snapshot.val() || {};
+    return publicFolders;
+  } catch (error) {
+    console.error('Error fetching public folders:', error);
+    throw error;
+  }
+};
+
+// Get analyses from a public folder
+export const getAnalysesByPublicFolder = async (
+  folderId: string,
+  ownerUserId: string
+): Promise<Record<string, SavedAnalysis>> => {
+  try {
+    const snapshot = await db.ref(`/analyses/${ownerUserId}`).once('value');
+    const analyses = snapshot.val() || {};
+
+    const filtered: Record<string, SavedAnalysis> = {};
+    Object.entries(analyses).forEach(([id, analysis]: [string, any]) => {
+      if (analysis.folderId === folderId) {
+        filtered[id] = analysis;
+      }
+    });
+
+    return filtered;
+  } catch (error) {
+    console.error('Error fetching public folder analyses:', error);
     throw error;
   }
 };
