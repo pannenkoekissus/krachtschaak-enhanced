@@ -89,9 +89,9 @@ jobs:
             --ks-key-alias ${{ secrets.KEY_ALIAS }} \
             --ks-pass pass:${{ secrets.KEYSTORE_PASSWORD }} \
             --key-pass pass:${{ secrets.KEY_PASSWORD }} \
-            --out krachtschaak-final.apk krachtschaak-aligned.apk
+            --out krachtschaak.apk krachtschaak-aligned.apk
           
-          echo "APK_PATH=krachtschaak-final.apk" >> $GITHUB_ENV
+          echo "APK_PATH=krachtschaak.apk" >> $GITHUB_ENV
 
       # Maak de release aan met de gegenereerde tag
       - name: Create Release
