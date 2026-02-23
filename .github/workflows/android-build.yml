@@ -43,7 +43,7 @@ jobs:
         run: |
           # We gebruiken --web-dir dist (pas dit aan naar 'www' of 'build' als dat de map is)
           # We gebruiken '|| true' zodat het script niet stopt als de map al bestaat
-          npx cap init "Krachtschaak" com.pannenkoekissus.krachtschaak --web-dir dist --confirm
+          npx cap init "Krachtschaak" com.pannenkoekissus.krachtschaak --web-dir dist
           npx cap add android || true
           npx cap sync android
 
