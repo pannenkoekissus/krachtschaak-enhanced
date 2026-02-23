@@ -1,0 +1,69 @@
+name: Initial Capacitor Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Start zodra je een tag pusht, bijv. v1.0.0
+
+jobs:
+  full-setup-and-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Java (Android vereiste)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # 1. Installeer dependencies van je project + Capacitor
+      - name: Install dependencies
+        run: |
+          npm install
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+
+      # 2. Bouw je web-applicatie (Maakt de 'dist' of 'build' map)
+      - name: Build Web App
+        run: npm run build
+
+      # 3. Initialiseer Capacitor (Non-interactief)
+      # LET OP: Pas 'dist' aan naar jouw build-map als dat anders is (bijv. 'www' of 'build')
+      - name: Initialize Capacitor
+        run: npx cap init "Krachtschaak Enhanced" com.krachtschaak --web-dir dist
+
+      # 4. Voeg Android platform toe
+      - name: Add Android Platform
+        run: npx cap add android
+
+      # 5. Sync de web-bestanden naar de Android map
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      # 6. Bouw de APK (Vervangt 'npx cap open android')
+      - name: Build APK with Gradle
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      # 7. Maak de Release aan op GitHub en voeg de APK toe
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body: "Automatische build van Krachtschaak Enhanced (Capacitor)."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
