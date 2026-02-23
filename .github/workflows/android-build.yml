@@ -48,7 +48,7 @@ jobs:
       - name: Initialize & Add Android
         run: |
           WEB_DIR=$(if [ -d "dist" ]; then echo "dist"; else echo "."; fi)
-          npx cap init "Krachtschaak" com.pannenkoekissus.krachtschaak --web-dir $WEB_DIR
+          npx cap init "Krachtschaak" com.krachtschaak --web-dir $WEB_DIR
           npx cap add android || true
           
       - name: Fix Kotlin Duplicate Classes
