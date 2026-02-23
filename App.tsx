@@ -15,7 +15,7 @@ import ConfirmationModal from './components/ConfirmationModal';
 import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, GameMode, TimerSettings, PlayerInfo, SentChallenge, Move, ChatMessage, LobbyGame } from './types';
 import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, sanitizePiece } from './utils/game';
 import { getRatingCategory, RatingCategory, RATING_CATEGORIES } from './utils/ratings';
-import { getSharedFolders } from './utils/analysisFirebase';
+import { getSharedFolders, getPublicFolders } from './utils/analysisFirebase';
 import { isFirebaseConfigured, auth, db } from './firebaseConfig';
 import SettingsModal from './components/SettingsModal';
 
@@ -102,7 +102,10 @@ const App: React.FC = () => {
     const [analysisId, setAnalysisId] = useState<string | null>(null);
     const [analysisOwnerUserId, setAnalysisOwnerUserId] = useState<string | null>(null);
     const [analysisFolderId, setAnalysisFolderId] = useState<string | null>(null);
+    const [analysisCanEdit, setAnalysisCanEdit] = useState<boolean>(true);
+    const [analysisSourceFolderType, setAnalysisSourceFolderType] = useState<'shared' | 'public' | null>(null);
     const [analysisSharedFolders, setAnalysisSharedFolders] = useState<Record<string, any>>({});
+    const [analysisPublicFolders, setAnalysisPublicFolders] = useState<Record<string, { ownerUserId: string; folderId: string; name: string; isPublicWritable?: boolean }>>({});
     const [showPowerLegend, setShowPowerLegend] = useState(false);
     const [showConfirmation, setShowConfirmation] = useState<'draw' | 'resign' | 'move' | 'premove' | null>(null);
     const [pendingMove, setPendingMove] = useState<{ from: Position, to: Position } | null>(null);
@@ -2236,6 +2239,8 @@ const App: React.FC = () => {
         setLastEditedBoard(editedBoard);
         setLastEditedTurn(startingTurn);
         setAnalysisId(null);
+        setAnalysisCanEdit(true);
+        setAnalysisSourceFolderType(null);
         const initialState: GameState = {
             board: editedBoard,
             turn: startingTurn,
@@ -2271,17 +2276,24 @@ const App: React.FC = () => {
         setAnalysisReturnTo({ mode: gameMode, lobbyView: lobbyView, reviewingGame: reviewingGame });
         setReviewingGame(null);
         setAnalysisId(null);
+        setAnalysisCanEdit(true);
+        setAnalysisSourceFolderType(null);
         setAnalysisState(gameState);
         setGameMode('analysis');
     };
 
-    // Load shared folders when entering analysis mode
+    // Load shared and public folders when entering analysis mode (for save-modal destinations)
     useEffect(() => {
         if (gameMode === 'analysis' && currentUser?.uid) {
             getSharedFolders(currentUser.uid).then(folders => {
                 setAnalysisSharedFolders(folders);
             }).catch(err => {
                 console.error('Failed to load shared folders:', err);
+            });
+            getPublicFolders().then(folders => {
+                setAnalysisPublicFolders(folders || {});
+            }).catch(err => {
+                console.error('Failed to load public folders:', err);
             });
         }
     }, [gameMode, currentUser?.uid]);
@@ -2718,7 +2730,10 @@ const App: React.FC = () => {
                 analysisId={analysisId || undefined}
                 analysisOwnerUserId={analysisOwnerUserId || undefined}
                 analysisFolderId={analysisFolderId || undefined}
+                canEditAnalysis={analysisCanEdit}
+                analysisSourceFolderType={analysisSourceFolderType || undefined}
                 analysisSharedFolders={analysisSharedFolders}
+                analysisPublicFolders={analysisPublicFolders}
                 currentUser={currentUser}
                 onBackToAnalysisManager={() => {
                     setGameMode('analysis_manager');
@@ -2727,10 +2742,12 @@ const App: React.FC = () => {
         }
 
         if (gameMode === 'analysis_manager') {
-            return <AnalysisManager userId={currentUser?.uid || ''} onSelectAnalysis={(id, ownerUserId, folderId) => {
+            return <AnalysisManager userId={currentUser?.uid || ''} onSelectAnalysis={(id, ownerUserId, folderId, canEdit, sourceType) => {
                 setAnalysisId(id);
                 setAnalysisOwnerUserId(ownerUserId || currentUser?.uid || null);
                 setAnalysisFolderId(folderId || null);
+                setAnalysisCanEdit(canEdit !== false);
+                setAnalysisSourceFolderType(sourceType || null);
                 setGameMode('analysis');
             }} onBack={() => {
                 if (analysisReturnTo) {

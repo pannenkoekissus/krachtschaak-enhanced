@@ -9,13 +9,22 @@ import Board from './Board';
 import GameOverlay from './GameOverlay';
 import PieceComponent from './Piece';
 
+/** Public folder entry (writable ones can be save destinations). */
+export type PublicFolderOption = { ownerUserId: string; folderId: string; name: string; isPublicWritable?: boolean };
+
 interface AnalysisProps {
     initialState?: GameState;
     onBack: () => void;
     analysisId?: string;
     analysisOwnerUserId?: string;
     analysisFolderId?: string;
+    /** When false, saving and editing (moves, comments) are disabled (read-only view). */
+    canEditAnalysis?: boolean;
+    /** 'shared' | 'public' when opening from a shared/public folder, so save modal pre-selects that folder. */
+    analysisSourceFolderType?: 'shared' | 'public';
     analysisSharedFolders?: Record<string, any>;
+    /** Public folders (writable ones shown as save destinations). */
+    analysisPublicFolders?: Record<string, PublicFolderOption>;
     currentUser?: { uid: string };
     onBackToAnalysisManager?: () => void;
 }
@@ -30,7 +39,7 @@ interface AnalysisTreeNode {
     comment?: string;
 }
 
-const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, analysisOwnerUserId, analysisFolderId, analysisSharedFolders, currentUser, onBackToAnalysisManager }) => {
+const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, analysisOwnerUserId, analysisFolderId, canEditAnalysis = true, analysisSourceFolderType, analysisSharedFolders, analysisPublicFolders, currentUser, onBackToAnalysisManager }) => {
 
 const formatTimerSettingText = (settings: GameState['timerSettings']) => {
     if (!settings) return 'Unlimited';
@@ -467,20 +476,39 @@ for (let i = 0; i < initialState.moveHistory.length; i++) {
     }, [currentNodeId, nodes]);
 
     const handleSaveAnalysis = async () => {
-        if (!currentUser?.uid || !saveName.trim()) return;
+        if (!canEditAnalysis || !currentUser?.uid || !saveName.trim()) return;
 
         try {
             setIsSaving(true);
-            const analysisToSave = analysisId || generateId();
-            const saveToUserId = analysisOwnerUserId || currentUser.uid;
+            let saveToUserId: string;
+            let finalFolderId: string | null;
+            if (selectedFolderId?.startsWith('public_')) {
+                const folderId = selectedFolderId.replace('public_', '');
+                const pub = analysisPublicFolders?.[folderId];
+                if (!pub?.isPublicWritable) {
+                    alert('That public folder is not writable.');
+                    return;
+                }
+                saveToUserId = pub.ownerUserId;
+                finalFolderId = folderId;
+            } else if (selectedFolderId?.startsWith('shared_')) {
+                const folderId = selectedFolderId.replace('shared_', '');
+                const shared = analysisSharedFolders?.[folderId];
+                if (!shared?.permission || shared.permission !== 'edit') {
+                    alert('You do not have edit access to that folder.');
+                    return;
+                }
+                saveToUserId = shared.ownerUserId ?? currentUser.uid;
+                finalFolderId = folderId;
+            } else {
+                saveToUserId = currentUser.uid;
+                finalFolderId = selectedFolderId || null;
+            }
 
-            // Clean folder ID: remove "shared_" prefix if present
-            const cleanFolderId = selectedFolderId?.startsWith('shared_')
-                ? selectedFolderId.replace('shared_', '')
-                : selectedFolderId;
-            const finalFolderId = analysisFolderId || cleanFolderId;
+            const currentOwner = analysisOwnerUserId || currentUser.uid;
+            const isSameOwner = saveToUserId === currentOwner;
+            const analysisToSave = (analysisId && isSameOwner) ? analysisId : generateId();
 
-            // Get the root node
             const rootId = 'root';
             const analysisData: SavedAnalysis = {
                 name: saveName,
@@ -490,12 +518,10 @@ for (let i = 0; i < initialState.moveHistory.length; i++) {
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
                 lastNodeId: currentNodeId,
-                // per-node comments are stored inside `nodes`
             } as any;
 
             await saveAnalysis(saveToUserId, analysisToSave, analysisData);
             setSaveModalOpen(false);
-            // Show success message (you could use a toast notification here)
             alert('Analysis saved successfully!');
         } catch (error) {
             console.error('Error saving analysis:', error);
@@ -839,6 +865,15 @@ for (let i = 0; i < initialState.moveHistory.length; i++) {
 
     const handleSquareClick = useCallback((row: number, col: number) => {
         if (status === 'promotion' || status === 'ambiguous_en_passant') return;
+        if (!canEditAnalysis) {
+            // Read-only: allow selecting pieces to view valid moves, but do not commit moves
+            const piece = board[row][col];
+            if (selectedPiece && selectedPiece.row === row && selectedPiece.col === col) setSelectedPiece(null);
+            else if (selectedPiece && validMoves.some(m => m.row === row && m.col === col)) return;
+            else if (piece && piece.color === turn) setSelectedPiece({ row, col });
+            else setSelectedPiece(null);
+            return;
+        }
 
         if (selectedPiece) {
             if (selectedPiece.row === row && selectedPiece.col === col) {
@@ -859,10 +894,10 @@ for (let i = 0; i < initialState.moveHistory.length; i++) {
                 setSelectedPiece({ row, col });
             }
         }
-    }, [board, turn, status, selectedPiece, validMoves]);
+    }, [board, turn, status, selectedPiece, validMoves, canEditAnalysis]);
 
     const handlePromotion = (type: PieceType) => {
-        if (!promotionData) return;
+        if (!promotionData || !canEditAnalysis) return;
         const { from, position, promotingPiece, powerAfterPromotion } = promotionData;
         const newBoard = board.map(r => [...r]);
         newBoard[position.row][position.col] = { ...promotingPiece, type, hasMoved: true, power: powerAfterPromotion };
@@ -871,7 +906,7 @@ for (let i = 0; i < initialState.moveHistory.length; i++) {
     };
 
     const resolveAmbiguousEnPassant = (choice: 'move' | 'capture') => {
-        if (!ambiguousEnPassantData) return;
+        if (!ambiguousEnPassantData || !canEditAnalysis) return;
         const { from, to } = ambiguousEnPassantData;
         const newBoard = board.map(r => [...r]);
         const pieceToMove = { ...newBoard[from.row][from.col]! };
@@ -953,6 +988,7 @@ for (let i = 0; i < initialState.moveHistory.length; i++) {
                             <textarea
                                 value={nodes[currentNodeId].comment || ''}
                                 onChange={(e) => {
+                                    if (!canEditAnalysis) return;
                                     const text = e.target.value;
                                     setNodes(prev => ({
                                         ...prev,
@@ -963,7 +999,8 @@ for (let i = 0; i < initialState.moveHistory.length; i++) {
                                     }));
                                 }}
                                 placeholder="Short comment"
-                                className="w-full h-16 p-2 bg-gray-900 border border-gray-700 rounded text-white placeholder-gray-400 resize-none text-sm"
+                                readOnly={!canEditAnalysis}
+                                className={`w-full h-16 p-2 bg-gray-900 border border-gray-700 rounded text-white placeholder-gray-400 resize-none text-sm ${!canEditAnalysis ? 'opacity-75 cursor-not-allowed' : ''}`}
                             />
                         </div>
                     )}
@@ -1199,11 +1236,17 @@ for (let i = 0; i < initialState.moveHistory.length; i++) {
 
                     <button
                         onClick={() => {
+                            if (analysisFolderId && analysisSourceFolderType) {
+                                setSelectedFolderId(`${analysisSourceFolderType}_${analysisFolderId}`);
+                            } else if (!selectedFolderId) {
+                                setSelectedFolderId(null);
+                            }
                             setSaveModalOpen(true);
                             if (!saveName) setSaveName('Analysis ' + new Date().toLocaleDateString());
                         }}
-                        className="w-full py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-semibold transition-colors"
-                        disabled={!currentUser?.uid}
+                        className="w-full py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={!currentUser?.uid || !canEditAnalysis}
+                        title={!canEditAnalysis ? 'Read-only: save a copy via Analysis Manager (Clone)' : undefined}
                     >
                         Save Analysis
                     </button>
@@ -1242,12 +1285,23 @@ for (let i = 0; i < initialState.moveHistory.length; i++) {
                                         {(folder as AnalysisFolder).name}
                                     </option>
                                 ))}
-                                {/* Add shared folders with edit permission */}
+                                {/* Shared folders with edit permission */}
                                 {analysisSharedFolders && Object.entries(analysisSharedFolders).map(([folderId, folder]: [string, any]) => {
                                     if (folder.permission === 'edit') {
                                         return (
                                             <option key={`shared_${folderId}`} value={`shared_${folderId}`}>
                                                 🔗 {folder.name} (shared)
+                                            </option>
+                                        );
+                                    }
+                                    return null;
+                                })}
+                                {/* Public writable folders */}
+                                {analysisPublicFolders && Object.entries(analysisPublicFolders).map(([folderId, folder]: [string, PublicFolderOption]) => {
+                                    if (folder.isPublicWritable) {
+                                        return (
+                                            <option key={`public_${folderId}`} value={`public_${folderId}`}>
+                                                🌐 {folder.name} (public)
                                             </option>
                                         );
                                     }

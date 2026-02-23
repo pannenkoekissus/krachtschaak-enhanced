@@ -9,6 +9,8 @@ import {
   deleteAnalysis,
   renameAnalysis,
   moveAnalysisToFolder,
+  loadAnalysis,
+  saveAnalysis,
   generateId,
   AnalysisFolder,
   SavedAnalysis,
@@ -20,19 +22,20 @@ import {
   FolderShare,
   makePublic,
   makePrivate,
+  setPublicFolderWritable,
   getPublicFolders,
   getAnalysesByPublicFolder
 } from '../utils/analysisFirebase';
 
 interface AnalysisManagerProps {
   userId: string;
-  onSelectAnalysis: (analysisId: string, ownerUserId?: string, folderId?: string) => void;
+  onSelectAnalysis: (analysisId: string, ownerUserId?: string, folderId?: string, canEdit?: boolean, sourceType?: 'shared' | 'public') => void;
   onBack: () => void;
 }
 
 interface ModalState {
-  type: 'create_folder' | 'create_analysis' | 'rename_folder' | 'rename_analysis' | 'share_folder' | null;
-  targetId?: string; // For rename operations
+  type: 'create_folder' | 'create_analysis' | 'rename_folder' | 'rename_analysis' | 'share_folder' | 'clone_analysis' | null;
+  targetId?: string; // For rename operations, or analysis id for clone
   targetName?: string;
 }
 
@@ -57,6 +60,9 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
   const [sharedFolderAnalyses, setSharedFolderAnalyses] = useState<Record<string, SavedAnalysis>>({});
   const [publicFolderAnalyses, setPublicFolderAnalyses] = useState<Record<string, SavedAnalysis>>({});
   const [folderIsPublic, setFolderIsPublic] = useState(false);
+  const [folderIsPublicWritable, setFolderIsPublicWritable] = useState(false);
+  const [cloneTargetFolderId, setCloneTargetFolderId] = useState<string | null>(null);
+  const [isCloning, setIsCloning] = useState(false);
 
   // Check if selected folder is shared
   const isSelectedFolderShared = selectedFolderId?.startsWith('shared_');
@@ -73,6 +79,12 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
     ? publicFolders[cleanFolderId]
     : null;
   const userCanEditSharedFolder = selectedSharedFolder?.permission === 'edit';
+  const userCanEditPublicFolder = !!(isSelectedFolderPublic && selectedPublicFolder?.isPublicWritable);
+  const effectiveOwnerId = isSelectedFolderShared && selectedSharedFolder
+    ? selectedSharedFolder.ownerUserId
+    : isSelectedFolderPublic && selectedPublicFolder
+    ? selectedPublicFolder.ownerUserId
+    : userId;
 
   // Load data on mount
   useEffect(() => {
@@ -194,14 +206,14 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
   const handleRenameAnalysis = async () => {
     if (!inputValue.trim() || !modal.targetId) return;
     try {
-      await renameAnalysis(userId, modal.targetId, inputValue);
-      setAnalyses(prev => ({
+      await renameAnalysis(effectiveOwnerId, modal.targetId, inputValue);
+      const updateName = (prev: Record<string, SavedAnalysis>) => ({
         ...prev,
-        [modal.targetId!]: {
-          ...prev[modal.targetId!],
-          name: inputValue
-        }
-      }));
+        [modal.targetId!]: { ...prev[modal.targetId!], name: inputValue }
+      });
+      setAnalyses(updateName);
+      setSharedFolderAnalyses(updateName);
+      setPublicFolderAnalyses(updateName);
       setModal({ type: null });
       setInputValue('');
     } catch (err) {
@@ -213,32 +225,102 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
   const handleDeleteAnalysis = async (analysisId: string) => {
     if (!confirm('Delete this analysis?')) return;
     try {
-      await deleteAnalysis(userId, analysisId);
-      setAnalyses(prev => {
+      await deleteAnalysis(effectiveOwnerId, analysisId);
+      const remove = (prev: Record<string, SavedAnalysis>) => {
         const updated = { ...prev };
         delete updated[analysisId];
         return updated;
-      });
+      };
+      setAnalyses(remove);
+      setSharedFolderAnalyses(remove);
+      setPublicFolderAnalyses(remove);
     } catch (err) {
       console.error('Error deleting analysis:', err);
       setError('Failed to delete analysis');
     }
   };
 
-  const handleMoveAnalysis = async (analysisId: string, folderId: string | null) => {
-    try {
-      await moveAnalysisToFolder(userId, analysisId, folderId);
-      setAnalyses(prev => ({
-        ...prev,
-        [analysisId]: {
-          ...prev[analysisId],
-          folderId
+  const handleMoveAnalysis = async (analysisId: string, folderIdOrPublic: string | null) => {
+    if (folderIdOrPublic?.startsWith('public_')) {
+      const publicFolderId = folderIdOrPublic.replace('public_', '');
+      const pub = publicFolders[publicFolderId] as { ownerUserId?: string; isPublicWritable?: boolean } | undefined;
+      if (!pub?.isPublicWritable || !pub.ownerUserId) {
+        setError('That public folder is not writable.');
+        return;
+      }
+      try {
+        const source = await loadAnalysis(userId, analysisId);
+        if (!source) {
+          setError('Analysis not found');
+          return;
         }
-      }));
+        const newId = generateId();
+        await saveAnalysis(pub.ownerUserId, newId, {
+          ...source,
+          folderId: publicFolderId,
+          updatedAt: Date.now()
+        });
+        await deleteAnalysis(userId, analysisId);
+        const remove = (prev: Record<string, SavedAnalysis>) => {
+          const next = { ...prev };
+          delete next[analysisId];
+          return next;
+        };
+        setAnalyses(remove);
+      } catch (err) {
+        console.error('Error moving analysis to public folder:', err);
+        setError('Failed to move to public folder');
+      }
+      return;
+    }
+    try {
+      await moveAnalysisToFolder(effectiveOwnerId, analysisId, folderIdOrPublic);
+      const updateFolder = (prev: Record<string, SavedAnalysis>) => ({
+        ...prev,
+        [analysisId]: { ...prev[analysisId], folderId: folderIdOrPublic } as SavedAnalysis
+      });
+      setAnalyses(updateFolder);
+      setSharedFolderAnalyses(updateFolder);
+      setPublicFolderAnalyses(updateFolder);
     } catch (err) {
       console.error('Error moving analysis:', err);
       setError('Failed to move analysis');
     }
+  };
+
+  const handleCloneAnalysis = async () => {
+    if (!modal.targetId) return;
+    try {
+      setIsCloning(true);
+      setError(null);
+      const source = await loadAnalysis(effectiveOwnerId, modal.targetId);
+      if (!source) {
+        setError('Analysis not found');
+        return;
+      }
+      const newId = generateId();
+      const cloneData: SavedAnalysis = {
+        ...source,
+        name: (source.name || 'Analysis') + ' (copy)',
+        folderId: cloneTargetFolderId,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      await saveAnalysis(userId, newId, cloneData);
+      setAnalyses(prev => ({ ...prev, [newId]: { ...cloneData } }));
+      setModal({ type: null });
+      setCloneTargetFolderId(null);
+    } catch (err) {
+      console.error('Error cloning analysis:', err);
+      setError(err instanceof Error ? err.message : 'Failed to clone analysis');
+    } finally {
+      setIsCloning(false);
+    }
+  };
+
+  const openCloneModal = (analysisId: string) => {
+    setCloneTargetFolderId(null);
+    setModal({ type: 'clone_analysis', targetId: analysisId });
   };
 
   const handleShareFolder = async () => {
@@ -287,6 +369,8 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
       setFolderShares(shares);
       const isPublic = folders[folderId]?.isPublic || false;
       setFolderIsPublic(isPublic);
+      const isWritable = folders[folderId]?.isPublicWritable || false;
+      setFolderIsPublicWritable(isWritable);
     } catch (err) {
       console.error('Error loading shares:', err);
     }
@@ -299,21 +383,25 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
       if (folderIsPublic) {
         await makePrivate(userId, sharingFolderId);
         setFolderIsPublic(false);
+        setFolderIsPublicWritable(false);
         setFolders(prev => ({
           ...prev,
           [sharingFolderId]: {
             ...prev[sharingFolderId],
-            isPublic: false
+            isPublic: false,
+            isPublicWritable: false
           }
         }));
       } else {
-        await makePublic(userId, sharingFolderId);
+        // When making the folder public, respect the current writable choice
+        await makePublic(userId, sharingFolderId, folderIsPublicWritable);
         setFolderIsPublic(true);
         setFolders(prev => ({
           ...prev,
           [sharingFolderId]: {
             ...prev[sharingFolderId],
-            isPublic: true
+            isPublic: true,
+            isPublicWritable: folderIsPublicWritable
           }
         }));
       }
@@ -323,6 +411,28 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
     } catch (err) {
       console.error('Error toggling folder public status:', err);
       setError('Failed to update folder public status');
+    }
+  };
+
+  const handleTogglePublicWritable = async () => {
+    if (!sharingFolderId || !folderIsPublic) return;
+    try {
+      const nextWritable = !folderIsPublicWritable;
+      await setPublicFolderWritable(userId, sharingFolderId, nextWritable);
+      setFolderIsPublicWritable(nextWritable);
+      setFolders(prev => ({
+        ...prev,
+        [sharingFolderId]: {
+          ...prev[sharingFolderId],
+          isPublicWritable: nextWritable
+        }
+      }));
+      // Reload public folders so the sidebar reflects the new state
+      const publicFoldersData = await getPublicFolders();
+      setPublicFolders(publicFoldersData);
+    } catch (err) {
+      console.error('Error toggling public folder writable flag:', err);
+      setError('Failed to update public folder write permissions');
     }
   };
 
@@ -421,23 +531,26 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                   <div className="flex items-center justify-between">
                     <div
                       onClick={() => setSelectedFolderId(folderId)}
-                      className="flex-1 cursor-pointer"
+                      className="flex-1 cursor-pointer min-w-0 pr-2"
                     >
-                      <div className="text-sm font-semibold">📁 {folder.name}</div>
+                      <div className="text-sm font-semibold truncate" title={folder.name}>📁 {folder.name}</div>
                       <div className="text-xs text-gray-400 mt-1">
                         {Object.values(analyses).filter((a: SavedAnalysis) => (a.folderId ?? null) === folderId).length}{' '}
                         analyses
                       </div>
                     </div>
+                    
+                    {/* Zorg dat knoppen ALTIJD zichtbaar zijn als de map is geselecteerd */}
                     {selectedFolderId === folderId && (
-                      <div className="flex gap-1">
+                      <div className="flex gap-1 shrink-0">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             openShareModal(folderId);
                           }}
-                          className="p-1 text-xs bg-blue-700 hover:bg-blue-600 rounded"
-                          title="Share"
+                          // Maak de knop paars als hij publiek is als visuele hint
+                          className={`p-1 text-xs rounded ${folder.isPublic ? 'bg-purple-700 hover:bg-purple-600' : 'bg-blue-700 hover:bg-blue-600'}`}
+                          title="Share / Public Settings"
                         >
                           🔗
                         </button>
@@ -452,16 +565,20 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                         >
                           ✎
                         </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteFolder(folderId);
-                          }}
-                          className="p-1 text-xs bg-red-700 hover:bg-red-600 rounded"
-                          title="Delete"
-                        >
-                          ✕
-                        </button>
+                        
+                        {/* Verberg ALLEEN de delete knop als hij gedeeld of publiek is */}
+                        {!folder.isPublic && !((folder as any).sharedWith && Object.keys((folder as any).sharedWith || {}).length > 0) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteFolder(folderId);
+                            }}
+                            className="p-1 text-xs bg-red-700 hover:bg-red-600 rounded"
+                            title="Delete"
+                          >
+                            ✕
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -552,7 +669,10 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
             {selectedPublicFolder && (
               <div className="text-xs text-gray-400 mb-2">
                 Owned by: <span className="text-gray-300">{(selectedPublicFolder as any).ownerDisplayName || selectedPublicFolder.ownerUserId}</span> •
-                Status: <span className="text-purple-400">Public</span>
+                Status:{' '}
+                <span className={selectedPublicFolder.isPublicWritable ? 'text-green-400' : 'text-purple-400'}>
+                  {selectedPublicFolder.isPublicWritable ? 'Public (writable for everyone)' : 'Public (read-only)'}
+                </span>
               </div>
             )}
           </div>
@@ -572,11 +692,11 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                     <div
                       onClick={() => {
                         if (isSelectedFolderShared && selectedSharedFolder) {
-                          onSelectAnalysis(analysisId, selectedSharedFolder.ownerUserId, cleanFolderId);
+                          onSelectAnalysis(analysisId, selectedSharedFolder.ownerUserId, cleanFolderId, selectedSharedFolder.permission === 'edit', 'shared');
                         } else if (isSelectedFolderPublic && selectedPublicFolder) {
-                          onSelectAnalysis(analysisId, selectedPublicFolder.ownerUserId, cleanFolderId);
+                          onSelectAnalysis(analysisId, selectedPublicFolder.ownerUserId, cleanFolderId, !!selectedPublicFolder.isPublicWritable, 'public');
                         } else {
-                          onSelectAnalysis(analysisId, undefined, selectedFolderId || undefined);
+                          onSelectAnalysis(analysisId, undefined, selectedFolderId || undefined, true, undefined);
                         }
                       }}
                       className="flex-1 cursor-pointer"
@@ -590,20 +710,24 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                       </div>
                     </div>
 
-                    {/* Folder selector */}
+                    {/* Folder selector (only in own folders: move to own or to public writable) */}
                     <select
                       onClick={(e) => e.stopPropagation()}
                       onChange={(e) => {
-                        const newFolderId = e.target.value === 'null' ? null : e.target.value;
+                        const val = e.target.value;
+                        const newFolderId = val === 'null' ? null : val;
                         handleMoveAnalysis(analysisId, newFolderId);
                       }}
-                      value={analysis.folderId || 'null'}
-                      disabled={(isSelectedFolderShared && !userCanEditSharedFolder) || isSelectedFolderPublic}
+                      value={
+                        isSelectedFolderShared || isSelectedFolderPublic
+                          ? 'null'
+                          : (analysis.folderId || 'null')
+                      }
+                      disabled={isSelectedFolderShared || isSelectedFolderPublic}
                       className={`mx-2 px-2 py-1 text-xs rounded border border-gray-500 ${
-                        (isSelectedFolderShared && !userCanEditSharedFolder) || isSelectedFolderPublic
-                          ? 'bg-gray-500 text-gray-400 cursor-not-allowed'
-                          : 'bg-gray-600 text-white'
+                        isSelectedFolderShared || isSelectedFolderPublic ? 'bg-gray-500 text-gray-400 cursor-not-allowed' : 'bg-gray-600 text-white'
                       }`}
+                      title={isSelectedFolderShared || isSelectedFolderPublic ? 'Use Clone to copy to your folders' : undefined}
                     >
                       <option value="null">Unsorted</option>
                       {Object.entries(folders).map(([folderId, folder]: [string, AnalysisFolder]) => (
@@ -611,11 +735,26 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                           {folder.name}
                         </option>
                       ))}
+                      {!isSelectedFolderShared && !isSelectedFolderPublic && Object.entries(publicFolders).filter(([, f]: [string, any]) => f.isPublicWritable).map(([folderId, folder]: [string, any]) => (
+                        <option key={`public_${folderId}`} value={`public_${folderId}`}>
+                          🌐 {folder.name} (public)
+                        </option>
+                      ))}
                     </select>
 
                     {/* Action buttons */}
-                    <div className="flex gap-2">
-                      {(!isSelectedFolderShared || userCanEditSharedFolder) && !isSelectedFolderPublic && (
+                    <div className="flex gap-2 items-center flex-wrap">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openCloneModal(analysisId);
+                        }}
+                        className="px-2 py-1 text-xs bg-gray-600 hover:bg-gray-500 rounded font-semibold"
+                        title="Clone to your folders"
+                      >
+                        Clone
+                      </button>
+                      {(!isSelectedFolderShared || userCanEditSharedFolder) && !(isSelectedFolderPublic && !userCanEditPublicFolder) && (
                         <>
                           <button
                             onClick={(e) => {
@@ -643,8 +782,11 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                       {isSelectedFolderShared && !userCanEditSharedFolder && (
                         <div className="text-xs text-yellow-400 font-semibold">Read-only</div>
                       )}
-                      {isSelectedFolderPublic && (
-                        <div className="text-xs text-purple-400 font-semibold">Public</div>
+                      {isSelectedFolderPublic && !userCanEditPublicFolder && (
+                        <div className="text-xs text-purple-400 font-semibold">Public (read-only)</div>
+                      )}
+                      {isSelectedFolderPublic && userCanEditPublicFolder && (
+                        <div className="text-xs text-green-400 font-semibold">Public (writable)</div>
                       )}
                     </div>
                   </div>
@@ -655,8 +797,46 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
         </div>
       </div>
 
+      {/* Clone Analysis Modal */}
+      {modal.type === 'clone_analysis' && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold mb-4">Clone Analysis</h3>
+            <p className="text-sm text-gray-300 mb-4">Save a copy of this analysis to your account.</p>
+            <div className="mb-4">
+              <label className="block text-sm font-semibold mb-2">Destination folder</label>
+              <select
+                value={cloneTargetFolderId || 'null'}
+                onChange={(e) => setCloneTargetFolderId(e.target.value === 'null' ? null : e.target.value)}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+              >
+                <option value="null">Unsorted</option>
+                {Object.entries(folders).map(([folderId, folder]: [string, AnalysisFolder]) => (
+                  <option key={folderId} value={folderId}>{folder.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setModal({ type: null }); setCloneTargetFolderId(null); }}
+                className="flex-1 px-3 py-2 bg-gray-600 hover:bg-gray-500 rounded font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCloneAnalysis}
+                disabled={isCloning}
+                className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-500 rounded font-semibold transition-colors disabled:opacity-50"
+              >
+                {isCloning ? 'Cloning...' : 'Clone'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal */}
-      {modal.type && modal.type !== 'share_folder' && (
+      {modal.type && modal.type !== 'share_folder' && modal.type !== 'clone_analysis' && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">z
             <h3 className="text-lg font-bold mb-4 capitalize">
@@ -784,6 +964,26 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                   {folderIsPublic ? '✓ Public' : 'Private'}
                 </button>
               </div>
+              {folderIsPublic && (
+                <div className="mt-3 flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-gray-300">Allow everyone to edit</div>
+                    <div className="text-[11px] text-gray-400 mt-1">
+                      Anyone can create, change, and delete analyses in this public folder
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleTogglePublicWritable}
+                    className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
+                      folderIsPublicWritable
+                        ? 'bg-green-600 hover:bg-green-500 text-white'
+                        : 'bg-gray-600 hover:bg-gray-500 text-gray-300'
+                    }`}
+                  >
+                    {folderIsPublicWritable ? '✓ Writable' : 'Read-only'}
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-2">

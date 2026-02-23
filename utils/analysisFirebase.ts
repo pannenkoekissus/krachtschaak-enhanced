@@ -23,6 +23,8 @@ export interface AnalysisFolder {
   ownerDisplayName?: string;
   isShared?: boolean;
   isPublic?: boolean;
+  // If true, everyone may create/edit analyses in this public folder
+  isPublicWritable?: boolean;
   permission?: 'read' | 'edit';
   sharedWith?: Record<string, string | 'read' | 'edit'>; // userId -> permission
 }
@@ -124,6 +126,13 @@ export const deleteFolder = async (
   folderId: string
 ): Promise<void> => {
   try {
+    // Prevent deleting folders that are public or shared
+    const folderSnap = await db.ref(`/analysisfolders/${userId}/${folderId}`).once('value');
+    const folderData = folderSnap.val() || {};
+    if (folderData.isPublic || (folderData.sharedWith && Object.keys(folderData.sharedWith).length > 0)) {
+      throw new Error('Cannot delete a public or shared folder');
+    }
+
     // Check if any analyses belong to this folder
     const snapshot = await db.ref(`/analyses/${userId}`).once('value');
     const analyses = snapshot.val() || {};
@@ -459,7 +468,8 @@ export const saveAnalysisToFolder = async (
 // Make a folder public
 export const makePublic = async (
   ownerUserId: string,
-  folderId: string
+  folderId: string,
+  isWritableForEveryone: boolean = false
 ): Promise<void> => {
   try {
     const folderSnapshot = await db.ref(`/analysisfolders/${ownerUserId}/${folderId}`).once('value');
@@ -473,6 +483,7 @@ export const makePublic = async (
     // Set folder as public
     await db.ref(`/analysisfolders/${ownerUserId}/${folderId}/isPublic`).set(true);
     await db.ref(`/analysisfolders/${ownerUserId}/${folderId}/ownerDisplayName`).set(displayName);
+    await db.ref(`/analysisfolders/${ownerUserId}/${folderId}/isPublicWritable`).set(isWritableForEveryone);
 
     // Add to public folders index
     await db.ref(`/publicFolders/${folderId}`).set({
@@ -481,7 +492,8 @@ export const makePublic = async (
       name: folder.name,
       ownerDisplayName: displayName,
       createdAt: folder.createdAt,
-      isPublic: true
+      isPublic: true,
+      isPublicWritable: isWritableForEveryone
     });
   } catch (error) {
     console.error('Error making folder public:', error);
@@ -497,11 +509,34 @@ export const makePrivate = async (
   try {
     // Set folder as private
     await db.ref(`/analysisfolders/${ownerUserId}/${folderId}/isPublic`).set(false);
+    await db.ref(`/analysisfolders/${ownerUserId}/${folderId}/isPublicWritable`).set(false);
 
     // Remove from public folders index
     await db.ref(`/publicFolders/${folderId}`).remove();
   } catch (error) {
     console.error('Error making folder private:', error);
+    throw error;
+  }
+};
+
+// Toggle whether a public folder is writable by everyone
+export const setPublicFolderWritable = async (
+  ownerUserId: string,
+  folderId: string,
+  isWritable: boolean
+): Promise<void> => {
+  try {
+    // Update flag on the owner's folder
+    await db.ref(`/analysisfolders/${ownerUserId}/${folderId}/isPublicWritable`).set(isWritable);
+
+    // If the folder is in the public index, update it there as well
+    const publicFolderRef = db.ref(`/publicFolders/${folderId}`);
+    const snapshot = await publicFolderRef.once('value');
+    if (snapshot.exists()) {
+      await publicFolderRef.update({ isPublicWritable: isWritable });
+    }
+  } catch (error) {
+    console.error('Error updating public folder writable flag:', error);
     throw error;
   }
 };
