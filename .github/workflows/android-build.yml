@@ -69,16 +69,29 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease
 
-      - name: Sign APK
-        uses: r0adkll/sign-android-release@v1
-        id: sign_app
-        with:
-          releaseDirectory: android/app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
-          alias: ${{ secrets.KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
-          buildToolsVersion: "34.0.0"
+      - name: Sign APK Manually
+        run: |
+          # 1. Decodeer de keystore uit je secret naar een echt bestand
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.keystore
+
+          # 2. Zoek het pad naar de nieuwste Android build-tools op de server
+          # Dit zorgt dat we niet afhankelijk zijn van een specifiek versienummer zoals 29.0.3
+          BUILD_TOOLS_PATH=$(ls -d $ANDROID_HOME/build-tools/* | tail -1)
+          echo "Gebruikte build-tools: $BUILD_TOOLS_PATH"
+
+          # 3. Zipalign de APK (nodig voor installatie)
+          # We zoeken de unsigned apk die Gradle net heeft gemaakt
+          UNSIGNED_APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
+          $BUILD_TOOLS_PATH/zipalign -v 4 "$UNSIGNED_APK" krachtschaak-aligned.apk
+
+          # 4. Onderteken de APK met de keystore
+          $BUILD_TOOLS_PATH/apksigner sign --ks release.keystore \
+            --ks-key-alias ${{ secrets.KEY_ALIAS }} \
+            --ks-pass pass:${{ secrets.KEYSTORE_PASSWORD }} \
+            --key-pass pass:${{ secrets.KEY_PASSWORD }} \
+            --out krachtschaak-final.apk krachtschaak-aligned.apk
+          
+          echo "APK_PATH=krachtschaak-final.apk" >> $GITHUB_ENV
 
       # Maak de release aan met de gegenereerde tag
       - name: Create Release
@@ -87,7 +100,7 @@ jobs:
           tag_name: latest
           name: Latest Build
           # We gebruiken de signed APK van de 'sign_app' stap
-          files: ${{ steps.sign_app.outputs.signedReleaseFile }}
+          files: ${{ env.APK_PATH }}
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
