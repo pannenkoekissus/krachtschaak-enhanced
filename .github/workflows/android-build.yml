@@ -67,16 +67,26 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleRelease
+
+      - name: Sign APK
+        uses: r0adkll/sign-android-release@v1
+        id: sign_app
+        with:
+          releaseDirectory: android/app/build/outputs/apk/release
+          signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
+          alias: ${{ secrets.KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
 
       # Maak de release aan met de gegenereerde tag
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.tag_gen.outputs.new_tag }}
-          name: Release ${{ steps.tag_gen.outputs.new_tag }}
-          body: "Automatische build na push naar main branch."
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          tag_name: latest
+          name: Latest Build
+          # We gebruiken de signed APK van de 'sign_app' stap
+          files: ${{ steps.sign_app.outputs.signedReleaseFile }}
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
