@@ -97,8 +97,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: Latest Build
+          tag_name: ${{ steps.tag_gen.outputs.new_tag }}
+          name: ${{ steps.tag_gen.outputs.new_tag }}
           # We gebruiken de signed APK van de 'sign_app' stap
           files: ${{ env.APK_PATH }}
           make_latest: true
