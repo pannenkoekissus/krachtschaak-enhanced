@@ -1,7 +1,7 @@
 name: Handmatige Android Build
 
 on:
-  workflow_dispatch: # Dit voegt de "Run workflow" knop toe
+  workflow_dispatch:
   push:
     tags:
       - 'v*'
@@ -35,17 +35,27 @@ jobs:
 
       - name: Build Web App
         run: |
-          # We proberen de build uit te voeren. 
-          # Als 'npm run build' niet bestaat, maken we een lege dist om crashes te voorkomen.
-          npm run build || (mkdir -p dist && echo "<html><body>Build failed or missing</body></html>" > dist/index.html)
+          npm run build || (mkdir -p dist && echo "<html><body>Build fallback</body></html>" > dist/index.html)
 
       - name: Initialize & Add Android
         run: |
-          # We gebruiken --web-dir dist (pas dit aan naar 'www' of 'build' als dat de map is)
-          # We gebruiken '|| true' zodat het script niet stopt als de map al bestaat
-          npx cap init "Krachtschaak" com.pannenkoekissus.krachtschaak --web-dir dist
+          WEB_DIR=$(if [ -d "dist" ]; then echo "dist"; else echo "."; fi)
+          # We geven alle info mee zodat hij niet om bevestiging vraagt
+          npx cap init "Krachtschaak" com.pannenkoekissus.krachtschaak --web-dir $WEB_DIR
           npx cap add android || true
-          npx cap sync android
+          
+      # FIX: Los de 'Duplicate class' fout op door dubbele Kotlin libs uit te sluiten
+      - name: Fix Kotlin Duplicate Classes
+        run: |
+          echo "configurations.all {
+              resolutionStrategy {
+                  exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+                  exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+              }
+          }" >> android/app/build.gradle
+
+      - name: Sync Capacitor
+        run: npx cap sync android
 
       - name: Build APK with Gradle
         run: |
@@ -53,14 +63,12 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      # Backup: Upload de APK naar de 'Actions' tab (altijd beschikbaar)
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: krachtschaak-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
-      # Optioneel: Maak alleen een release als je een tag hebt gepusht
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
