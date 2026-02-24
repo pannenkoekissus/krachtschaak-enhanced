@@ -1283,7 +1283,31 @@ const App: React.FC = () => {
 
         gameRef.on('value', onGameUpdate);
 
+        // Fallback polling: every 5 seconds, cheaply check the move count first.
+        // Only fetch the full game state if the remote is ahead of local.
+        const syncIntervalId = window.setInterval(async () => {
+            if (!gameRef) return;
+            try {
+                // Step 1: fetch only moveHistory — much cheaper than the full game state
+                const moveHistorySnap = await gameRef.child('moveHistory').once('value');
+                const remoteMove = moveHistorySnap.exists() ? (moveHistorySnap.val() as any[]).length : 0;
+                const localMove = Array.isArray(gameStateRef.current?.moveHistory) ? gameStateRef.current!.moveHistory.length : 0;
+
+                // Step 2: only pull the full state if remote is strictly ahead
+                if (remoteMove > localMove) {
+                    console.log(`[sync] Remote move ${remoteMove} > local move ${localMove}. Fetching full state.`);
+                    const fullSnapshot = await gameRef.once('value');
+                    if (fullSnapshot.exists()) {
+                        onGameUpdate(fullSnapshot);
+                    }
+                }
+            } catch (e) {
+                // Silently ignore — no internet is expected during this fallback
+            }
+        }, 5000);
+
         return () => {
+            window.clearInterval(syncIntervalId);
             if (playerInGameRef) {
                 onDisconnectRef.cancel();
             }
