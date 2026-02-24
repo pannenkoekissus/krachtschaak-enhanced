@@ -12,7 +12,7 @@ import BoardEditor from './components/BoardEditor';
 import Analysis from './components/Analysis';
 import AnalysisManager from './components/AnalysisManager';
 import ConfirmationModal from './components/ConfirmationModal';
-import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, GameMode, TimerSettings, PlayerInfo, SentChallenge, Move, ChatMessage, LobbyGame } from './types';
+import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, GameMode, TimerSettings, PlayerInfo, SentChallenge, Move, ChatMessage, LobbyGame, IncomingChallenge } from './types';
 import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, sanitizePiece } from './utils/game';
 import { getRatingCategory, RatingCategory, RATING_CATEGORIES } from './utils/ratings';
 import { getSharedFolders, getPublicFolders } from './utils/analysisFirebase';
@@ -119,6 +119,7 @@ const App: React.FC = () => {
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [chatInput, setChatInput] = useState("");
     const [activeTab, setActiveTab] = useState<'controls' | 'chat' | 'moves'>('controls');
+    const hasPlayedLowTimeSoundRef = useRef(false);
 
     // Local state for online interactions to prevent sending premature game state updates
     const [localPromotionState, setLocalPromotionState] = useState<PromotionData | null>(null);
@@ -158,6 +159,9 @@ const App: React.FC = () => {
     const [myRatings, setMyRatings] = useState<Record<RatingCategory, number> | null>(null);
     const [authLoading, setAuthLoading] = useState(true);
     const [showAuthModal, setShowAuthModal] = useState(false);
+    const [allMyGamesData, setAllMyGamesData] = useState<Record<string, GameState>>({});
+    const [incomingChallenges, setIncomingChallenges] = useState<IncomingChallenge[]>([]);
+    const [sentChallenges, setSentChallenges] = useState<SentChallenge[]>([]);
 
     const statusRef = useRef(status);
     const timerRef = useRef<number | null>(null);
@@ -268,17 +272,15 @@ const App: React.FC = () => {
     // Persistent Chat Read Status
     useEffect(() => {
         if (currentUser && gameRef && (activeTab === 'chat')) {
-            // Update last read timestamp in Firebase if we are in chat tab and messages exist
-            if (chatMessages.length > 0) {
-                const now = Date.now();
-                // Use update instead of set to avoid overwriting other user data
-                gameRef.child(`players/${currentUser.uid}`).update({ lastReadChatTimestamp: now });
-            }
+            // Mark all messages as read whenever we are looking at the chat
+            const now = Date.now();
+            gameRef.child(`players/${currentUser.uid}`).update({ lastReadChatTimestamp: now });
         }
     }, [activeTab, chatMessages.length, currentUser, gameRef]);
 
     const unreadChatCount = useMemo(() => {
         if (!currentUser) return 0;
+        // If we're looking at chat, show 0 unread locally
         if (activeTab === 'chat') return 0;
 
         const myPlayer = players[currentUser.uid];
@@ -936,7 +938,12 @@ const App: React.FC = () => {
         if (isRealtime && playerTimes && turnStartTime) {
             const timeAtTurnStart = playerTimes[turn];
             setDisplayedTime(playerTimes);
-            let hasPlayedLowTimeSound = false;
+
+            // Reset the low time sound trigger if the turn has changed (time is high again)
+            if (timeAtTurnStart > 10) {
+                hasPlayedLowTimeSoundRef.current = false;
+            }
+
             if (timerRef.current) clearInterval(timerRef.current);
             timerRef.current = window.setInterval(() => {
                 if (statusRef.current !== 'playing') {
@@ -949,13 +956,13 @@ const App: React.FC = () => {
                 }
                 const newTime = timeAtTurnStart - elapsedSeconds;
 
-                if (newTime <= 10 && newTime > 0 && !hasPlayedLowTimeSound) {
-                    const isGameScreen = gameMode === 'local' || gameMode === 'online_playing' || gameMode === 'online_spectating';
+                if (newTime <= 10 && newTime > 0 && !hasPlayedLowTimeSoundRef.current) {
+                    const isGameScreen = gameMode === 'online_playing' || gameMode === 'local' || gameMode === 'online_spectating';
                     if (isGameScreen && !reviewingGame) {
                         if (soundsEnabled) {
                             playLowTimeSound();
                         }
-                        hasPlayedLowTimeSound = true;
+                        hasPlayedLowTimeSoundRef.current = true;
                     }
                 }
 
@@ -1063,6 +1070,159 @@ const App: React.FC = () => {
         }
         return initialGameState;
     }, [loadGameState]);
+
+    //spectate functie
+    const handleOnlineSpectate = useCallback((id: string) => {
+        setGameId(id);
+        const ref = db.ref(`games/${id}`);
+        setGameRef(ref);
+
+        setGameMode('online_spectating'); // Nieuwe modus!
+        setMyOnlineColor(null); // Belangrijk: je bent geen wit of zwart
+
+        // Reset states
+        setRematchOffer(null);
+        setNextGameId(null);
+        setRatingChange(null);
+        setIsForcePowerMode(false);
+        setDraggedPiece(null);
+        setActiveTab('controls');
+    }, []);
+
+    const handleOnlineGameStart = useCallback((id: string, color: Color) => {
+        setMyOnlineColor(color);
+        setGameId(id);
+        const ref = db.ref(`games/${id}`);
+        setGameRef(ref);
+        setGameMode('online_playing');
+
+        setRematchOffer(null);
+        setNextGameId(null);
+        setRatingChange(null);
+        setIsForcePowerMode(false);
+        setDraggedPiece(null);
+        setActiveTab('controls');
+
+    }, []);
+
+    // Background Global Monitor for Low Time "Warping" & Lobby Data Sync
+    useEffect(() => {
+        if (!currentUser || !isFirebaseConfigured) return;
+
+        let gameListeners: Record<string, (snap: any) => void> = {};
+        const userGamesRef = db.ref(`userGames/${currentUser.uid}`);
+
+        const onUserGamesUpdate = (snap: any) => {
+            const gameIds = snap.val() || {};
+            const currentGameKeys = Object.keys(gameIds);
+            const listeningGameKeys = Object.keys(gameListeners);
+
+            // Cleanup old listeners
+            listeningGameKeys.forEach(gid => {
+                if (!currentGameKeys.includes(gid)) {
+                    db.ref(`games/${gid}`).off('value', gameListeners[gid]);
+                    delete gameListeners[gid];
+                    setAllMyGamesData(prev => {
+                        const newState = { ...prev };
+                        delete newState[gid];
+                        return newState;
+                    });
+                }
+            });
+
+            // Add new listeners
+            currentGameKeys.forEach(gid => {
+                if (gameListeners[gid]) return;
+
+                const gRef = db.ref(`games/${gid}`);
+                const listener = (gSnap: any) => {
+                    const gameData = gSnap.val() as GameState;
+                    if (!gameData) {
+                        setAllMyGamesData(prev => {
+                            const newState = { ...prev };
+                            delete newState[gid];
+                            return newState;
+                        });
+                        return;
+                    }
+
+                    setAllMyGamesData(prev => ({ ...prev, [gid]: gameData }));
+
+                    // WARP LOGIC (if not currently in this game)
+                    if (gid !== gameId) {
+                        const myColor = gameData.playerColors.white === currentUser.uid ? Color.White : Color.Black
+
+                        // 2. Warp on Low Time (if playing and it's my turn)
+                        if (gameData.status === 'playing' && gameData.turn === myColor) {
+                            const isRealtime = gameData.timerSettings && 'initialTime' in gameData.timerSettings;
+                            if (isRealtime) {
+                                const timeAtTurnStart = gameData.playerTimes?.[myColor] || 0;
+                                const turnStartTime = gameData.turnStartTime || 0;
+                                const elapsed = (Date.now() - turnStartTime + serverOffset) / 1000;
+                                const remaining = timeAtTurnStart - elapsed;
+
+                                if (remaining <= 10 && remaining > 0) {
+                                    // Only warp if user hasn't disabled it (by deleting the code previously, maybe they want it back?)
+                                    // I'll keep the logic commented out or omitted if they deleted it.
+                                    // But they asked for the listener to be immediate.
+
+                                    if (soundsEnabled && !hasPlayedLowTimeSoundRef.current) {
+                                        playLowTimeSound();
+                                        hasPlayedLowTimeSoundRef.current = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                };
+
+                gRef.on('value', listener);
+                gameListeners[gid] = listener;
+            });
+        };
+
+        userGamesRef.on('value', onUserGamesUpdate);
+
+        // Challenge Listeners
+        const challengesRef = db.ref(`challenges/${currentUser.uid}`);
+        const challengesListener = (snapshot: any) => {
+            const data = snapshot.val();
+            if (data) {
+                const challenges: IncomingChallenge[] = Object.keys(data).map(key => ({
+                    id: key,
+                    ...data[key]
+                }));
+                setIncomingChallenges(challenges.sort((a, b) => b.timestamp - a.timestamp));
+            } else {
+                setIncomingChallenges([]);
+            }
+        };
+        challengesRef.on('value', challengesListener);
+
+        const sentChallengesRef = db.ref(`sentChallenges/${currentUser.uid}`);
+        const sentListener = (snapshot: any) => {
+            const data = snapshot.val();
+            if (data) {
+                const challenges: SentChallenge[] = Object.keys(data).map(key => ({
+                    id: key,
+                    ...data[key]
+                }));
+                setSentChallenges(challenges.sort((a, b) => b.timestamp - a.timestamp));
+            } else {
+                setSentChallenges([]);
+            }
+        };
+        sentChallengesRef.on('value', sentListener);
+
+        return () => {
+            userGamesRef.off('value', onUserGamesUpdate);
+            Object.entries(gameListeners).forEach(([gid, l]) => {
+                db.ref(`games/${gid}`).off('value', l);
+            });
+            challengesRef.off('value', challengesListener);
+            sentChallengesRef.off('value', sentListener);
+        };
+    }, [currentUser, isFirebaseConfigured, gameId, serverOffset, soundsEnabled, handleOnlineGameStart, gameMode]);
 
     const handleBackToMenu = useCallback(async () => {
         const localStatus = statusRef.current;
@@ -1219,40 +1379,6 @@ const App: React.FC = () => {
             }, 3000);
         }
     };
-    //spectate functie
-    const handleOnlineSpectate = useCallback((id: string) => {
-        setGameId(id);
-        const ref = db.ref(`games/${id}`);
-        setGameRef(ref);
-
-        setGameMode('online_spectating'); // Nieuwe modus!
-        setMyOnlineColor(null); // Belangrijk: je bent geen wit of zwart
-
-        // Reset states
-        setRematchOffer(null);
-        setNextGameId(null);
-        setRatingChange(null);
-        setIsForcePowerMode(false);
-        setDraggedPiece(null);
-        setActiveTab('controls');
-    }, []);
-
-    const handleOnlineGameStart = useCallback((id: string, color: Color) => {
-        setMyOnlineColor(color);
-        setGameId(id);
-        const ref = db.ref(`games/${id}`);
-        setGameRef(ref);
-        setGameMode('online_playing');
-
-        setRematchOffer(null);
-        setNextGameId(null);
-        setRatingChange(null);
-        setIsForcePowerMode(false);
-        setDraggedPiece(null);
-        setActiveTab('controls');
-
-    }, []);
-
     useEffect(() => {
         if (!gameRef || !currentUser) return;
 
@@ -2987,6 +3113,9 @@ const App: React.FC = () => {
                     setSoundsEnabled={setSoundsEnabled}
                     currentLobbyTab={lobbyView}
                     setCurrentLobbyTab={setLobbyView}
+                    allMyGames={allMyGamesData}
+                    incomingChallenges={incomingChallenges}
+                    sentChallenges={sentChallenges}
                 />
             );
         }

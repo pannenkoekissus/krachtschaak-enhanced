@@ -35,6 +35,9 @@ interface OnlineLobbyProps {
     setCurrentLobbyTab: (tab: LobbyTab) => void;
     onSpectate: (gameId: string) => void;
     onAnalyse: (game: GameState) => void;
+    allMyGames: Record<string, GameState>;
+    incomingChallenges: IncomingChallenge[];
+    sentChallenges: SentChallenge[];
 }
 
 const formatTime = (totalSeconds: number | null): string => {
@@ -172,20 +175,18 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
     premovesEnabled, setPremovesEnabled, moveConfirmationEnabled, setMoveConfirmationEnabled,
     drawConfirmationEnabled, setDrawConfirmationEnabled, resignConfirmationEnabled, setResignConfirmationEnabled,
     showPowerPieces, setShowPowerPieces, showPowerRings, setShowPowerRings, showOriginalType, setShowOriginalType, soundsEnabled, setSoundsEnabled,
-    currentLobbyTab, setCurrentLobbyTab, onSpectate, onAnalyse
+    currentLobbyTab, setCurrentLobbyTab, onSpectate, onAnalyse,
+    allMyGames, incomingChallenges, sentChallenges
 }) => {
     const [openGames, setOpenGames] = useState<LobbyGame[]>([]);
     const [myCurrentGames, setMyCurrentGames] = useState<ActiveGameSummary[]>([]);
     const [myFinishedGames, setMyFinishedGames] = useState<{ id: string, data: GameState }[]>([]);
     const [error, setError] = useState<string | null>(null);
-    const [allMyGames, setAllMyGames] = useState<Record<string, GameState>>({});
     const [tick, setTick] = useState(0); // Force update for timers
     const [showSettings, setShowSettings] = useState(false);
     const [liveGames, setLiveGames] = useState<LobbyGame[]>([]);
 
     // Challenge Logic
-    const [incomingChallenges, setIncomingChallenges] = useState<IncomingChallenge[]>([]);
-    const [sentChallenges, setSentChallenges] = useState<SentChallenge[]>([]);
     const [challengeTarget, setChallengeTarget] = useState<UserInfo | null>(null); // Who we are trying to challenge
 
     const [isLobbyLoading, setIsLobbyLoading] = useState(true);
@@ -353,119 +354,6 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
         });
     }, [myCurrentGames, onGameStart]);
 
-    // Listener for User's Own Games (standard sync)
-    useEffect(() => {
-        if (!userUid || (currentLobbyTab !== 'current_games' && currentLobbyTab !== 'finished_games')) return;
-
-        const gameListeners = gameListenersRef.current;
-        const userGamesRef = db.ref(`userGames/${userUid}`);
-
-        const listener = (snapshot: any) => {
-            const gameIds = snapshot.val() || {};
-            const currentGameKeys = Object.keys(gameIds);
-            const listeningGameKeys = Object.keys(gameListeners);
-
-            for (const gameId of listeningGameKeys) {
-                if (!currentGameKeys.includes(gameId)) {
-                    db.ref(`games/${gameId}`).off('value', gameListeners[gameId]);
-                    delete gameListeners[gameId];
-                    setAllMyGames(prev => {
-                        const newState = { ...prev };
-                        delete newState[gameId];
-                        return newState;
-                    });
-                }
-            }
-
-            for (const gameId of currentGameKeys) {
-                if (!listeningGameKeys.includes(gameId)) {
-                    const gameListener = (gameSnapshot: any) => {
-                        const gameData = gameSnapshot.val();
-                        if (gameData) {
-                            setAllMyGames(prev => ({ ...prev, [gameId]: gameData }));
-                        } else {
-                            setAllMyGames(prev => {
-                                const newState = { ...prev };
-                                delete newState[gameId];
-                                return newState;
-                            });
-                        }
-                    };
-                    db.ref(`games/${gameId}`).on('value', gameListener);
-                    gameListeners[gameId] = gameListener;
-                }
-            }
-        };
-
-        userGamesRef.on('value', listener);
-
-        return () => {
-            userGamesRef.off('value', listener);
-            for (const gameId in gameListeners) {
-                db.ref(`games/${gameId}`).off('value', gameListeners[gameId]);
-            }
-            gameListenersRef.current = {};
-        };
-    }, [userUid, currentLobbyTab]);
-
-    // Listener for Incoming Challenges
-    useEffect(() => {
-        if (!userUid || currentLobbyTab !== 'challenges') return;
-        const challengesRef = db.ref(`challenges/${userUid}`);
-
-        const listener = (snapshot: any) => {
-            const data = snapshot.val();
-            if (data) {
-                const challenges: IncomingChallenge[] = Object.keys(data).map(key => {
-                    const val = data[key];
-                    // Normalize data to handle potential casing issues from legacy or manual edits
-                    return {
-                        id: key,
-                        fromUid: val.fromUid,
-                        fromName: val.fromName,
-                        fromRating: val.fromRating,
-                        timerSettings: val.timerSettings || val.TimerSettings || null,
-                        ratingCategory: val.ratingCategory,
-                        isRated: typeof val.isRated === 'boolean' ? val.isRated : (val.IsRated ?? true),
-                        timestamp: val.timestamp,
-                        challengeColor: val.challengeColor
-                    };
-                });
-                setIncomingChallenges(challenges.sort((a, b) => b.timestamp - a.timestamp));
-            } else {
-                setIncomingChallenges([]);
-            }
-        };
-
-        const onError = (err: any) => {
-            console.error("Error reading challenges:", err);
-            setError("Failed to load challenges (Permission Denied?)");
-        }
-
-        challengesRef.on('value', listener, onError);
-        return () => challengesRef.off();
-    }, [userUid, currentLobbyTab]);
-
-    // Listener for Sent Challenges
-    useEffect(() => {
-        if (!userUid || currentLobbyTab !== 'challenges') return;
-        const sentChallengesRef = db.ref(`sentChallenges/${userUid}`);
-
-        const listener = (snapshot: any) => {
-            const data = snapshot.val();
-            if (data) {
-                const challenges: SentChallenge[] = Object.keys(data).map(key => ({
-                    id: key,
-                    ...data[key]
-                }));
-                setSentChallenges(challenges.sort((a, b) => b.timestamp - a.timestamp));
-            } else {
-                setSentChallenges([]);
-            }
-        };
-        sentChallengesRef.on('value', listener);
-        return () => sentChallengesRef.off();
-    }, [userUid, currentLobbyTab]);
 
     // Process Games List for UI
     useEffect(() => {

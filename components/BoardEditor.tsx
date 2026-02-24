@@ -16,6 +16,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
     const [turn, setTurn] = useState<Color>(initialTurn || Color.White);
     const [selectedPalettePiece, setSelectedPalettePiece] = useState<{ type: PieceType, color: Color } | null>(null);
     const [selectedPower, setSelectedPower] = useState<PieceType | null>(null);
+    const [selectedOriginalType, setSelectedOriginalType] = useState<PieceType | null>(null);
 
     const clearBoard = () => {
         setBoard(Array(8).fill(null).map(() => Array(8).fill(null)));
@@ -47,7 +48,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                 type: selectedPalettePiece.type,
                 color: selectedPalettePiece.color,
                 power: selectedPower,
-                originalType: selectedPalettePiece.type,
+                originalType: selectedOriginalType || selectedPalettePiece.type,
                 isKing: selectedPalettePiece.type === PieceType.King,
                 hasMoved: false
             };
@@ -149,6 +150,33 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                             title="No Power"
                         >
                             <span className="text-xs font-bold">NONE</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                    <label className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Original Piece Type</label>
+                    <div className="grid grid-cols-6 gap-2 bg-gray-700 p-2 rounded-lg">
+                        {[PieceType.Pawn, PieceType.Knight, PieceType.Bishop, PieceType.Rook, PieceType.Queen].map((type) => (
+                            <div
+                                key={type}
+                                className={`aspect-square cursor-pointer rounded-md flex items-center justify-center transition-all ${selectedOriginalType === type ? 'bg-blue-900 ring-2 ring-blue-400 scale-110 shadow-lg' : 'bg-gray-600 hover:bg-gray-500'
+                                    }`}
+                                onClick={() => setSelectedOriginalType(type === selectedOriginalType ? null : type)}
+                                title={`Original: ${type}`}
+                            >
+                                <div className="w-8 h-8 opacity-60">
+                                    <PieceComponent piece={{ type, color: Color.White, power: null, originalType: type, isKing: false }} />
+                                </div>
+                            </div>
+                        ))}
+                        <div
+                            className={`aspect-square cursor-pointer rounded-md flex items-center justify-center transition-all ${selectedOriginalType === null ? 'bg-gray-500 ring-2 ring-gray-300 scale-110 shadow-lg' : 'bg-gray-600 hover:bg-gray-500'
+                                }`}
+                            onClick={() => setSelectedOriginalType(null)}
+                            title="Default (Same as Visual)"
+                        >
+                            <span className="text-[10px] font-bold">DEF</span>
                         </div>
                     </div>
                 </div>
