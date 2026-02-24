@@ -18,6 +18,7 @@ import { getRatingCategory, RatingCategory, RATING_CATEGORIES } from './utils/ra
 import { getSharedFolders, getPublicFolders } from './utils/analysisFirebase';
 import { isFirebaseConfigured, auth, db } from './firebaseConfig';
 import SettingsModal from './components/SettingsModal';
+import useOnlineStatus from './utils/useOnlineStatus';
 
 var continueGameClicks = -1;
 const formatTime = (totalSeconds: number | null | undefined): string => {
@@ -51,6 +52,7 @@ const formatTimerSettingText = (settings: TimerSettings) => {
 
 
 const App: React.FC = () => {
+    const isOnline = useOnlineStatus();
     const [board, setBoard] = useState<BoardState>(() => createInitialBoard());
     const [turn, setTurn] = useState<Color>(Color.White);
     const [selectedPiece, setSelectedPiece] = useState<Position | null>(null);
@@ -2760,7 +2762,19 @@ const App: React.FC = () => {
                 analysisPublicFolders={analysisPublicFolders}
                 currentUser={currentUser}
                 onBackToAnalysisManager={() => {
-                    setGameMode('analysis_manager');
+                    if (!isOnline) {
+                        if (analysisReturnTo) {
+                            setGameMode(analysisReturnTo.mode);
+                            setLobbyView(analysisReturnTo.lobbyView);
+                            setReviewingGame(analysisReturnTo.reviewingGame);
+                            setAnalysisReturnTo(null);
+                        } else {
+                            setGameMode('menu');
+                        }
+                    }
+                    else {
+                        setGameMode('analysis_manager');
+                    }
                 }}
             />;
         }
@@ -2795,6 +2809,11 @@ const App: React.FC = () => {
                     <h1 className="text-5xl md:text-7xl font-bold mb-8 text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500">
                         Krachtschaak
                     </h1>
+                    {isFirebaseConfigured && !isOnline && (
+                        <div className="flex items-center gap-2 bg-yellow-900/60 border border-yellow-600 text-yellow-200 px-4 py-3 rounded-lg mb-4 text-sm font-semibold w-full max-w-md">
+                            <span>📡</span> You are offline. Online play and analysis syncing are unavailable.
+                        </div>
+                    )}
                     {menuMessage && (
                         <div className={`mb-6 p-4 rounded-lg ${menuMessage.type === 'error' ? 'bg-red-600' : 'bg-blue-600'} text-white font-semibold shadow-lg`}>
                             {menuMessage.text}

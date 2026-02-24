@@ -1,4 +1,3 @@
-// DO NOT MODIFY THIS FILE UNLESS INSTRUCTED TO DO SO
 // This file is populated with the public configuration for your Firebase project.
 
 // IMPORTANT: For this to work, you must enable the Realtime Database
@@ -13,20 +12,20 @@
 // Extend the global Window interface to declare the firebase object
 declare global {
     interface Window {
-        firebase: any; 
+        firebase: any;
     }
 }
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyDuQk34hZnfNSkD0tEFQvXnaHmffFsGcOQ",
-  authDomain: "gen-lang-client-0495001492.firebaseapp.com",
-  databaseURL: "https://gen-lang-client-0495001492-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "gen-lang-client-0495001492",
-  storageBucket: "gen-lang-client-0495001492.firebasestorage.app",
-  messagingSenderId: "431186330751",
-  appId: "1:431186330751:web:8f61c2843ed8c249946b4a",
-  measurementId: "G-YDXLJF6J63"
+    apiKey: "AIzaSyDuQk34hZnfNSkD0tEFQvXnaHmffFsGcOQ",
+    authDomain: "gen-lang-client-0495001492.firebaseapp.com",
+    databaseURL: "https://gen-lang-client-0495001492-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "gen-lang-client-0495001492",
+    storageBucket: "gen-lang-client-0495001492.firebasestorage.app",
+    messagingSenderId: "431186330751",
+    appId: "1:431186330751:web:8f61c2843ed8c249946b4a",
+    measurementId: "G-YDXLJF6J63"
 };
 
 
@@ -52,11 +51,11 @@ if (isFirebaseConfigured) {
         // Initialize Firebase
         // This check prevents Firebase from being initialized multiple times.
         if (!window.firebase.apps.length) {
-          window.firebase.initializeApp(firebaseConfig);
-          // It's good practice to check if analytics is available before calling it
-          if (window.firebase.analytics) {
-            window.firebase.analytics(); // Initialize Analytics
-          }
+            window.firebase.initializeApp(firebaseConfig);
+            // It's good practice to check if analytics is available before calling it
+            if (window.firebase.analytics) {
+                window.firebase.analytics(); // Initialize Analytics
+            }
         }
 
         // Export the auth instance for use in other parts of the app

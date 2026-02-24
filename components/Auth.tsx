@@ -1,8 +1,8 @@
 
-// DO NOT MODIFY THIS FILE UNLESS INSTRUCTED TO DO SO
 import React, { useState } from 'react';
-import { auth, db } from '../firebaseConfig';
+import { auth, db, isFirebaseConfigured } from '../firebaseConfig';
 import { RatingCategory, RATING_CATEGORIES } from '../utils/ratings';
+import useOnlineStatus from '../utils/useOnlineStatus';
 
 interface AuthProps {
     onClose: () => void;
@@ -10,6 +10,7 @@ interface AuthProps {
 }
 
 const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
+    const isOnline = useOnlineStatus();
     const [authView, setAuthView] = useState<'signIn' | 'signUp' | 'forgotPassword'>('signIn');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -31,7 +32,7 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
         setIsPasswordVisible(false);
         setAuthView('signIn');
     }
-    
+
     const handleAuthAction = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
@@ -62,16 +63,16 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
 
                 const userCredential = await auth.createUserWithEmailAndPassword(email, password);
                 await userCredential.user.updateProfile({ displayName: trimmedName });
-                
+
                 // Reserve username with UID
                 await usernameRef.set(userCredential.user.uid);
                 // Store email in users section
                 await db.ref(`users/${userCredential.user.uid}/email`).set(email);
 
                 await userCredential.user.sendEmailVerification();
-                
+
                 await auth.signOut();
-                
+
                 setMessage("Account created! Please check your email for a verification link, then you can sign in.");
                 setAuthView('signIn');
 
@@ -118,20 +119,20 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
                     default:
                         // Also check for the generic message for some environments
                         if (err.message?.includes('INVALID_LOGIN_CREDENTIALS')) {
-                             setError("Wrong login credentials. Please try again.");
+                            setError("Wrong login credentials. Please try again.");
                         } else {
                             setError(err.message || "An unknown error occurred.");
                         }
                         break;
                 }
             } else { // Handle errors for signUp view
-                 setError(err.message || "An unknown error occurred.");
+                setError(err.message || "An unknown error occurred.");
             }
         } finally {
             setIsLoading(false);
         }
     };
-    
+
     const handlePasswordReset = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
@@ -156,7 +157,7 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
     const handleAnonymousSignIn = async () => {
         setIsLoading(true);
         clearState();
-        
+
         if (!auth) {
             setError("Firebase is not configured. Cannot perform authentication.");
             setIsLoading(false);
@@ -177,7 +178,7 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
                 ratingsData = { ratings: initialRatings };
                 await userRatingRef.set(ratingsData);
             }
-            
+
             onAuthSuccess(ratingsData);
             onClose();
         } catch (err: any) {
@@ -196,15 +197,15 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
             <div className="mb-2">
                 <label className="block mb-1 text-md font-medium text-gray-300">Password</label>
                 <div className="relative">
-                    <input 
-                        type={isPasswordVisible ? 'text' : 'password'} 
-                        value={password} 
-                        onChange={e => { setPassword(e.target.value); clearState(); }} 
-                        required 
-                        className="w-full p-2 pr-10 bg-gray-700 text-white rounded-lg border-2 border-gray-600 focus:outline-none focus:border-green-500" 
+                    <input
+                        type={isPasswordVisible ? 'text' : 'password'}
+                        value={password}
+                        onChange={e => { setPassword(e.target.value); clearState(); }}
+                        required
+                        className="w-full p-2 pr-10 bg-gray-700 text-white rounded-lg border-2 border-gray-600 focus:outline-none focus:border-green-500"
                     />
-                    <button 
-                        type="button" 
+                    <button
+                        type="button"
                         onClick={() => setIsPasswordVisible(!isPasswordVisible)}
                         className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-white"
                         aria-label={isPasswordVisible ? "Hide password" : "Show password"}
@@ -223,18 +224,18 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
                     </button>
                 </div>
             </div>
-             <div className="text-right mb-4">
-                 <a href="#" onClick={(e) => { e.preventDefault(); clearState(); setAuthView('forgotPassword'); }} className="text-sm text-green-400 hover:underline">Forgot Password?</a>
+            <div className="text-right mb-4">
+                <a href="#" onClick={(e) => { e.preventDefault(); clearState(); setAuthView('forgotPassword'); }} className="text-sm text-green-400 hover:underline">Forgot Password?</a>
             </div>
             <button type="submit" disabled={isLoading} className="w-full py-3 bg-purple-600 hover:bg-purple-700 rounded-lg text-lg font-semibold transition-colors disabled:bg-gray-500">
                 {isLoading ? 'Loading...' : 'Sign In'}
             </button>
         </form>
     );
-    
+
     const renderSignUp = () => (
         <form onSubmit={handleAuthAction}>
-             <div className="mb-4">
+            <div className="mb-4">
                 <label className="block mb-1 text-md font-medium text-gray-300">Display Name</label>
                 <input type="text" value={displayName} onChange={e => setDisplayName(e.target.value)} required minLength={3} maxLength={20} className="w-full p-2 bg-gray-700 text-white rounded-lg border-2 border-gray-600 focus:outline-none focus:border-green-500" />
             </div>
@@ -269,12 +270,17 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
         <div className="fixed inset-0 flex items-center justify-center z-50">
             <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md relative">
                 <button onClick={onClose} className="absolute top-2 right-3 text-2xl text-gray-400 hover:text-white">&times;</button>
+                {isFirebaseConfigured && !isOnline && (
+                    <div className="flex items-center gap-2 bg-yellow-900/60 border border-yellow-600 text-yellow-200 px-3 py-2 rounded-lg mb-4 text-sm font-semibold">
+                        <span>📡</span> You are offline. Sign-in requires an internet connection.
+                    </div>
+                )}
                 <h2 className="text-3xl font-bold mb-6 text-center text-green-400">
                     {authView === 'signIn' ? 'Sign In' : authView === 'signUp' ? 'Create Account' : 'Reset Password'}
                 </h2>
                 {error && <p className="bg-red-900 border border-red-500 text-red-300 p-3 rounded-lg mb-4 font-semibold text-center">{error}</p>}
                 {message && <p className="bg-green-900 border border-green-500 text-green-300 p-3 rounded-lg mb-4 font-semibold text-center">{message}</p>}
-                
+
                 {authView === 'signIn' && renderSignIn()}
                 {authView === 'signUp' && renderSignUp()}
                 {authView === 'forgotPassword' && renderForgotPassword()}
@@ -286,12 +292,12 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
                     {authView === 'signUp' && (
                         <p className="text-gray-300">Already have an account? <a href="#" onClick={(e) => { e.preventDefault(); resetToSignIn(); }} className="font-semibold text-green-400 hover:underline">Sign In</a></p>
                     )}
-                     {authView === 'forgotPassword' && (
+                    {authView === 'forgotPassword' && (
                         <p className="text-gray-300">Remember your password? <a href="#" onClick={(e) => { e.preventDefault(); resetToSignIn(); }} className="font-semibold text-green-400 hover:underline">Sign In</a></p>
                     )}
                     <div className="my-4 flex items-center"><div className="flex-grow border-t border-gray-600"></div><span className="flex-shrink mx-4 text-gray-400">OR</span><div className="flex-grow border-t border-gray-600"></div></div>
                     <button onClick={handleAnonymousSignIn} disabled={isLoading} className="w-full py-3 bg-gray-600 hover:bg-gray-700 rounded-lg text-lg font-semibold transition-colors disabled:bg-gray-500">
-                         {isLoading ? 'Loading...' : 'Continue as Guest'}
+                        {isLoading ? 'Loading...' : 'Continue as Guest'}
                     </button>
                 </div>
             </div>

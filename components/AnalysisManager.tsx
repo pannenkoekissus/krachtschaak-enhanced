@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { isFirebaseConfigured } from '../firebaseConfig';
+import useOnlineStatus from '../utils/useOnlineStatus';
 import {
   getAllFolders,
   getAllAnalyses,
@@ -44,6 +46,7 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
   onSelectAnalysis,
   onBack
 }) => {
+  const isOnline = useOnlineStatus();
   const [folders, setFolders] = useState<Record<string, AnalysisFolder>>({});
   const [analyses, setAnalyses] = useState<Record<string, SavedAnalysis>>({});
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
@@ -67,11 +70,11 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
   // Check if selected folder is shared
   const isSelectedFolderShared = selectedFolderId?.startsWith('shared_');
   const isSelectedFolderPublic = selectedFolderId?.startsWith('public_');
-  const cleanFolderId = isSelectedFolderShared 
-    ? selectedFolderId.replace('shared_', '') 
-    : isSelectedFolderPublic 
-    ? selectedFolderId.replace('public_', '')
-    : selectedFolderId;
+  const cleanFolderId = isSelectedFolderShared
+    ? selectedFolderId.replace('shared_', '')
+    : isSelectedFolderPublic
+      ? selectedFolderId.replace('public_', '')
+      : selectedFolderId;
   const selectedSharedFolder = isSelectedFolderShared
     ? sharedFolders[cleanFolderId]
     : null;
@@ -83,8 +86,8 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
   const effectiveOwnerId = isSelectedFolderShared && selectedSharedFolder
     ? selectedSharedFolder.ownerUserId
     : isSelectedFolderPublic && selectedPublicFolder
-    ? selectedPublicFolder.ownerUserId
-    : userId;
+      ? selectedPublicFolder.ownerUserId
+      : userId;
 
   // Load data on mount
   useEffect(() => {
@@ -441,11 +444,11 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
   // For public folders, we use publicFolderAnalyses instead of analyses
   const currentAnalyses = isSelectedFolderShared
     ? Object.entries(sharedFolderAnalyses)
-        .sort(([, a]: [string, SavedAnalysis], [, b]: [string, SavedAnalysis]) => b.updatedAt - a.updatedAt)
+      .sort(([, a]: [string, SavedAnalysis], [, b]: [string, SavedAnalysis]) => b.updatedAt - a.updatedAt)
     : isSelectedFolderPublic
-    ? Object.entries(publicFolderAnalyses)
+      ? Object.entries(publicFolderAnalyses)
         .sort(([, a]: [string, SavedAnalysis], [, b]: [string, SavedAnalysis]) => b.updatedAt - a.updatedAt)
-    : Object.entries(analyses)
+      : Object.entries(analyses)
         .filter(([, analysis]: [string, SavedAnalysis]) => (analysis.folderId ?? null) === selectedFolderId)
         .sort(([, a]: [string, SavedAnalysis], [, b]: [string, SavedAnalysis]) => b.updatedAt - a.updatedAt);
 
@@ -472,6 +475,12 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
           Back to Menu
         </button>
       </div>
+
+      {isFirebaseConfigured && !isOnline && (
+        <div className="flex items-center gap-2 bg-yellow-900/60 border border-yellow-600 text-yellow-200 px-4 py-2 rounded-lg mb-4 text-sm font-semibold">
+          <span>📡</span> You are offline. Changes will not be saved until you reconnect.
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-900/40 border border-red-600 text-red-200 px-4 py-2 rounded mb-4">
@@ -503,11 +512,10 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
           {/* Root/Unsorted folder */}
           <div
             onClick={() => setSelectedFolderId(null)}
-            className={`p-3 rounded mb-2 cursor-pointer transition-colors ${
-              selectedFolderId === null
-                ? 'bg-green-600 text-white'
-                : 'bg-gray-700 hover:bg-gray-600'
-            }`}
+            className={`p-3 rounded mb-2 cursor-pointer transition-colors ${selectedFolderId === null
+              ? 'bg-green-600 text-white'
+              : 'bg-gray-700 hover:bg-gray-600'
+              }`}
           >
             <div className="text-sm font-semibold">📁 Unsorted</div>
             <div className="text-xs text-gray-400 mt-1">
@@ -522,11 +530,10 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
               .map(([folderId, folder]: [string, AnalysisFolder]) => (
                 <div
                   key={folderId}
-                  className={`p-3 rounded group transition-colors ${
-                    selectedFolderId === folderId
-                      ? 'bg-green-600 text-white'
-                      : 'bg-gray-700 hover:bg-gray-600'
-                  }`}
+                  className={`p-3 rounded group transition-colors ${selectedFolderId === folderId
+                    ? 'bg-green-600 text-white'
+                    : 'bg-gray-700 hover:bg-gray-600'
+                    }`}
                 >
                   <div className="flex items-center justify-between">
                     <div
@@ -539,7 +546,7 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                         analyses
                       </div>
                     </div>
-                    
+
                     {/* Zorg dat knoppen ALTIJD zichtbaar zijn als de map is geselecteerd */}
                     {selectedFolderId === folderId && (
                       <div className="flex gap-1 shrink-0">
@@ -565,7 +572,7 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                         >
                           ✎
                         </button>
-                        
+
                         {/* Verberg ALLEEN de delete knop als hij gedeeld of publiek is */}
                         {!folder.isPublic && !((folder as any).sharedWith && Object.keys((folder as any).sharedWith || {}).length > 0) && (
                           <button
@@ -596,16 +603,15 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                   .map(([sharedFolderId, sharedFolder]: any) => (
                     <div
                       key={sharedFolderId}
-                      className={`p-3 rounded text-sm transition-colors ${
-                        selectedFolderId === `shared_${sharedFolderId}`
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-700 hover:bg-gray-600'
-                      }`}
+                      className={`p-3 rounded text-sm transition-colors ${selectedFolderId === `shared_${sharedFolderId}`
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 hover:bg-gray-600'
+                        }`}
                     >
                       <div onClick={() => setSelectedFolderId(`shared_${sharedFolderId}`)} className="cursor-pointer">
                         <div className="font-semibold">🔗 {sharedFolder.name}</div>
                         <div className="text-xs text-gray-400 mt-1">
-                        by {(sharedFolder as any).ownerUsername || sharedFolder.ownerUserId}
+                          by {(sharedFolder as any).ownerUsername || sharedFolder.ownerUserId}
                           <span className={`ml-2 ${sharedFolder.permission === 'edit' ? 'text-green-400' : 'text-yellow-400'}`}>
                             • {sharedFolder.permission === 'edit' ? 'Edit' : 'Read'}
                           </span>
@@ -627,11 +633,10 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                   .map(([publicFolderId, publicFolder]: any) => (
                     <div
                       key={publicFolderId}
-                      className={`p-3 rounded text-sm transition-colors ${
-                        selectedFolderId === `public_${publicFolderId}`
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-gray-700 hover:bg-gray-600'
-                      }`}
+                      className={`p-3 rounded text-sm transition-colors ${selectedFolderId === `public_${publicFolderId}`
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-700 hover:bg-gray-600'
+                        }`}
                     >
                       <div onClick={() => setSelectedFolderId(`public_${publicFolderId}`)} className="cursor-pointer">
                         <div className="font-semibold">🌐 {publicFolder.name}</div>
@@ -653,10 +658,10 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
               {selectedFolderId === null
                 ? 'Unsorted Analyses'
                 : isSelectedFolderShared
-                ? `${selectedSharedFolder?.name || 'Analyses'} (shared)`
-                : isSelectedFolderPublic
-                ? `${selectedPublicFolder?.name || 'Analyses'} (public)`
-                : folders[selectedFolderId]?.name || 'Analyses'}
+                  ? `${selectedSharedFolder?.name || 'Analyses'} (shared)`
+                  : isSelectedFolderPublic
+                    ? `${selectedPublicFolder?.name || 'Analyses'} (public)`
+                    : folders[selectedFolderId]?.name || 'Analyses'}
             </h2>
             {selectedSharedFolder && (
               <div className="text-xs text-gray-400 mb-2">
@@ -724,9 +729,8 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                           : (analysis.folderId || 'null')
                       }
                       disabled={isSelectedFolderShared || isSelectedFolderPublic}
-                      className={`mx-2 px-2 py-1 text-xs rounded border border-gray-500 ${
-                        isSelectedFolderShared || isSelectedFolderPublic ? 'bg-gray-500 text-gray-400 cursor-not-allowed' : 'bg-gray-600 text-white'
-                      }`}
+                      className={`mx-2 px-2 py-1 text-xs rounded border border-gray-500 ${isSelectedFolderShared || isSelectedFolderPublic ? 'bg-gray-500 text-gray-400 cursor-not-allowed' : 'bg-gray-600 text-white'
+                        }`}
                       title={isSelectedFolderShared || isSelectedFolderPublic ? 'Use Clone to copy to your folders' : undefined}
                     >
                       <option value="null">Unsorted</option>
@@ -955,11 +959,10 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                 </div>
                 <button
                   onClick={handleTogglePublic}
-                  className={`px-3 py-1 rounded text-sm font-semibold transition-colors ${
-                    folderIsPublic
-                      ? 'bg-green-600 hover:bg-green-500 text-white'
-                      : 'bg-gray-600 hover:bg-gray-500 text-gray-300'
-                  }`}
+                  className={`px-3 py-1 rounded text-sm font-semibold transition-colors ${folderIsPublic
+                    ? 'bg-green-600 hover:bg-green-500 text-white'
+                    : 'bg-gray-600 hover:bg-gray-500 text-gray-300'
+                    }`}
                 >
                   {folderIsPublic ? '✓ Public' : 'Private'}
                 </button>
@@ -974,11 +977,10 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                   </div>
                   <button
                     onClick={handleTogglePublicWritable}
-                    className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
-                      folderIsPublicWritable
-                        ? 'bg-green-600 hover:bg-green-500 text-white'
-                        : 'bg-gray-600 hover:bg-gray-500 text-gray-300'
-                    }`}
+                    className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${folderIsPublicWritable
+                      ? 'bg-green-600 hover:bg-green-500 text-white'
+                      : 'bg-gray-600 hover:bg-gray-500 text-gray-300'
+                      }`}
                   >
                     {folderIsPublicWritable ? '✓ Writable' : 'Read-only'}
                   </button>

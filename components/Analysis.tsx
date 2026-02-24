@@ -8,6 +8,7 @@ import { getAllFolders } from '../utils/analysisFirebase';
 import Board from './Board';
 import GameOverlay from './GameOverlay';
 import PieceComponent from './Piece';
+import useOnlineStatus from '../utils/useOnlineStatus';
 
 /** Public folder entry (writable ones can be save destinations). */
 export type PublicFolderOption = { ownerUserId: string; folderId: string; name: string; isPublicWritable?: boolean };
@@ -1284,7 +1285,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                         onClick={onBackToAnalysisManager ? handleBackToManager : onBack}
                         className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-colors mt-auto"
                     >
-                        {onBackToAnalysisManager ? 'Back to Manager' : 'Exit Analysis'}
+                        {onBackToAnalysisManager && useOnlineStatus() ? 'Back to Manager' : 'Exit Analysis'}
                     </button>
                 </div>
             </div>

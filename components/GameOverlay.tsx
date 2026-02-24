@@ -1,5 +1,4 @@
 
-// DO NOT MODIFY THIS FILE UNLESS INSTRUCTED TO DO SO
 import React from 'react';
 import { GameStatus, PieceType, PromotionData, Position, Color, GameMode, PlayerInfo, GameState } from '../types';
 import Piece from './Piece';

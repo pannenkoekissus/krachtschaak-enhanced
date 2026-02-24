@@ -1,4 +1,3 @@
-// DO NOT MODIFY THIS FILE UNLESS INSTRUCTED TO DO SO
 import React, { useCallback } from 'react';
 import { BoardState, Position, Color, GameMode } from '../types';
 import Piece from './Piece';

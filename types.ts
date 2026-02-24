@@ -1,5 +1,4 @@
 
-// DO NOT MODIFY THIS FILE UNLESS INSTRUCTED TO DO SO
 import { RatingCategory } from './utils/ratings';
 
 export enum PieceType {

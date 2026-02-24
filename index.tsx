@@ -1,4 +1,3 @@
-// DO NOT MODIFY THIS FILE UNLESS INSTRUCTED TO DO SO
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';

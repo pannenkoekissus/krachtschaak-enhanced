@@ -1,5 +1,4 @@
 
-// DO NOT MODIFY THIS FILE UNLESS INSTRUCTED TO DO SO
 import React from 'react';
 import { Piece as PieceProps, PieceType, Color } from '../types';
 

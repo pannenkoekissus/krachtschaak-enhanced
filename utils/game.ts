@@ -1,5 +1,4 @@
 
-// DO NOT MODIFY THIS FILE UNLESS INSTRUCTED TO DO SO
 import { BoardState, Piece, PieceType, Color, Position, Square, Move } from '../types';
 
 const PIECE_ORDER: PieceType[] = [
