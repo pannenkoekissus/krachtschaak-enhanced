@@ -16,6 +16,7 @@ dist-ssr
 tmpclaude*
 .vscode/*
 !.vscode/extensions.json
+.VSCodeCounter
 .idea
 .DS_Store
 *.suo
