@@ -41,17 +41,19 @@ interface AnalysisTreeNode {
 
 const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, analysisOwnerUserId, analysisFolderId, canEditAnalysis = true, analysisSourceFolderType, analysisSharedFolders, analysisPublicFolders, currentUser, onBackToAnalysisManager }) => {
 
-const formatTimerSettingText = (settings: GameState['timerSettings']) => {
-    if (!settings) return 'Unlimited';
-    if ('daysPerMove' in settings) return `${settings.daysPerMove} day${settings.daysPerMove > 1 ? 's' : ''} / move`;
-    return `${settings.initialTime / 60} min | ${settings.increment} sec`;
-};
+    const formatTimerSettingText = (settings: GameState['timerSettings']) => {
+        if (!settings) return 'Unlimited';
+        if ('daysPerMove' in settings) return `${settings.daysPerMove} day${settings.daysPerMove > 1 ? 's' : ''} / move`;
+        return `${settings.initialTime / 60} min | ${settings.increment} sec`;
+    };
 
     const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
     const [folders, setFolders] = useState<Record<string, AnalysisFolder>>({});
     const [isSaving, setIsSaving] = useState(false);
     const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
     const [loadedOnceFromFirebase, setLoadedOnceFromFirebase] = useState(false);
+    // Tracks the active analysis ID across saves; starts from the prop but persists after first save
+    const [currentAnalysisId, setCurrentAnalysisId] = useState<string | undefined>(analysisId);
 
     // Selection and interaction
     const [selectedPiece, setSelectedPiece] = useState<Position | null>(null);
@@ -62,75 +64,75 @@ const formatTimerSettingText = (settings: GameState['timerSettings']) => {
     const [draggedPiece, setDraggedPiece] = useState<Position | null>(null);
     const [boardOrientation, setBoardOrientation] = useState<Color>(Color.White);
 
-// Normalize loaded game state and ensure explicit empty squares
-const normalizeGameState = (raw: any): GameState => {
-    let lastMove = raw?.lastMove ?? null;
-    if (!lastMove && moveHistory.length > 0) {
-        const lastHistoryItem = moveHistory[moveHistory.length - 1];
-        if (lastHistoryItem && lastHistoryItem.from && lastHistoryItem.to) {
-            lastMove = { from: lastHistoryItem.from, to: lastHistoryItem.to };
+    // Normalize loaded game state and ensure explicit empty squares
+    const normalizeGameState = (raw: any): GameState => {
+        let lastMove = raw?.lastMove ?? null;
+        if (!lastMove && moveHistory.length > 0) {
+            const lastHistoryItem = moveHistory[moveHistory.length - 1];
+            if (lastHistoryItem && lastHistoryItem.from && lastHistoryItem.to) {
+                lastMove = { from: lastHistoryItem.from, to: lastHistoryItem.to };
+            }
         }
-    }
-    const board = sanitizeBoard(raw?.board || createInitialBoard());
-    return {
-        board,
-        turn: raw?.turn ?? Color.White,
-        status: raw?.status ?? 'playing',
-        winner: raw?.winner ?? null,
-        promotionData: raw?.promotionData ?? null,
-        capturedPieces: raw?.capturedPieces ?? { white: [], black: [] },
-        enPassantTarget: raw?.enPassantTarget ?? null,
-        halfmoveClock: raw?.halfmoveClock ?? 0,
-        positionHistory: raw?.positionHistory ?? {},
-        ambiguousEnPassantData: raw?.ambiguousEnPassantData ?? null,
-        drawOffer: raw?.drawOffer ?? null,
-        playerTimes: raw?.playerTimes ?? null,
-        turnStartTime: raw?.turnStartTime ?? null,
-        moveDeadline: raw?.moveDeadline ?? null,
-        timerSettings: raw?.timerSettings ?? null,
-        ratingCategory: raw?.ratingCategory ?? 'unlimited' as any,
-        players: raw?.players ?? {},
-        playerColors: raw?.playerColors ?? { white: null, black: null },
-        initialRatings: raw?.initialRatings ?? null,
-        isRated: raw?.isRated ?? false,
-        rematchOffer: raw?.rematchOffer ?? null,
-        nextGameId: raw?.nextGameId ?? null,
-        ratingChange: raw?.ratingChange ?? null,
-        moveHistory: raw?.moveHistory ?? [],
-        lastMove: lastMove ?? null // <--- DEZE REGEL TOEVOEGEN
+        const board = sanitizeBoard(raw?.board || createInitialBoard());
+        return {
+            board,
+            turn: raw?.turn ?? Color.White,
+            status: raw?.status ?? 'playing',
+            winner: raw?.winner ?? null,
+            promotionData: raw?.promotionData ?? null,
+            capturedPieces: raw?.capturedPieces ?? { white: [], black: [] },
+            enPassantTarget: raw?.enPassantTarget ?? null,
+            halfmoveClock: raw?.halfmoveClock ?? 0,
+            positionHistory: raw?.positionHistory ?? {},
+            ambiguousEnPassantData: raw?.ambiguousEnPassantData ?? null,
+            drawOffer: raw?.drawOffer ?? null,
+            playerTimes: raw?.playerTimes ?? null,
+            turnStartTime: raw?.turnStartTime ?? null,
+            moveDeadline: raw?.moveDeadline ?? null,
+            timerSettings: raw?.timerSettings ?? null,
+            ratingCategory: raw?.ratingCategory ?? 'unlimited' as any,
+            players: raw?.players ?? {},
+            playerColors: raw?.playerColors ?? { white: null, black: null },
+            initialRatings: raw?.initialRatings ?? null,
+            isRated: raw?.isRated ?? false,
+            rematchOffer: raw?.rematchOffer ?? null,
+            nextGameId: raw?.nextGameId ?? null,
+            ratingChange: raw?.ratingChange ?? null,
+            moveHistory: raw?.moveHistory ?? [],
+            lastMove: lastMove ?? null // <--- DEZE REGEL TOEVOEGEN
+        };
     };
-};
 
-// Navigation Tree
-// If we have move history, the root should be the STARTING position (before any moves),
-// not the final board position passed in initialState.
-const hasMoveHistory = initialState?.moveHistory && initialState.moveHistory.length > 0;
-const initialRootState: GameState = {
-    board: hasMoveHistory ? createInitialBoard() : sanitizeBoard(initialState?.board || createInitialBoard()),
-    turn: hasMoveHistory ? Color.White : (initialState?.turn || Color.White),
-    status: 'playing',
-    winner: null,
-    promotionData: null,
-    capturedPieces: hasMoveHistory ? { white: [], black: [] } : (initialState?.capturedPieces || { white: [], black: [] }),
-    enPassantTarget: null,
-    halfmoveClock: 0,
-    positionHistory: hasMoveHistory ? {} : (initialState?.positionHistory || {}),
-    ambiguousEnPassantData: null,
-    drawOffer: null,
-    playerTimes: initialState?.playerTimes || null,
-    turnStartTime: null,
-    moveDeadline: null,
-    timerSettings: initialState?.timerSettings || null,
-    ratingCategory: initialState?.ratingCategory || 'unlimited' as any,
-    players: initialState?.players || {},
-    playerColors: initialState?.playerColors || { white: null, black: null },
-    initialRatings: initialState?.initialRatings || null,
-    isRated: initialState?.isRated || false,
-    rematchOffer: null,
-    nextGameId: null,
-    ratingChange: initialState?.ratingChange || null,
-    moveHistory: []
-};
+    // Navigation Tree
+    // If we have move history, the root should be the STARTING position (before any moves),
+    // not the final board position passed in initialState.
+    const hasMoveHistory = initialState?.moveHistory && initialState.moveHistory.length > 0;
+    const initialRootState: GameState = {
+        board: hasMoveHistory ? createInitialBoard() : sanitizeBoard(initialState?.board || createInitialBoard()),
+        turn: hasMoveHistory ? Color.White : (initialState?.turn || Color.White),
+        status: 'playing',
+        winner: null,
+        promotionData: null,
+        capturedPieces: hasMoveHistory ? { white: [], black: [] } : (initialState?.capturedPieces || { white: [], black: [] }),
+        enPassantTarget: null,
+        halfmoveClock: 0,
+        positionHistory: hasMoveHistory ? {} : (initialState?.positionHistory || {}),
+        ambiguousEnPassantData: null,
+        drawOffer: null,
+        playerTimes: initialState?.playerTimes || null,
+        turnStartTime: null,
+        moveDeadline: null,
+        timerSettings: initialState?.timerSettings || null,
+        ratingCategory: initialState?.ratingCategory || 'unlimited' as any,
+        players: initialState?.players || {},
+        playerColors: initialState?.playerColors || { white: null, black: null },
+        initialRatings: initialState?.initialRatings || null,
+        isRated: initialState?.isRated || false,
+        rematchOffer: null,
+        nextGameId: null,
+        ratingChange: initialState?.ratingChange || null,
+        moveHistory: []
+    };
 
     // Build initial tree if move history exists
     const buildInitialTree = () => {
@@ -141,7 +143,7 @@ const initialRootState: GameState = {
             notation: null,
             children: [],
             parentId: null
-        ,    comment: ''
+            , comment: ''
         };
         const initialNodes: Record<string, AnalysisTreeNode> = { [rootId]: rootNode };
         let leafId = rootId;
@@ -153,33 +155,33 @@ const initialRootState: GameState = {
             let currentCaptured = { ...initialRootState.capturedPieces };
 
             // Gebruik een index (i) voor 100% nauwkeurigheid
-for (let i = 0; i < initialState.moveHistory.length; i++) {
-    const move = initialState.moveHistory[i];
-    const newNodeId = Math.random().toString(36).substr(2, 9);
+            for (let i = 0; i < initialState.moveHistory.length; i++) {
+                const move = initialState.moveHistory[i];
+                const newNodeId = Math.random().toString(36).substr(2, 9);
 
-    // Safety check for board integrity
-    if (!currentBoard || !Array.isArray(currentBoard)) {
-        currentBoard = createInitialBoard();
-    }
+                // Safety check for board integrity
+                if (!currentBoard || !Array.isArray(currentBoard)) {
+                    currentBoard = createInitialBoard();
+                }
 
-    const nextBoard = applyMoveToBoard(currentBoard, move);
-    const nextTurn = currentTurn === Color.White ? Color.Black : Color.White;
-    var ActualLastMove = move;
-    const nextState: GameState = {
-        ...initialRootState,
-        board: nextBoard,
-        turn: nextTurn,
-        lastMove: move,
-        // VERBETERD: Gebruik i + 1 in plaats van indexOf(move)
-        moveHistory: initialState.moveHistory.slice(0, i + 1),
-        enPassantTarget: move.piece === PieceType.Pawn && Math.abs(move.from.row - move.to.row) === 2
-            ? { row: (move.from.row + move.to.row) / 2, col: move.from.col }
-            : null,
-        capturedPieces: move.captured ? {
-            ...currentCaptured,
-            [move.color === Color.White ? Color.Black : Color.White]: [...currentCaptured[move.color === Color.White ? Color.Black : Color.White], { type: move.captured, color: move.color === Color.White ? Color.Black : Color.White, originalType: move.captured, isKing: move.captured === PieceType.King, hasMoved: true }]
-        } : currentCaptured
-    };
+                const nextBoard = applyMoveToBoard(currentBoard, move);
+                const nextTurn = currentTurn === Color.White ? Color.Black : Color.White;
+                var ActualLastMove = move;
+                const nextState: GameState = {
+                    ...initialRootState,
+                    board: nextBoard,
+                    turn: nextTurn,
+                    lastMove: move,
+                    // VERBETERD: Gebruik i + 1 in plaats van indexOf(move)
+                    moveHistory: initialState.moveHistory.slice(0, i + 1),
+                    enPassantTarget: move.piece === PieceType.Pawn && Math.abs(move.from.row - move.to.row) === 2
+                        ? { row: (move.from.row + move.to.row) / 2, col: move.from.col }
+                        : null,
+                    capturedPieces: move.captured ? {
+                        ...currentCaptured,
+                        [move.color === Color.White ? Color.Black : Color.White]: [...currentCaptured[move.color === Color.White ? Color.Black : Color.White], { type: move.captured, color: move.color === Color.White ? Color.Black : Color.White, originalType: move.captured, isKing: move.captured === PieceType.King, hasMoved: true }]
+                    } : currentCaptured
+                };
 
                 initialNodes[newNodeId] = {
                     id: newNodeId,
@@ -507,7 +509,7 @@ for (let i = 0; i < initialState.moveHistory.length; i++) {
 
             const currentOwner = analysisOwnerUserId || currentUser.uid;
             const isSameOwner = saveToUserId === currentOwner;
-            const analysisToSave = (analysisId && isSameOwner) ? analysisId : generateId();
+            const analysisToSave = currentAnalysisId ?? generateId();
 
             const rootId = 'root';
             const analysisData: SavedAnalysis = {
@@ -519,9 +521,36 @@ for (let i = 0; i < initialState.moveHistory.length; i++) {
                 updatedAt: Date.now(),
                 lastNodeId: currentNodeId,
             } as any;
-
             await saveAnalysis(saveToUserId, analysisToSave, analysisData);
             setSaveModalOpen(false);
+
+            // Reload the freshly saved analysis and update component state
+            const saved = await loadAnalysis(saveToUserId, analysisToSave);
+            if (saved) {
+                const newNodes: Record<string, AnalysisTreeNode> = {};
+                for (const [id, node] of Object.entries(saved.nodes || {})) {
+                    const normalized = normalizeGameState((node as any).gameState || {});
+                    newNodes[id] = {
+                        id: (node as any).id || id,
+                        children: (node as any).children || [],
+                        parentId: (node as any).parentId || null,
+                        notation: (node as any).notation || null,
+                        gameState: normalized,
+                        lastVisited: (node as any).lastVisited !== false,
+                        comment: (node as any).comment || '',
+                    };
+                }
+                setNodes(newNodes);
+                const newCurrentNodeId = (saved as any).lastNodeId || (saved as any).rootNodeId;
+                setCurrentNodeId(newCurrentNodeId);
+                if (newNodes[newCurrentNodeId]) {
+                    applyState(newNodes[newCurrentNodeId].gameState);
+                }
+                setSaveName((saved as any).name || saveName);
+                setCurrentAnalysisId(analysisToSave);
+                setLoadedOnceFromFirebase(true);
+            }
+
             alert('Analysis saved successfully!');
         } catch (error) {
             console.error('Error saving analysis:', error);
