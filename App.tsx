@@ -1283,7 +1283,28 @@ const App: React.FC = () => {
 
         gameRef.on('value', onGameUpdate);
 
+        // Fallback polling: every 5 seconds, do a one-shot fetch and sync if
+        // the real-time listener missed an update (e.g. brief network hiccup).
+        const syncIntervalId = window.setInterval(async () => {
+            if (!gameRef) return;
+            try {
+                const snapshot = await gameRef.once('value');
+                if (!snapshot.exists()) return;
+                const remoteState: GameState = snapshot.val();
+                const remoteMove = Array.isArray(remoteState.moveHistory) ? remoteState.moveHistory.length : 0;
+                const localMove = Array.isArray(gameStateRef.current?.moveHistory) ? gameStateRef.current!.moveHistory.length : 0;
+                // Only sync if remote is strictly ahead — avoids overwriting local optimistic updates
+                if (remoteMove > localMove) {
+                    console.log(`[sync] Remote move ${remoteMove} > local move ${localMove}. Re-syncing.`);
+                    onGameUpdate(snapshot);
+                }
+            } catch (e) {
+                // Silently ignore — no internet is expected during this fallback
+            }
+        }, 5000);
+
         return () => {
+            window.clearInterval(syncIntervalId);
             if (playerInGameRef) {
                 onDisconnectRef.cancel();
             }
