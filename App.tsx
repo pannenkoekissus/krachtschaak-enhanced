@@ -1283,20 +1283,23 @@ const App: React.FC = () => {
 
         gameRef.on('value', onGameUpdate);
 
-        // Fallback polling: every 5 seconds, do a one-shot fetch and sync if
-        // the real-time listener missed an update (e.g. brief network hiccup).
+        // Fallback polling: every 5 seconds, cheaply check the move count first.
+        // Only fetch the full game state if the remote is ahead of local.
         const syncIntervalId = window.setInterval(async () => {
             if (!gameRef) return;
             try {
-                const snapshot = await gameRef.once('value');
-                if (!snapshot.exists()) return;
-                const remoteState: GameState = snapshot.val();
-                const remoteMove = Array.isArray(remoteState.moveHistory) ? remoteState.moveHistory.length : 0;
+                // Step 1: fetch only moveHistory — much cheaper than the full game state
+                const moveHistorySnap = await gameRef.child('moveHistory').once('value');
+                const remoteMove = moveHistorySnap.exists() ? (moveHistorySnap.val() as any[]).length : 0;
                 const localMove = Array.isArray(gameStateRef.current?.moveHistory) ? gameStateRef.current!.moveHistory.length : 0;
-                // Only sync if remote is strictly ahead — avoids overwriting local optimistic updates
+
+                // Step 2: only pull the full state if remote is strictly ahead
                 if (remoteMove > localMove) {
-                    console.log(`[sync] Remote move ${remoteMove} > local move ${localMove}. Re-syncing.`);
-                    onGameUpdate(snapshot);
+                    console.log(`[sync] Remote move ${remoteMove} > local move ${localMove}. Fetching full state.`);
+                    const fullSnapshot = await gameRef.once('value');
+                    if (fullSnapshot.exists()) {
+                        onGameUpdate(fullSnapshot);
+                    }
                 }
             } catch (e) {
                 // Silently ignore — no internet is expected during this fallback
