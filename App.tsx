@@ -52,7 +52,7 @@ const formatTimerSettingText = (settings: TimerSettings) => {
 
 
 const App: React.FC = () => {
-    const isOnline = useOnlineStatus();
+    const isOnline = isFirebaseConfigured && useOnlineStatus();
     const [board, setBoard] = useState<BoardState>(() => createInitialBoard());
     const [turn, setTurn] = useState<Color>(Color.White);
     const [selectedPiece, setSelectedPiece] = useState<Position | null>(null);
