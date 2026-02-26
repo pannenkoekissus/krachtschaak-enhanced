@@ -2935,7 +2935,7 @@ const App: React.FC = () => {
                     <h1 className="text-5xl md:text-7xl font-bold mb-8 text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500">
                         Krachtschaak
                     </h1>
-                    {isFirebaseConfigured && !isOnline && (
+                    {!isOnline && (
                         <div className="flex items-center gap-2 bg-yellow-900/60 border border-yellow-600 text-yellow-200 px-4 py-3 rounded-lg mb-4 text-sm font-semibold w-full max-w-md">
                             <span>📡</span> You are offline. Online play and analysis syncing are unavailable.
                         </div>

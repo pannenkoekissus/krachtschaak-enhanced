@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/network": "^8.0.1",
     "@fontsource/inter": "^5.2.8",
     "firebase": "^12.9.0",
     "howler": "^2.2.4",
