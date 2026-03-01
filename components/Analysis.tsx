@@ -10,8 +10,7 @@ import GameOverlay from './GameOverlay';
 import PieceComponent from './Piece';
 import useOnlineStatus from '../utils/useOnlineStatus';
 
-var goToWhereICameFrom = false;
-var goDirectlyToMenu = false;
+
 /** Public folder entry (writable ones can be save destinations). */
 export type PublicFolderOption = { ownerUserId: string; folderId: string; name: string; isPublicWritable?: boolean };
 
@@ -360,7 +359,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         setEngineThinking(false);
     };
 
-    const handleGoingBack = () => {
+    const handleGoingBack = (target?: 'menu' | 'whereIcameFrom' | 'manager') => {
         // Stop worker and clear state before navigating away
         stopWorker();
         setHighlightedSquares([]);
@@ -380,9 +379,10 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         setSaveName('');
         setLoadedOnceFromFirebase(false);
         // Call the callback
-        if (goDirectlyToMenu) onBackToMenu?.();
-        else if (goToWhereICameFrom) onBackToWhereIcameFrom?.();
-        else onBackToAnalysisManager?.();
+        if (target === 'menu') onBackToMenu?.();
+        else if (target === 'whereIcameFrom') onBackToWhereIcameFrom?.();
+        else if (target === 'manager') onBackToAnalysisManager?.();
+        else onBack();
     };
 
     const moveListRef = useRef<HTMLDivElement>(null);
@@ -1043,7 +1043,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                 </div>
             </div>
 
-            <div className="w-full md:w-96 bg-gray-800 p-4 rounded-xl shadow-2xl flex flex-col h-[85vh] min-h-[700px]">
+            <div className="w-full md:w-96 bg-gray-800 p-4 rounded-xl shadow-2xl flex flex-col h-[85vh] min-h-[710px]">
                 <h2 className="text-2xl font-bold text-center text-green-400 mb-2">Analysis Board</h2>
 
                 <div className="flex justify-between items-center mb-3 bg-gray-700 p-2 rounded">
@@ -1288,19 +1288,19 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                     </button>
 
                     <button
-                        onClick={onBackToAnalysisManager ? handleGoingBack : onBack}
+                        onClick={() => onBackToAnalysisManager ? handleGoingBack('manager') : onBack()}
                         className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-colors mt-auto"
                     >
                         {onBackToAnalysisManager && useOnlineStatus() ? 'Back to Manager' : 'Exit Analysis'}
                     </button>
                     <button
-                        onClick={goToWhereICameFrom = true && onBackToWhereIcameFrom ? handleGoingBack : onBack}
+                        onClick={() => onBackToWhereIcameFrom ? handleGoingBack('whereIcameFrom') : onBack()}
                         className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-colors mt-auto"
                     >
                         {'Exit to where you came from'}
                     </button>
                     <button
-                        onClick={goDirectlyToMenu = true && onBackToMenu ? handleGoingBack : onBack}
+                        onClick={() => onBackToMenu ? handleGoingBack('menu') : onBack()}
                         className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-colors mt-auto"
                     >
                         {'Exit to Menu'}

@@ -33,6 +33,7 @@ interface AnalysisManagerProps {
   userId: string;
   onSelectAnalysis: (analysisId: string, ownerUserId?: string, folderId?: string, canEdit?: boolean, sourceType?: 'shared' | 'public') => void;
   onBack: () => void;
+  onBackToMenu: () => void;
 }
 
 interface ModalState {
@@ -44,7 +45,8 @@ interface ModalState {
 const AnalysisManager: React.FC<AnalysisManagerProps> = ({
   userId,
   onSelectAnalysis,
-  onBack
+  onBack,
+  onBackToMenu
 }) => {
   const isOnline = useOnlineStatus();
   const [folders, setFolders] = useState<Record<string, AnalysisFolder>>({});
@@ -468,12 +470,20 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
     <div className="min-h-screen flex flex-col bg-gray-900 text-white p-4">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-3xl font-bold text-green-400">Analysis Manager</h1>
-        <button
-          onClick={onBack}
-          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-semibold transition-colors"
-        >
-          Back to Menu
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={onBack}
+            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-semibold transition-colors"
+          >
+            Back to Where you came from
+          </button>
+          <button
+            onClick={onBackToMenu}
+            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-semibold transition-colors"
+          >
+            Back to Menu
+          </button>
+        </div>
       </div>
 
       {isFirebaseConfigured && !isOnline && (

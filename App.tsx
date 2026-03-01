@@ -2902,6 +2902,10 @@ const App: React.FC = () => {
                         setGameMode('analysis_manager');
                     }
                 }}
+                onBackToMenu={() => {
+                    setGameMode('menu');
+                    setAnalysisReturnTo(null);
+                }}
                 onBackToWhereIcameFrom={() => {
                     if (analysisReturnTo) {
                         setGameMode(analysisReturnTo.mode);
@@ -2911,9 +2915,6 @@ const App: React.FC = () => {
                     } else {
                         setGameMode('menu');
                     }
-                }}
-                onBackToMenu={() => {
-                    setGameMode('menu');
                 }}
             />;
         }
@@ -2935,7 +2936,12 @@ const App: React.FC = () => {
                 } else {
                     setGameMode('menu');
                 }
-            }} />;
+            }}
+                onBackToMenu={() => {
+                    setGameMode('menu');
+                    setAnalysisReturnTo(null);
+                }}
+            />;
         }
 
         if (gameMode === 'board_editor') {
