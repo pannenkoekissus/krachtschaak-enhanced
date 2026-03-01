@@ -10,6 +10,8 @@ import GameOverlay from './GameOverlay';
 import PieceComponent from './Piece';
 import useOnlineStatus from '../utils/useOnlineStatus';
 
+var goToWhereICameFrom = false;
+var goDirectlyToMenu = false;
 /** Public folder entry (writable ones can be save destinations). */
 export type PublicFolderOption = { ownerUserId: string; folderId: string; name: string; isPublicWritable?: boolean };
 
@@ -28,6 +30,8 @@ interface AnalysisProps {
     analysisPublicFolders?: Record<string, PublicFolderOption>;
     currentUser?: { uid: string };
     onBackToAnalysisManager?: () => void;
+    onBackToMenu?: () => void;
+    onBackToWhereIcameFrom?: () => void;
 }
 
 interface AnalysisTreeNode {
@@ -40,7 +44,7 @@ interface AnalysisTreeNode {
     comment?: string;
 }
 
-const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, analysisOwnerUserId, analysisFolderId, canEditAnalysis = true, analysisSourceFolderType, analysisSharedFolders, analysisPublicFolders, currentUser, onBackToAnalysisManager }) => {
+const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, analysisOwnerUserId, analysisFolderId, canEditAnalysis = true, analysisSourceFolderType, analysisSharedFolders, analysisPublicFolders, currentUser, onBackToAnalysisManager, onBackToMenu, onBackToWhereIcameFrom }) => {
 
     const formatTimerSettingText = (settings: GameState['timerSettings']) => {
         if (!settings) return 'Unlimited';
@@ -356,7 +360,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         setEngineThinking(false);
     };
 
-    const handleBackToManager = () => {
+    const handleGoingBack = () => {
         // Stop worker and clear state before navigating away
         stopWorker();
         setHighlightedSquares([]);
@@ -376,7 +380,9 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         setSaveName('');
         setLoadedOnceFromFirebase(false);
         // Call the callback
-        onBackToAnalysisManager?.();
+        if (goDirectlyToMenu) onBackToMenu?.();
+        else if (goToWhereICameFrom) onBackToWhereIcameFrom?.();
+        else onBackToAnalysisManager?.();
     };
 
     const moveListRef = useRef<HTMLDivElement>(null);
@@ -1037,7 +1043,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                 </div>
             </div>
 
-            <div className="w-full md:w-96 bg-gray-800 p-4 rounded-xl shadow-2xl flex flex-col h-[85vh] min-h-[400px]">
+            <div className="w-full md:w-96 bg-gray-800 p-4 rounded-xl shadow-2xl flex flex-col h-[85vh] min-h-[700px]">
                 <h2 className="text-2xl font-bold text-center text-green-400 mb-2">Analysis Board</h2>
 
                 <div className="flex justify-between items-center mb-3 bg-gray-700 p-2 rounded">
@@ -1282,10 +1288,22 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                     </button>
 
                     <button
-                        onClick={onBackToAnalysisManager ? handleBackToManager : onBack}
+                        onClick={onBackToAnalysisManager ? handleGoingBack : onBack}
                         className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-colors mt-auto"
                     >
                         {onBackToAnalysisManager && useOnlineStatus() ? 'Back to Manager' : 'Exit Analysis'}
+                    </button>
+                    <button
+                        onClick={goToWhereICameFrom = true && onBackToWhereIcameFrom ? handleGoingBack : onBack}
+                        className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-colors mt-auto"
+                    >
+                        {'Exit to where you came from'}
+                    </button>
+                    <button
+                        onClick={goDirectlyToMenu = true && onBackToMenu ? handleGoingBack : onBack}
+                        className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-colors mt-auto"
+                    >
+                        {'Exit to Menu'}
                     </button>
                 </div>
             </div>

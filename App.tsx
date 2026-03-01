@@ -2902,6 +2902,19 @@ const App: React.FC = () => {
                         setGameMode('analysis_manager');
                     }
                 }}
+                onBackToWhereIcameFrom={() => {
+                    if (analysisReturnTo) {
+                        setGameMode(analysisReturnTo.mode);
+                        setLobbyView(analysisReturnTo.lobbyView);
+                        setReviewingGame(analysisReturnTo.reviewingGame);
+                        setAnalysisReturnTo(null);
+                    } else {
+                        setGameMode('menu');
+                    }
+                }}
+                onBackToMenu={() => {
+                    setGameMode('menu');
+                }}
             />;
         }
 
