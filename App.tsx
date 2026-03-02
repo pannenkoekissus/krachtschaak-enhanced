@@ -379,6 +379,28 @@ const App: React.FC = () => {
         }
     }, [currentUser]);
 
+    // URL Deep Linking for Analysis
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const urlAnalysisId = params.get('analysisId');
+        const urlOwnerId = params.get('ownerId');
+        const urlFolderId = params.get('folderId');
+        const urlSourceType = params.get('sourceType');
+
+        if (urlAnalysisId && urlOwnerId) {
+            setAnalysisId(urlAnalysisId);
+            setAnalysisOwnerUserId(urlOwnerId);
+            setAnalysisFolderId(urlFolderId);
+            setAnalysisSourceFolderType(urlSourceType as 'shared' | 'public' | null);
+            setAnalysisCanEdit(true); // Allow edit if user has permissions (Firebase will enforce)
+            setGameMode('analysis');
+
+            // Clear params from URL without reloading
+            const newUrl = window.location.origin + window.location.pathname;
+            window.history.replaceState({}, document.title, newUrl);
+        }
+    }, []);
+
     // AUTH & PRESENCE EFFECT
     useEffect(() => {
         if (!isFirebaseConfigured) {
@@ -2992,7 +3014,7 @@ const App: React.FC = () => {
                                     }}
                                     className="w-full py-4 bg-gray-700 hover:bg-gray-600 rounded-xl text-xl font-bold transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-3"
                                 >
-                                    <span>📊</span> Analysis
+                                    <span>📊</span> Analysis Manager
                                 </button>
                                 <button
                                     onClick={handleContinueOnlineGame}

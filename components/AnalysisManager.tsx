@@ -68,6 +68,7 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
   const [folderIsPublicWritable, setFolderIsPublicWritable] = useState(false);
   const [cloneTargetFolderId, setCloneTargetFolderId] = useState<string | null>(null);
   const [isCloning, setIsCloning] = useState(false);
+  const [copiedAnalysisId, setCopiedAnalysisId] = useState<string | null>(null);
 
   // Check if selected folder is shared
   const isSelectedFolderShared = selectedFolderId?.startsWith('shared_');
@@ -441,6 +442,17 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
     }
   };
 
+  const handleShareLink = (analysisId: string, ownerId: string, folderId?: string | null, sourceType?: 'shared' | 'public' | null) => {
+    let url = `${window.location.origin}${window.location.pathname}?analysisId=${analysisId}&ownerId=${ownerId}`;
+    if (folderId) url += `&folderId=${folderId}`;
+    if (sourceType) url += `&sourceType=${sourceType}`;
+
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedAnalysisId(analysisId);
+      setTimeout(() => setCopiedAnalysisId(null), 2000);
+    });
+  };
+
   // Get analyses for current folder (treat missing folderId as null)
   // For shared folders, we use sharedFolderAnalyses instead of analyses
   // For public folders, we use publicFolderAnalyses instead of analyses
@@ -758,6 +770,19 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
 
                     {/* Action buttons */}
                     <div className="flex gap-2 items-center flex-wrap">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const ownerId = isSelectedFolderShared ? (selectedSharedFolder as any)?.ownerUserId : isSelectedFolderPublic ? (selectedPublicFolder as any)?.ownerUserId : userId;
+                          const sourceType = isSelectedFolderShared ? 'shared' : isSelectedFolderPublic ? 'public' : null;
+                          if (ownerId) handleShareLink(analysisId, ownerId, cleanFolderId, sourceType);
+                        }}
+                        className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded font-semibold transition-all"
+                        title="Copy shareable link"
+                      >
+                        {copiedAnalysisId === analysisId ? 'Link Copied!' : 'Share Link'}
+                      </button>
+
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
