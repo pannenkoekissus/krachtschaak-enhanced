@@ -2326,6 +2326,12 @@ const App: React.FC = () => {
             await db.ref().update(updates);
         }
 
+        // Clear all online game state so it's fresh on next login
+        setAllMyGamesData({});
+        setIncomingChallenges([]);
+        setSentChallenges([]);
+        setActiveTournamentId(null);
+
         await auth.signOut();
         handleBackToMenu();
     };

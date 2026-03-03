@@ -69,6 +69,15 @@ const renderTimerSetting = (settings: TimerSettings) => {
     return `${settings.initialTime / 60}m | ${settings.increment}s`;
 };
 
+const renderVisualSettings = (showPowerPieces?: boolean, showPowerRings?: boolean, showOriginalType?: boolean) => {
+    const tags: string[] = [];
+    if (showPowerPieces !== undefined) tags.push(showPowerPieces ? '🔮 Icons' : '🚫 No Icons');
+    if (showPowerRings !== undefined) tags.push(showPowerRings ? '💍 Rings' : '🚫 No Rings');
+    if (showOriginalType !== undefined) tags.push(showOriginalType ? '♟ Original' : '🚫 No Original');
+    if (tags.length === 0) return null;
+    return tags.join(' • ');
+};
+
 const PlayerRatingsModal: React.FC<{
     user: UserInfo,
     onClose: () => void
@@ -283,6 +292,9 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                                             timerSettings: game.timerSettings,
                                             ratingCategory: game.ratingCategory,
                                             isRated: typeof game.isRated === 'boolean' ? game.isRated : true,
+                                            showPowerPieces: game.showPowerPieces,
+                                            showPowerRings: game.showPowerRings,
+                                            showOriginalType: game.showOriginalType,
                                         });
                                     }
                                 }
@@ -884,6 +896,9 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                                                 <p className="font-bold text-white text-lg">{c.fromName} ({c.fromRating})</p>
                                                 <p className="text-indigo-200 text-sm">{renderTimerSetting(c.timerSettings)} • {c.isRated ? 'Rated' : 'Unrated'} {c.ratingCategory}</p>
                                                 <p className="font-bold text-white text-lg">{"Opponent plays as: " + c.challengeColor}</p>
+                                                {renderVisualSettings(c.showPowerPieces, c.showPowerRings, c.showOriginalType) && (
+                                                    <p className="text-indigo-300 text-xs mt-1">{renderVisualSettings(c.showPowerPieces, c.showPowerRings, c.showOriginalType)}</p>
+                                                )}
                                             </div>
                                             <div className="flex gap-3">
                                                 <button onClick={() => handleAcceptChallenge(c)} className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded font-bold transition-colors">Accept</button>
@@ -908,6 +923,9 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                                                 <p className="text-xs text-gray-400">Sent: {new Date(c.timestamp).toLocaleString()}</p>
                                                 <p className="text-xs text-blue-300 mt-1">{renderTimerSetting(c.timerSettings)} • {c.isRated ? 'Rated' : 'Unrated'} ({c.ratingCategory})</p>
                                                 <p className="text-xs text-blue-300 mt-1">{"you play as: " + c.challengeColor}</p>
+                                                {renderVisualSettings(c.showPowerPieces, c.showPowerRings, c.showOriginalType) && (
+                                                    <p className="text-xs text-blue-300 mt-1">{renderVisualSettings(c.showPowerPieces, c.showPowerRings, c.showOriginalType)}</p>
+                                                )}
                                             </div>
                                             <button onClick={() => handleCancelSentChallenge(c)} className="px-3 py-1 bg-red-600 hover:bg-red-500 rounded text-sm font-semibold text-white transition-colors">Cancel</button>
                                         </div>
@@ -1108,7 +1126,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                             {isLobbyLoading ? <p className="text-gray-400 text-center">Loading games...</p> : !openGames.length ? <p className="text-gray-400 text-center">No open games available.</p> : null}
                             <div className="flex-grow overflow-y-auto max-h-64 space-y-2 pr-2">{openGames.map(game => (
                                 <div key={game.gameId} className="bg-gray-700 p-3 rounded-lg flex justify-between items-center">
-                                    <div><p className="font-semibold truncate">{game.creatorName} ({game.creatorRatings?.[game.ratingCategory] ?? '...'})</p><p className="text-sm text-gray-400">{renderTimerSetting(game.timerSettings)}, {game.isRated ? 'Rated' : 'Unrated'}</p></div>
+                                    <div><p className="font-semibold truncate">{game.creatorName} ({game.creatorRatings?.[game.ratingCategory] ?? '...'})</p><p className="text-sm text-gray-400">{renderTimerSetting(game.timerSettings)}, {game.isRated ? 'Rated' : 'Unrated'}</p>{renderVisualSettings(game.showPowerPieces, game.showPowerRings, game.showOriginalType) && (<p className="text-xs text-gray-500 mt-0.5">{renderVisualSettings(game.showPowerPieces, game.showPowerRings, game.showOriginalType)}</p>)}</div>
                                     <button onClick={() => handleJoinGame(game)} disabled={isActionInProgress} className="px-4 py-1 bg-blue-600 hover:bg-blue-700 rounded font-semibold transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed">{isJoiningGame === game.gameId ? 'Joining...' : 'Join'}</button>
                                 </div>))}
                             </div>

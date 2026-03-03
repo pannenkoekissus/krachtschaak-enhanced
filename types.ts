@@ -188,6 +188,9 @@ export interface LobbyGame {
   timerSettings: TimerSettings;
   ratingCategory: RatingCategory;
   isRated: boolean;
+  showPowerPieces?: boolean;
+  showPowerRings?: boolean;
+  showOriginalType?: boolean;
 }
 
 // Tournament types
