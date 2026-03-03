@@ -190,20 +190,23 @@ const Tournament: React.FC<TournamentProps> = ({
             const isHostOfThis = t.hostUid === userId;
             const existing = Object.values(t.players || {}).find((p: any) => p.uid === userId);
 
-            // Non-host, non-player can't enter a started/finished tournament
-            if (t.status !== 'lobby' && !existing && !isHostOfThis) {
-                setError('Tournament has already started or finished');
-                return;
+            // Non-host, non-player can enter a started or finished tournament as a spectator
+            // We only show an error if it's private and they don't have access (already handled by lists usually)
+            // But for joining by code, we might want to check privacy.
+            if (t.isPrivate && !existing && !isHostOfThis && joinCode === id) {
+                // If they have the code, maybe they CAN spectate? 
+                // Usually "private" implies invitation only.
             }
 
-            // Only auto-join as a player if NOT the host and not already in
-            if (!existing && !isHostOfThis) {
+            // Allow anyone to enter as long as it exists (spectator mode)
+            // If lobby, they should probably join as player if they aren't host.
+            if (t.status === 'lobby' && !existing && !isHostOfThis) {
                 await joinTournament(id, displayName, userId);
             }
 
             onTournamentJoined(id);
             subscribeToTournament(id);
-            setView('lobby');
+            setView('lobby'); // The component will render the correct sub-view based on t.status
         } catch (err: any) {
             setError(err.message);
         }
@@ -960,10 +963,12 @@ const Tournament: React.FC<TournamentProps> = ({
                                 </div>
                             </div>
 
-                            {/* Current round pairings */}
-                            {activeTournament.status === 'in_progress' && (
+                            {/* Pairings for current round or all rounds if finished */}
+                            {(activeTournament.status === 'in_progress' || activeTournament.status === 'finished') && (
                                 <div className="p-4 bg-gray-800 rounded-xl border border-gray-700">
-                                    <h2 className="text-lg font-bold mb-3">Round {currentRound} Pairings</h2>
+                                    <h2 className="text-lg font-bold mb-3">
+                                        {activeTournament.status === 'finished' ? 'All Pairings' : `Round ${currentRound} Pairings`}
+                                    </h2>
 
                                     {currentPairings.length === 0 ? (
                                         <div className="text-center text-gray-500 py-4">
@@ -971,7 +976,13 @@ const Tournament: React.FC<TournamentProps> = ({
                                         </div>
                                     ) : (
                                         <div className="space-y-2">
-                                            {currentPairings.map(pairing => (
+                                            {/* If finished, we might want to show all pairings from all rounds. 
+                                                But for now, keeping currentRound pairings is fine if we show them in standings too. 
+                                                Actually, let's show ALL pairings if finished. */}
+                                            {(activeTournament.status === 'finished' ?
+                                                Object.values(activeTournament.rounds || {}).flatMap(r => Object.values((r as any).pairings || {})) :
+                                                currentPairings
+                                            ).map((pairing: any) => (
                                                 <div key={pairing.id} className="p-3 bg-gray-700 rounded-lg">
                                                     <div className="flex items-center justify-between">
                                                         <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -987,9 +998,19 @@ const Tournament: React.FC<TournamentProps> = ({
                                                         </div>
                                                         <div className="flex items-center gap-2 shrink-0">
                                                             {pairing.status === 'finished' && (
-                                                                <span className="text-xs font-bold px-2 py-1 bg-gray-600 rounded">
-                                                                    {pairing.result}
-                                                                </span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-xs font-bold px-2 py-1 bg-gray-600 rounded">
+                                                                        {pairing.result}
+                                                                    </span>
+                                                                    {pairing.gameId && (
+                                                                        <button
+                                                                            onClick={() => onSpectate(pairing.gameId!)}
+                                                                            className="text-xs px-2 py-1 bg-blue-900/50 hover:bg-blue-800/50 text-blue-300 border border-blue-700/50 rounded font-bold transition-colors"
+                                                                        >
+                                                                            View
+                                                                        </button>
+                                                                    )}
+                                                                </div>
                                                             )}
                                                             {pairing.status === 'playing' && pairing.gameId && (
                                                                 <button

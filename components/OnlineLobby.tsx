@@ -122,12 +122,22 @@ const PlayerGameHistoryModal: React.FC<{
 
     useEffect(() => {
         const fetchGames = async () => {
+            if (!userId) return;
             setLoading(true);
             try {
+                // Try to get game IDs from user's game index
                 const gamesSnap = await db.ref(`userGames/${userId}`).once('value');
-                const gameIds = Object.keys(gamesSnap.val() || {});
+                const val = gamesSnap.val();
 
-                const gamePromises = gameIds.map(gid => db.ref(`games/${gid}`).once('value'));
+                if (!val) {
+                    setGames([]);
+                    return;
+                }
+
+                const gameIds = Object.keys(val);
+
+                // Fetch each game's data. Note: some might be deleted or missing
+                const gamePromises = gameIds.slice(-20).map(gid => db.ref(`games/${gid}`).once('value'));
                 const snapshots = await Promise.all(gamePromises);
 
                 const gamesList = snapshots
@@ -163,31 +173,36 @@ const PlayerGameHistoryModal: React.FC<{
                     </div>
                 ) : (
                     <div className="overflow-y-auto pr-2 space-y-3">
-                        {games.map(game => (
-                            <div key={game.id} className="bg-gray-700 p-4 rounded-xl border border-gray-600 flex flex-col md:flex-row justify-between items-center hover:bg-gray-650 transition-colors">
-                                <div className="flex-grow mb-3 md:mb-0">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className="font-bold text-white">
-                                            {game.data.players[game.data.playerColors.white!]?.displayName} vs {game.data.players[game.data.playerColors.black!]?.displayName}
+                        {games.map(game => {
+                            const whitePlayer = game.data.players && game.data.playerColors?.white ? game.data.players[game.data.playerColors.white] : null;
+                            const blackPlayer = game.data.players && game.data.playerColors?.black ? game.data.players[game.data.playerColors.black] : null;
+
+                            return (
+                                <div key={game.id} className="bg-gray-700 p-4 rounded-xl border border-gray-600 flex flex-col md:flex-row justify-between items-center hover:bg-gray-650 transition-colors">
+                                    <div className="flex-grow mb-3 md:mb-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="font-bold text-white">
+                                                {whitePlayer?.displayName || 'Unknown'} vs {blackPlayer?.displayName || 'Unknown'}
+                                            </span>
+                                        </div>
+                                        <div className="text-sm text-gray-400">
+                                            {game.data.ratingCategory || 'Casual'} • {game.data.isRated ? 'Rated' : 'Unrated'} • {game.data.completedAt ? new Date(game.data.completedAt).toLocaleDateString() : 'Unknown Date'}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                        <span className="text-lg font-bold text-yellow-500">
+                                            {game.data.winner ? (game.data.winner === 'White' ? '1-0' : '0-1') : '½-½'}
                                         </span>
-                                    </div>
-                                    <div className="text-sm text-gray-400">
-                                        {game.data.ratingCategory} • {game.data.isRated ? 'Rated' : 'Unrated'} • {new Date(game.data.completedAt || 0).toLocaleDateString()}
+                                        <button
+                                            onClick={() => onReview(game.data)}
+                                            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-bold transition-colors"
+                                        >
+                                            Review
+                                        </button>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-4">
-                                    <span className="text-lg font-bold text-yellow-500">
-                                        {game.data.winner ? (game.data.winner === 'White' ? '1-0' : '0-1') : '½-½'}
-                                    </span>
-                                    <button
-                                        onClick={() => onReview(game.data)}
-                                        className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-bold transition-colors"
-                                    >
-                                        Review
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </div>
