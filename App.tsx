@@ -3084,6 +3084,10 @@ const App: React.FC = () => {
                         )}
                     </div>
 
+                    <div className="mt-4 text-xs text-gray-500">
+                        Bug reports and feature requests: <a href="mailto:pannenkoekissus@gmail.com" className="text-gray-400 hover:text-blue-400 underline transition-colors">pannenkoekissus@gmail.com</a>
+                    </div>
+
                     {showLocalSetup && (
                         <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4">
                             <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-sm relative">
