@@ -80,8 +80,9 @@ const renderVisualSettings = (showPowerPieces?: boolean, showPowerRings?: boolea
 
 const PlayerRatingsModal: React.FC<{
     user: UserInfo,
-    onClose: () => void
-}> = ({ user, onClose }) => {
+    onClose: () => void,
+    onViewHistory: (uid: string) => void
+}> = ({ user, onClose, onViewHistory }) => {
     return (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
             <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md relative">
@@ -95,6 +96,100 @@ const PlayerRatingsModal: React.FC<{
                         </div>
                     ))}
                 </div>
+                <div className="mt-8 flex justify-center">
+                    <button
+                        onClick={() => {
+                            onViewHistory(user.uid);
+                            onClose();
+                        }}
+                        className="px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold transition-all transform hover:scale-105"
+                    >
+                        📜 View Match History
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const PlayerGameHistoryModal: React.FC<{
+    userId: string;
+    onClose: () => void;
+    onReview: (game: GameState) => void;
+}> = ({ userId, onClose, onReview }) => {
+    const [games, setGames] = useState<{ id: string, data: GameState }[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchGames = async () => {
+            setLoading(true);
+            try {
+                const gamesSnap = await db.ref(`userGames/${userId}`).once('value');
+                const gameIds = Object.keys(gamesSnap.val() || {});
+
+                const gamePromises = gameIds.map(gid => db.ref(`games/${gid}`).once('value'));
+                const snapshots = await Promise.all(gamePromises);
+
+                const gamesList = snapshots
+                    .map(snap => ({ id: snap.key!, data: snap.val() as GameState }))
+                    .filter(g => g.data && (g.data.status !== 'playing' && g.data.status !== 'waiting'))
+                    .sort((a, b) => (b.data.completedAt || 0) - (a.data.completedAt || 0));
+
+                setGames(gamesList);
+            } catch (err) {
+                console.error("Error fetching player games:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchGames();
+    }, [userId]);
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 p-6 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] border border-gray-700">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-2xl font-bold text-blue-400">Match History</h3>
+                    <button onClick={onClose} className="text-3xl text-gray-400 hover:text-white transition-colors">&times;</button>
+                </div>
+
+                {loading ? (
+                    <div className="flex-grow flex items-center justify-center py-12">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400"></div>
+                    </div>
+                ) : games.length === 0 ? (
+                    <div className="flex-grow flex items-center justify-center py-12 text-gray-500 italic">
+                        No finished games found for this player.
+                    </div>
+                ) : (
+                    <div className="overflow-y-auto pr-2 space-y-3">
+                        {games.map(game => (
+                            <div key={game.id} className="bg-gray-700 p-4 rounded-xl border border-gray-600 flex flex-col md:flex-row justify-between items-center hover:bg-gray-650 transition-colors">
+                                <div className="flex-grow mb-3 md:mb-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="font-bold text-white">
+                                            {game.data.players[game.data.playerColors.white!]?.displayName} vs {game.data.players[game.data.playerColors.black!]?.displayName}
+                                        </span>
+                                    </div>
+                                    <div className="text-sm text-gray-400">
+                                        {game.data.ratingCategory} • {game.data.isRated ? 'Rated' : 'Unrated'} • {new Date(game.data.completedAt || 0).toLocaleDateString()}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <span className="text-lg font-bold text-yellow-500">
+                                        {game.data.winner ? (game.data.winner === 'White' ? '1-0' : '0-1') : '½-½'}
+                                    </span>
+                                    <button
+                                        onClick={() => onReview(game.data)}
+                                        className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-bold transition-colors"
+                                    >
+                                        Review
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -236,6 +331,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
     const [allUsers, setAllUsers] = useState<UserInfo[]>([]);
     const [searchText, setSearchText] = useState("");
     const [viewingPlayerRatings, setViewingPlayerRatings] = useState<UserInfo | null>(null);
+    const [viewingPlayerHistoryUid, setViewingPlayerHistoryUid] = useState<string | null>(null);
 
     const createdGameListenerRef = useRef<{ gameId: string; ref: any; } | null>(null);
     const gameListenersRef = useRef<Record<string, any>>({});
@@ -1155,7 +1251,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
 
                 <button onClick={onBack} className="mt-8 px-6 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-semibold transition-colors">Back to Menu</button>
             </div>
-            {viewingPlayerRatings && <PlayerRatingsModal user={viewingPlayerRatings} onClose={() => setViewingPlayerRatings(null)} />}
+            {viewingPlayerRatings && <PlayerRatingsModal user={viewingPlayerRatings} onClose={() => setViewingPlayerRatings(null)} onViewHistory={(uid) => setViewingPlayerHistoryUid(uid)} />}
+            {viewingPlayerHistoryUid && <PlayerGameHistoryModal userId={viewingPlayerHistoryUid} onClose={() => setViewingPlayerHistoryUid(null)} onReview={onReview} />}
             {challengeTarget && (
                 <ChallengeConfigModal
                     opponent={challengeTarget}

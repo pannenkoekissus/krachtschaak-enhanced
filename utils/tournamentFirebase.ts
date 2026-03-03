@@ -210,6 +210,13 @@ export const listTournamentHistory = async (userId: string): Promise<TournamentD
     }) as TournamentData[];
 };
 
+// List all public finished tournaments
+export const listPublicTournamentHistory = async (): Promise<TournamentData[]> => {
+    const snap = await db.ref('tournaments').orderByChild('status').equalTo('finished').once('value');
+    const data = snap.val() || {};
+    return Object.values(data).filter((t: any) => !t.isPrivate) as TournamentData[];
+};
+
 // Toggle host participation during lobby
 export const toggleHostParticipation = async (tournamentId: string, hostUid: string, hostName: string, shouldParticipate: boolean): Promise<void> => {
     const tSnap = await db.ref(`tournaments/${tournamentId}`).once('value');
@@ -241,33 +248,72 @@ export const generateSwissPairings = (
     players: TournamentPlayer[],
     previousRounds: Record<number, TournamentRound>
 ): TournamentPairing[] => {
-    // Collect who has played whom
+    // Collect stats: who has played whom, color balance, byes
     const playedAgainst: Record<string, Set<string>> = {};
-    players.forEach(p => { playedAgainst[p.oderId] = new Set(); });
+    const colorBalance: Record<string, number> = {}; // +1 for White, -1 for Black
+    const byesReceived: Record<string, number> = {};
+
+    players.forEach(p => {
+        playedAgainst[p.oderId] = new Set();
+        colorBalance[p.oderId] = 0;
+        byesReceived[p.oderId] = 0;
+    });
 
     Object.values(previousRounds || {}).forEach(round => {
         Object.values(round.pairings || {}).forEach(pairing => {
-            if (playedAgainst[pairing.white]) playedAgainst[pairing.white].add(pairing.black);
-            if (playedAgainst[pairing.black]) playedAgainst[pairing.black].add(pairing.white);
+            if (pairing.black === 'BYE') {
+                if (byesReceived[pairing.white] !== undefined) byesReceived[pairing.white]++;
+            } else {
+                if (playedAgainst[pairing.white]) playedAgainst[pairing.white].add(pairing.black);
+                if (playedAgainst[pairing.black]) playedAgainst[pairing.black].add(pairing.white);
+                if (colorBalance[pairing.white] !== undefined) colorBalance[pairing.white]++;
+                if (colorBalance[pairing.black] !== undefined) colorBalance[pairing.black]--;
+            }
         });
     });
 
     // Sort by score descending, then by join order
-    const sorted = [...players].sort((a, b) => {
+    let available = [...players].sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score;
         return a.joinedAt - b.joinedAt;
     });
 
-    const paired = new Set<string>();
     const pairings: TournamentPairing[] = [];
 
-    for (let i = 0; i < sorted.length; i++) {
-        const p1 = sorted[i];
+    // Handle BYE if odd number of players
+    if (available.length % 2 !== 0) {
+        // Find candidate for BYE: lowest score, and hasn't had a bye (or fewer byes)
+        // Rule: 1 bye per player unless everyone has had one
+        const minByes = Math.min(...available.map(p => byesReceived[p.oderId]));
+
+        // Candidates are those with minByes
+        const byeCandidates = available.filter(p => byesReceived[p.oderId] === minByes);
+        // Take the one with lowest score (end of sorted list) among candidates
+        const byePlayer = byeCandidates[byeCandidates.length - 1];
+
+        const pairingId = generatePlayerId();
+        pairings.push({
+            id: pairingId,
+            white: byePlayer.oderId,
+            black: 'BYE',
+            gameId: null,
+            result: '1-0',
+            status: 'finished'
+        });
+
+        // Remove from available
+        available = available.filter(p => p.oderId !== byePlayer.oderId);
+    }
+
+    const paired = new Set<string>();
+
+    for (let i = 0; i < available.length; i++) {
+        const p1 = available[i];
         if (paired.has(p1.oderId)) continue;
 
         let bestMatch: TournamentPlayer | null = null;
-        for (let j = i + 1; j < sorted.length; j++) {
-            const p2 = sorted[j];
+        for (let j = i + 1; j < available.length; j++) {
+            const p2 = available[j];
             if (paired.has(p2.oderId)) continue;
             // Avoid rematches if possible
             if (!playedAgainst[p1.oderId]?.has(p2.oderId)) {
@@ -278,41 +324,39 @@ export const generateSwissPairings = (
 
         // If no fresh opponent, pair with closest available
         if (!bestMatch) {
-            for (let j = i + 1; j < sorted.length; j++) {
-                if (!paired.has(sorted[j].oderId)) {
-                    bestMatch = sorted[j];
+            for (let j = i + 1; j < available.length; j++) {
+                if (!paired.has(available[j].oderId)) {
+                    bestMatch = available[j];
                     break;
                 }
             }
         }
 
         if (bestMatch) {
-            // Alternate colors - simple approach: random for first round, then try to balance
             const pairingId = generatePlayerId();
-            const whiteFirst = Math.random() < 0.5;
+
+            // Color logic: try to balance
+            // If p1 has more White games (+), and p2 has fewer (-), p2 should be White
+            let p1White = Math.random() < 0.5;
+            const bal1 = colorBalance[p1.oderId] || 0;
+            const bal2 = colorBalance[bestMatch.oderId] || 0;
+
+            if (bal1 > bal2) {
+                p1White = false;
+            } else if (bal2 > bal1) {
+                p1White = true;
+            }
+
             pairings.push({
                 id: pairingId,
-                white: whiteFirst ? p1.oderId : bestMatch.oderId,
-                black: whiteFirst ? bestMatch.oderId : p1.oderId,
+                white: p1White ? p1.oderId : bestMatch.oderId,
+                black: p1White ? bestMatch.oderId : p1.oderId,
                 gameId: null,
                 result: null,
                 status: 'pending'
             });
             paired.add(p1.oderId);
             paired.add(bestMatch.oderId);
-        }
-        // If odd number and no match, this player gets a bye (auto 1-0)
-        else if (!paired.has(p1.oderId)) {
-            const pairingId = generatePlayerId();
-            pairings.push({
-                id: pairingId,
-                white: p1.oderId,
-                black: 'BYE',
-                gameId: null,
-                result: '1-0',
-                status: 'finished'
-            });
-            paired.add(p1.oderId);
         }
     }
 

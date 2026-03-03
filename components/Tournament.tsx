@@ -9,7 +9,7 @@ import {
     startTournament, endTournament, setPairings, updatePairing,
     updatePlayerScore, advanceRound, getTournament,
     listActiveTournaments, listTournamentHistory, generateSwissPairings, recalculateTiebreaks,
-    toggleHostParticipation
+    toggleHostParticipation, listPublicTournamentHistory
 } from '../utils/tournamentFirebase';
 import { createInitialBoard } from '../utils/game';
 import { getRatingCategory } from '../utils/ratings';
@@ -19,22 +19,25 @@ interface TournamentProps {
     displayName: string;
     onBack: () => void;
     onGameStart: (gameId: string, playerColor: Color) => void;
+    onSpectate: (gameId: string) => void;
     getInitialGameState: (mode: 'online_playing', settings: TimerSettings, dontLoad: boolean, isRated: boolean) => GameState;
     myRatings: any;
     activeTournamentId?: string | null;
     onTournamentJoined: (id: string | null) => void;
 }
 
-type View = 'list' | 'create' | 'lobby';
+type TournamentView = 'list' | 'create' | 'lobby' | 'in_progress' | 'finished';
+type ListTab = 'active' | 'history' | 'public_history';
 
 const Tournament: React.FC<TournamentProps> = ({
     userId, displayName, onBack, onGameStart, getInitialGameState, myRatings,
-    activeTournamentId, onTournamentJoined
+    activeTournamentId, onTournamentJoined, onSpectate
 }) => {
-    const [view, setView] = useState<View>('list');
+    const [view, setView] = useState<TournamentView>('list');
     const [tournaments, setTournaments] = useState<TournamentData[]>([]);
     const [history, setHistory] = useState<TournamentData[]>([]);
-    const [listTab, setListTab] = useState<'active' | 'history'>('active');
+    const [publicHistory, setPublicHistory] = useState<TournamentData[]>([]);
+    const [listTab, setListTab] = useState<ListTab>('active');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -77,13 +80,16 @@ const Tournament: React.FC<TournamentProps> = ({
     const loadTournaments = async () => {
         try {
             setLoading(true);
-            const [activeList, historyList] = await Promise.all([
-                listActiveTournaments(userId),
-                listTournamentHistory(userId)
-            ]);
+            const activeList = await listActiveTournaments(userId);
             setTournaments(activeList);
-            setHistory(historyList);
-        } catch (err) {
+
+            if (userId) {
+                const hist = await listTournamentHistory(userId);
+                setHistory(hist);
+            }
+            const pubHist = await listPublicTournamentHistory();
+            setPublicHistory(pubHist);
+        } catch (err: any) {
             setError('Failed to load tournaments');
         } finally {
             setLoading(false);
@@ -261,80 +267,84 @@ const Tournament: React.FC<TournamentProps> = ({
         const blackPlayer = activeTournament.players[pairing.black];
         if (!whitePlayer || !blackPlayer) return;
 
-        // Create a game in Firebase
-        const newGameRef = db.ref('games').push();
-        const gameId = newGameRef.key;
-        if (!gameId) return;
+        // Use a transaction on the pairing to ensure only one client actually starts the game
+        await db.ref(`tournaments/${activeTournament.id}/rounds/${currentRound}/pairings/${pairing.id}`).transaction((currentPairing: TournamentPairing | null) => {
+            if (!currentPairing || currentPairing.status !== 'pending') return; // Already started or invalid
+            return { ...currentPairing, status: 'starting' }; // Intermediate state
+        }, async (error, committed, snapshot) => {
+            if (error || !committed) return;
 
-        // Fetch actual ratings for both players
-        let whiteRatings = {};
-        let blackRatings = {};
-        try {
-            const whiteSnap = await db.ref(`userRatings/${whitePlayer.uid}/ratings`).once('value');
-            const blackSnap = await db.ref(`userRatings/${blackPlayer.uid}/ratings`).once('value');
-            if (whiteSnap.exists()) whiteRatings = whiteSnap.val();
-            if (blackSnap.exists()) blackRatings = blackSnap.val();
-        } catch (e) {
-            console.error("Error fetching ratings for tournament game:", e);
-        }
+            // Now we are the one responsible for starting the game
+            const newGameRef = db.ref('games').push();
+            const gameId = newGameRef.key;
+            if (!gameId) return;
 
-        const category = getRatingCategory(activeTournament.timerSettings);
+            // Fetch actual ratings for both players
+            let whiteRatings = {};
+            let blackRatings = {};
+            try {
+                const whiteSnap = await db.ref(`userRatings/${whitePlayer.uid}/ratings`).once('value');
+                const blackSnap = await db.ref(`userRatings/${blackPlayer.uid}/ratings`).once('value');
+                if (whiteSnap.exists()) whiteRatings = whiteSnap.val();
+                if (blackSnap.exists()) blackRatings = blackSnap.val();
+            } catch (e) {
+                console.error("Error fetching ratings for tournament game:", e);
+            }
 
-        const initialState = getInitialGameState('online_playing', activeTournament.timerSettings, true, false);
+            const category = getRatingCategory(activeTournament.timerSettings);
+            const initialState = getInitialGameState('online_playing', activeTournament.timerSettings, true, false);
 
-        const whiteInfo: PlayerInfo = {
-            uid: whitePlayer.uid, displayName: whitePlayer.nickname,
-            disconnectTimestamp: null, ratings: whiteRatings as any
-        };
-        const blackInfo: PlayerInfo = {
-            uid: blackPlayer.uid, displayName: blackPlayer.nickname,
-            disconnectTimestamp: null, ratings: blackRatings as any
-        };
+            const whiteInfo: PlayerInfo = {
+                uid: whitePlayer.uid, displayName: whitePlayer.nickname,
+                disconnectTimestamp: null, ratings: whiteRatings as any
+            };
+            const blackInfo: PlayerInfo = {
+                uid: blackPlayer.uid, displayName: blackPlayer.nickname,
+                disconnectTimestamp: null, ratings: blackRatings as any
+            };
 
-        initialState.players[whitePlayer.uid] = whiteInfo;
-        initialState.players[blackPlayer.uid] = blackInfo;
-        initialState.playerColors = { white: whitePlayer.uid, black: blackPlayer.uid };
-        initialState.status = 'playing';
-        initialState.isRated = activeTournament.isRated ?? false;
+            initialState.players[whitePlayer.uid] = whiteInfo;
+            initialState.players[blackPlayer.uid] = blackInfo;
+            initialState.playerColors = { white: whitePlayer.uid, black: blackPlayer.uid };
+            initialState.status = 'playing';
+            initialState.isRated = activeTournament.isRated ?? false;
 
-        // Enforce tournament's visual settings
-        initialState.showPowerPieces = activeTournament.showPowerPieces;
-        initialState.showPowerRings = activeTournament.showPowerRings;
-        initialState.showOriginalType = activeTournament.showOriginalType;
+            initialState.showPowerPieces = activeTournament.showPowerPieces;
+            initialState.showPowerRings = activeTournament.showPowerRings;
+            initialState.showOriginalType = activeTournament.showOriginalType;
 
-        initialState.ratingCategory = category;
-        initialState.initialRatings = {
-            white: (whiteRatings as any)[category] ?? 1200,
-            black: (blackRatings as any)[category] ?? 1200
-        };
+            initialState.ratingCategory = category;
+            initialState.initialRatings = {
+                white: (whiteRatings as any)[category] ?? 1200,
+                black: (blackRatings as any)[category] ?? 1200
+            };
 
-        if (activeTournament.timerSettings && 'initialTime' in activeTournament.timerSettings) {
-            initialState.turnStartTime = window.firebase.database.ServerValue.TIMESTAMP as any;
-        } else if (activeTournament.timerSettings && 'daysPerMove' in activeTournament.timerSettings) {
-            initialState.moveDeadline = Date.now() + activeTournament.timerSettings.daysPerMove * 24 * 60 * 60 * 1000;
-        }
+            if (activeTournament.timerSettings && 'initialTime' in activeTournament.timerSettings) {
+                initialState.turnStartTime = window.firebase.database.ServerValue.TIMESTAMP as any;
+            } else if (activeTournament.timerSettings && 'daysPerMove' in activeTournament.timerSettings) {
+                initialState.moveDeadline = Date.now() + activeTournament.timerSettings.daysPerMove * 24 * 60 * 60 * 1000;
+            }
 
-        // Tag it as a tournament game
-        initialState.tournamentId = activeTournament.id;
-        initialState.tournamentRound = currentRound;
-        initialState.tournamentPairingId = pairing.id;
+            initialState.tournamentId = activeTournament.id;
+            initialState.tournamentRound = currentRound;
+            initialState.tournamentPairingId = pairing.id;
 
-        await newGameRef.set(initialState);
-        await db.ref(`userGames/${whitePlayer.uid}/${gameId}`).set(true);
-        await db.ref(`userGames/${blackPlayer.uid}/${gameId}`).set(true);
+            await newGameRef.set(initialState);
+            await db.ref(`userGames/${whitePlayer.uid}/${gameId}`).set(true);
+            await db.ref(`userGames/${blackPlayer.uid}/${gameId}`).set(true);
 
-        // Update pairing
-        await updatePairing(activeTournament.id, currentRound, pairing.id, {
-            gameId,
-            status: 'playing'
+            // Update pairing status to playing
+            await updatePairing(activeTournament.id, currentRound, pairing.id, {
+                gameId,
+                status: 'playing'
+            });
+
+            if (whitePlayer.uid === userId) {
+                onGameStart(gameId, Color.White);
+            } else if (blackPlayer.uid === userId) {
+                onGameStart(gameId, Color.Black);
+            }
         });
-
-        // If I'm one of the players, enter the game
-        if (whitePlayer.uid === userId) {
-            onGameStart(gameId, Color.White);
-        } else if (blackPlayer.uid === userId) {
-            onGameStart(gameId, Color.Black);
-        }
     };
 
     // Host: start all pending games
@@ -499,7 +509,13 @@ const Tournament: React.FC<TournamentProps> = ({
                                 onClick={() => setListTab('history')}
                                 className={`px-4 py-2 font-bold transition-colors ${listTab === 'history' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-gray-400 hover:text-white'}`}
                             >
-                                History
+                                My History
+                            </button>
+                            <button
+                                onClick={() => setListTab('public_history')}
+                                className={`px-4 py-2 font-bold transition-colors ${listTab === 'public_history' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-gray-400 hover:text-white'}`}
+                            >
+                                Public History
                             </button>
                         </div>
 
@@ -528,12 +544,12 @@ const Tournament: React.FC<TournamentProps> = ({
                         <div className="space-y-3">
                             {loading ? (
                                 <div className="text-center py-8 text-gray-500">Loading...</div>
-                            ) : (listTab === 'active' ? tournaments : history).length === 0 ? (
+                            ) : (listTab === 'active' ? tournaments : listTab === 'history' ? history : publicHistory).length === 0 ? (
                                 <div className="text-center py-8 text-gray-500 italic">
-                                    No {listTab} tournaments found.
+                                    No {listTab.replace('_', ' ')} tournaments found.
                                 </div>
                             ) : (
-                                (listTab === 'active' ? tournaments : history).map(t => {
+                                (listTab === 'active' ? tournaments : listTab === 'history' ? history : publicHistory).map(t => {
                                     const timeLabel = !t.timerSettings ? 'Unlimited' :
                                         'daysPerMove' in t.timerSettings ? `${t.timerSettings.daysPerMove}d / move` :
                                             `${t.timerSettings.initialTime / 60}m + ${t.timerSettings.increment}s`;
@@ -975,10 +991,13 @@ const Tournament: React.FC<TournamentProps> = ({
                                                                     {pairing.result}
                                                                 </span>
                                                             )}
-                                                            {pairing.status === 'playing' && (
-                                                                <span className="text-xs font-bold px-2 py-1 bg-yellow-600 rounded animate-pulse">
-                                                                    Playing
-                                                                </span>
+                                                            {pairing.status === 'playing' && pairing.gameId && (
+                                                                <button
+                                                                    onClick={() => onSpectate(pairing.gameId!)}
+                                                                    className="text-xs px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded font-bold transition-colors"
+                                                                >
+                                                                    Spectate
+                                                                </button>
                                                             )}
                                                             {pairing.status === 'pending' && pairing.black !== 'BYE' && isHost && (
                                                                 <button
