@@ -100,10 +100,10 @@ const Tournament: React.FC<TournamentProps> = ({
             const data = snap.val();
             if (data) {
                 setActiveTournament(data);
-                // Find my player ID
+                // Find my player ID (reset if not found, e.g. host who is not a player)
                 const players = data.players || {};
                 const myEntry = Object.values(players).find((p: any) => p.uid === userId);
-                if (myEntry) setMyPlayerId((myEntry as TournamentPlayer).oderId);
+                setMyPlayerId(myEntry ? (myEntry as TournamentPlayer).oderId : null);
             }
         });
         listenerRef.current = ref;
@@ -181,14 +181,17 @@ const Tournament: React.FC<TournamentProps> = ({
             const t = await getTournament(id);
             if (!t) { setError('Tournament not found'); return; }
 
+            const isHostOfThis = t.hostUid === userId;
             const existing = Object.values(t.players || {}).find((p: any) => p.uid === userId);
 
-            if (t.status !== 'lobby' && !existing) {
+            // Non-host, non-player can't enter a started/finished tournament
+            if (t.status !== 'lobby' && !existing && !isHostOfThis) {
                 setError('Tournament has already started or finished');
                 return;
             }
 
-            if (!existing) {
+            // Only auto-join as a player if NOT the host and not already in
+            if (!existing && !isHostOfThis) {
                 await joinTournament(id, displayName, userId);
             }
 
@@ -400,9 +403,36 @@ const Tournament: React.FC<TournamentProps> = ({
         }
     };
 
+    // Award wins to opponents for any pending pairings involving a withdrawing/removed player
+    const awardForfeitWins = async (playerId: string) => {
+        if (!activeTournament) return;
+        const rounds = activeTournament.rounds || {};
+        for (const [roundNum, round] of Object.entries(rounds)) {
+            const roundData = round as TournamentRound;
+            const pairings = roundData.pairings || {};
+            for (const [pairingId, pairing] of Object.entries(pairings)) {
+                const p = pairing as TournamentPairing;
+                if (p.status !== 'pending') continue;
+                if (p.white === playerId || p.black === playerId) {
+                    const result: '1-0' | '0-1' = p.white === playerId ? '0-1' : '1-0';
+                    const winnerId = p.white === playerId ? p.black : p.white;
+                    if (winnerId !== 'BYE') {
+                        await updatePairing(activeTournament.id, parseInt(roundNum), pairingId, {
+                            result,
+                            status: 'finished'
+                        });
+                        await updatePlayerScore(activeTournament.id, winnerId, 1);
+                        await recalculateTiebreaks(activeTournament.id);
+                    }
+                }
+            }
+        }
+    };
+
     // Host: remove a player
     const handleRemovePlayer = async (playerId: string) => {
         if (!activeTournament) return;
+        await awardForfeitWins(playerId);
         await removePlayer(activeTournament.id, playerId);
     };
 
@@ -411,6 +441,7 @@ const Tournament: React.FC<TournamentProps> = ({
         if (!activeTournament || !myPlayerId) return;
         if (window.confirm('Are you sure you want to withdraw from this tournament?')) {
             try {
+                await awardForfeitWins(myPlayerId);
                 await removePlayer(activeTournament.id, myPlayerId);
                 if (listenerRef.current) listenerRef.current.off();
                 setActiveTournament(null);
