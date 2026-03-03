@@ -398,6 +398,15 @@ const App: React.FC = () => {
             // Clear params from URL without reloading
             const newUrl = window.location.origin + window.location.pathname;
             window.history.replaceState({}, document.title, newUrl);
+        } else if (urlFolderId && urlOwnerId) {
+            // Link to a folder
+            setAnalysisFolderId(urlFolderId);
+            setAnalysisSourceFolderType(urlSourceType as 'shared' | 'public' | null);
+            setGameMode('analysis_manager');
+
+            // Clear params from URL without reloading
+            const newUrl = window.location.origin + window.location.pathname;
+            window.history.replaceState({}, document.title, newUrl);
         }
     }, []);
 
@@ -2942,24 +2951,32 @@ const App: React.FC = () => {
         }
 
         if (gameMode === 'analysis_manager') {
-            return <AnalysisManager userId={currentUser?.uid || ''} onSelectAnalysis={(id, ownerUserId, folderId, canEdit, sourceType) => {
-                setAnalysisId(id);
-                setAnalysisOwnerUserId(ownerUserId || currentUser?.uid || null);
-                setAnalysisFolderId(folderId || null);
-                setAnalysisCanEdit(canEdit !== false);
-                setAnalysisSourceFolderType(sourceType || null);
-                setGameMode('analysis');
-            }} onBack={() => {
-                if (analysisReturnTo) {
-                    setGameMode(analysisReturnTo.mode);
-                    setLobbyView(analysisReturnTo.lobbyView);
-                    setReviewingGame(analysisReturnTo.reviewingGame);
-                    setAnalysisReturnTo(null);
-                } else {
-                    setGameMode('menu');
-                }
-            }}
+            return <AnalysisManager
+                userId={currentUser?.uid || ''}
+                initialFolderId={analysisFolderId}
+                initialSourceType={analysisSourceFolderType}
+                onSelectAnalysis={(id, ownerUserId, folderId, canEdit, sourceType) => {
+                    setAnalysisId(id);
+                    setAnalysisOwnerUserId(ownerUserId || currentUser?.uid || null);
+                    setAnalysisFolderId(folderId || null);
+                    setAnalysisCanEdit(canEdit !== false);
+                    setAnalysisSourceFolderType(sourceType || null);
+                    setGameMode('analysis');
+                }} onBack={() => {
+                    setAnalysisFolderId(null);
+                    setAnalysisSourceFolderType(null);
+                    if (analysisReturnTo) {
+                        setGameMode(analysisReturnTo.mode);
+                        setLobbyView(analysisReturnTo.lobbyView);
+                        setReviewingGame(analysisReturnTo.reviewingGame);
+                        setAnalysisReturnTo(null);
+                    } else {
+                        setGameMode('menu');
+                    }
+                }}
                 onBackToMenu={() => {
+                    setAnalysisFolderId(null);
+                    setAnalysisSourceFolderType(null);
                     setGameMode('menu');
                     setAnalysisReturnTo(null);
                 }}
@@ -3048,15 +3065,24 @@ const App: React.FC = () => {
                         )}
                     </div>
 
-                    <div className="mt-6">
+                    <div className="mt-8 flex flex-col items-center gap-4">
                         <a
                             href="https://gratis-5137332.jouwweb.site/de-officiele-krachtschaak-regels"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300 underline text-lg font-medium"
+                            className="text-blue-400 hover:text-blue-300 underline text-lg font-medium transition-colors"
                         >
                             How to Play (Official Rules in Dutch)
                         </a>
+
+                        {!(window as any).Capacitor && (
+                            <a
+                                href="https://github.com/pannenkoekissus/krachtschaak-enhanced/releases/latest/download/krachtschaak.apk"
+                                className="mt-2 px-6 py-2 bg-green-700/40 hover:bg-green-700/60 border border-green-600/50 rounded-full text-green-300 text-sm font-bold flex items-center gap-2 transition-all"
+                            >
+                                <span>🤖</span> Download Android App (APK)
+                            </a>
+                        )}
                     </div>
 
                     {showLocalSetup && (

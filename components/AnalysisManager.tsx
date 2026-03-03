@@ -34,6 +34,8 @@ interface AnalysisManagerProps {
   onSelectAnalysis: (analysisId: string, ownerUserId?: string, folderId?: string, canEdit?: boolean, sourceType?: 'shared' | 'public') => void;
   onBack: () => void;
   onBackToMenu: () => void;
+  initialFolderId?: string | null;
+  initialSourceType?: 'shared' | 'public' | null;
 }
 
 interface ModalState {
@@ -46,7 +48,9 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
   userId,
   onSelectAnalysis,
   onBack,
-  onBackToMenu
+  onBackToMenu,
+  initialFolderId,
+  initialSourceType
 }) => {
   const isOnline = useOnlineStatus();
   const [folders, setFolders] = useState<Record<string, AnalysisFolder>>({});
@@ -111,6 +115,8 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
     }
   }, [isSelectedFolderPublic, cleanFolderId]);
 
+  const [showFolderLinkCopied, setShowFolderLinkCopied] = useState<string | null>(null);
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -123,8 +129,13 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
       setAnalyses(analysesData);
       setSharedFolders(sharedFoldersData);
       setPublicFolders(publicFoldersData);
-      // Default to showing root folder
-      setSelectedFolderId(null);
+      // Default to showing root folder or initial folder from deep link
+      if (initialFolderId) {
+        const id = initialSourceType ? `${initialSourceType}_${initialFolderId}` : initialFolderId;
+        setSelectedFolderId(id);
+      } else {
+        setSelectedFolderId(null);
+      }
     } catch (err) {
       console.error('Error loading analysis data:', err);
       setError('Failed to load analyses');
@@ -453,7 +464,15 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
     });
   };
 
-  // Get analyses for current folder (treat missing folderId as null)
+  const handleShareFolderLink = (folderId: string, ownerId: string, sourceType?: 'shared' | 'public' | null) => {
+    let url = `${window.location.origin}${window.location.pathname}?folderId=${folderId}&ownerId=${ownerId}`;
+    if (sourceType) url += `&sourceType=${sourceType}`;
+
+    navigator.clipboard.writeText(url).then(() => {
+      setShowFolderLinkCopied(folderId);
+      setTimeout(() => setShowFolderLinkCopied(null), 2000);
+    });
+  };
   // For shared folders, we use sharedFolderAnalyses instead of analyses
   // For public folders, we use publicFolderAnalyses instead of analyses
   const currentAnalyses = isSelectedFolderShared
@@ -586,6 +605,16 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            handleShareFolderLink(folderId, userId);
+                          }}
+                          className="p-1 text-xs bg-blue-600 hover:bg-blue-500 rounded font-semibold transition-all"
+                          title="Copy direct folder link"
+                        >
+                          {showFolderLinkCopied === folderId ? 'Link Copied!' : '🔗 Copy Link'}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setModal({ type: 'rename_folder', targetId: folderId });
                             setInputValue(folder.name);
                           }}
@@ -625,13 +654,13 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                   .map(([sharedFolderId, sharedFolder]: any) => (
                     <div
                       key={sharedFolderId}
-                      className={`p-3 rounded text-sm transition-colors ${selectedFolderId === `shared_${sharedFolderId}`
+                      className={`p-3 rounded text-sm transition-colors flex items-center ${selectedFolderId === `shared_${sharedFolderId}`
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-700 hover:bg-gray-600'
                         }`}
                     >
-                      <div onClick={() => setSelectedFolderId(`shared_${sharedFolderId}`)} className="cursor-pointer">
-                        <div className="font-semibold">🔗 {sharedFolder.name}</div>
+                      <div onClick={() => setSelectedFolderId(`shared_${sharedFolderId}`)} className="cursor-pointer flex-1 min-w-0 pr-2">
+                        <div className="font-semibold truncate">🔗 {sharedFolder.name}</div>
                         <div className="text-xs text-gray-400 mt-1">
                           by {(sharedFolder as any).ownerUsername || sharedFolder.ownerUserId}
                           <span className={`ml-2 ${sharedFolder.permission === 'edit' ? 'text-green-400' : 'text-yellow-400'}`}>
@@ -639,6 +668,18 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                           </span>
                         </div>
                       </div>
+                      {selectedFolderId === `shared_${sharedFolderId}` && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleShareFolderLink(sharedFolderId, sharedFolder.ownerUserId, 'shared');
+                          }}
+                          className="p-1 px-2 text-[10px] bg-blue-700 hover:bg-blue-600 rounded font-bold transition-all shrink-0"
+                          title="Copy direct folder link"
+                        >
+                          {showFolderLinkCopied === sharedFolderId ? '✓ Copied' : '🔗 Link'}
+                        </button>
+                      )}
                     </div>
                   ))}
               </div>
@@ -655,17 +696,29 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                   .map(([publicFolderId, publicFolder]: any) => (
                     <div
                       key={publicFolderId}
-                      className={`p-3 rounded text-sm transition-colors ${selectedFolderId === `public_${publicFolderId}`
+                      className={`p-3 rounded text-sm transition-colors flex items-center ${selectedFolderId === `public_${publicFolderId}`
                         ? 'bg-purple-600 text-white'
                         : 'bg-gray-700 hover:bg-gray-600'
                         }`}
                     >
-                      <div onClick={() => setSelectedFolderId(`public_${publicFolderId}`)} className="cursor-pointer">
-                        <div className="font-semibold">🌐 {publicFolder.name}</div>
+                      <div onClick={() => setSelectedFolderId(`public_${publicFolderId}`)} className="cursor-pointer flex-1 min-w-0 pr-2">
+                        <div className="font-semibold truncate">🌐 {publicFolder.name}</div>
                         <div className="text-xs text-gray-400 mt-1">
                           by {(publicFolder as any).ownerDisplayName || publicFolder.ownerUserId}
                         </div>
                       </div>
+                      {selectedFolderId === `public_${publicFolderId}` && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleShareFolderLink(publicFolderId, publicFolder.ownerUserId, 'public');
+                          }}
+                          className="p-1 px-2 text-[10px] bg-purple-700 hover:bg-purple-600 rounded font-bold transition-all shrink-0"
+                          title="Copy direct folder link"
+                        >
+                          {showFolderLinkCopied === publicFolderId ? '✓ Copied' : '🔗 Link'}
+                        </button>
+                      )}
                     </div>
                   ))}
               </div>
@@ -1018,6 +1071,16 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                       }`}
                   >
                     {folderIsPublicWritable ? '✓ Writable' : 'Read-only'}
+                  </button>
+                </div>
+              )}
+              {folderIsPublic && (
+                <div className="mt-4 pt-3 border-t border-gray-600 text-center">
+                  <button
+                    onClick={() => handleShareFolderLink(sharingFolderId!, userId, 'public')}
+                    className="w-full py-2 bg-purple-700 hover:bg-purple-600 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2"
+                  >
+                    {showFolderLinkCopied === sharingFolderId ? '✅ Direct Link Copied!' : '🔗 Copy Public Direct Link'}
                   </button>
                 </div>
               )}
