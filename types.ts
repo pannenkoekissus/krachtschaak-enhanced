@@ -74,7 +74,7 @@ export interface PromotionData {
   powerAfterPromotion: PieceType | null;
 }
 
-export type GameMode = 'menu' | 'local' | 'online_lobby' | 'online_playing' | 'online_spectating' | 'analysis' | 'board_editor' | 'analysis_manager';
+export type GameMode = 'menu' | 'local' | 'online_lobby' | 'online_playing' | 'online_spectating' | 'analysis' | 'board_editor' | 'analysis_manager' | 'tournament';
 
 export type TimerSettings = { initialTime: number; increment: number; } | { daysPerMove: number; } | null;
 
@@ -104,6 +104,9 @@ export interface IncomingChallenge {
   isRated: boolean;
   timestamp: number;
   challengeColor?: string;
+  showPowerPieces?: boolean;
+  showPowerRings?: boolean;
+  showOriginalType?: boolean;
 }
 
 export interface SentChallenge {
@@ -116,6 +119,9 @@ export interface SentChallenge {
   ratingCategory: RatingCategory;
   isRated: boolean;
   challengeColor?: string;
+  showPowerPieces?: boolean;
+  showPowerRings?: boolean;
+  showOriginalType?: boolean;
 }
 
 export interface ActiveGameSummary {
@@ -166,6 +172,12 @@ export interface GameState {
   premoves?: { [color in Color]?: { from: Position, to: Position, isForcePower: boolean } | null };
   moveHistory?: Move[];
   chat?: ChatMessage[];
+  tournamentId?: string | null;
+  tournamentRound?: number | null;
+  tournamentPairingId?: string | null;
+  showPowerPieces?: boolean;
+  showPowerRings?: boolean;
+  showOriginalType?: boolean;
 }
 
 export interface LobbyGame {
@@ -176,4 +188,54 @@ export interface LobbyGame {
   timerSettings: TimerSettings;
   ratingCategory: RatingCategory;
   isRated: boolean;
+}
+
+// Tournament types
+
+export type TournamentStatus = 'lobby' | 'in_progress' | 'finished';
+export type PairingMode = 'manual' | 'swiss';
+export type PairingResult = '1-0' | '0-1' | '0.5-0.5' | null;
+export type PairingStatus = 'pending' | 'playing' | 'finished';
+
+export interface TournamentPlayer {
+  oderId: string;          // unique id within the tournament
+  uid: string;             // firebase uid (auth required)
+  nickname: string;
+  score: number;           // cumulative: 1 = win, 0.5 = draw, 0 = loss
+  buchholz: number;        // tiebreak: sum of opponents' scores
+  sonnebornBerger: number; // tiebreak: sum of beaten opponents' scores + 0.5 * drawn opponents' scores
+  joinedAt: number;
+}
+
+export interface TournamentPairing {
+  id: string;
+  white: string;           // oderId of player
+  black: string;           // oderId of player
+  gameId: string | null;   // link to /games/{gameId} when started
+  result: PairingResult;
+  status: PairingStatus;
+}
+
+export interface TournamentRound {
+  pairings: Record<string, TournamentPairing>;
+}
+
+export interface TournamentData {
+  id: string;
+  name: string;
+  hostUid: string;
+  hostName: string;
+  status: TournamentStatus;
+  timerSettings: TimerSettings;
+  currentRound: number;
+  totalRounds: number;
+  pairingMode: PairingMode;
+  isPrivate: boolean;
+  isRated: boolean;
+  createdAt: number;
+  players: Record<string, TournamentPlayer>;
+  rounds: Record<number, TournamentRound>;
+  showPowerPieces?: boolean;
+  showPowerRings?: boolean;
+  showOriginalType?: boolean;
 }

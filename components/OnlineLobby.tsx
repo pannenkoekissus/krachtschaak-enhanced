@@ -95,7 +95,7 @@ const PlayerRatingsModal: React.FC<{
 const ChallengeConfigModal: React.FC<{
     opponent: UserInfo;
     onCancel: () => void;
-    onSend: (settings: TimerSettings, isRated: boolean, challengeColor: string) => void;
+    onSend: (settings: TimerSettings, isRated: boolean, challengeColor: string, visualSettings: { showPowerPieces: boolean, showPowerRings: boolean, showOriginalType: boolean }) => void;
 }> = ({ opponent, onCancel, onSend }) => {
     const [isRated, setIsRated] = useState(true);
     const [type, setType] = useState<'realtime' | 'correspondence'>('realtime');
@@ -104,6 +104,9 @@ const ChallengeConfigModal: React.FC<{
     const [inc, setInc] = useState('5');
     const [days, setDays] = useState('2');
     const [challengeColor, setchallengeColor] = useState('random');
+    const [showPowerPieces, setShowPowerPieces] = useState(true);
+    const [showPowerRings, setShowPowerRings] = useState(true);
+    const [showOriginalType, setShowOriginalType] = useState(true);
 
     const handleSubmit = () => {
         let settings: TimerSettings = null;
@@ -112,7 +115,7 @@ const ChallengeConfigModal: React.FC<{
         } else if (corrType === 'daily') {
             settings = { daysPerMove: parseInt(days) };
         }
-        onSend(settings, isRated, challengeColor);
+        onSend(settings, isRated, challengeColor, { showPowerPieces, showPowerRings, showOriginalType });
     };
 
     return (
@@ -133,6 +136,22 @@ const ChallengeConfigModal: React.FC<{
                     <button onClick={() => setchallengeColor('white')} className={`flex-1 py-1 text-sm rounded ${challengeColor === 'white' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}>Play as white</button>
                     <button onClick={() => setchallengeColor('random')} className={`flex-1 py-1 text-sm rounded ${challengeColor === 'random' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}>Play as random color</button>
                     <button onClick={() => setchallengeColor('black')} className={`flex-1 py-1 text-sm rounded ${challengeColor === 'black' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}>Play as black</button>
+                </div>
+
+                <div className="bg-gray-700 p-3 rounded-lg mb-4 space-y-2">
+                    <p className="text-xs font-bold text-gray-400 uppercase mb-1">Visual Settings (Enforced for both)</p>
+                    <div className="flex items-center justify-between">
+                        <label className="text-sm text-gray-300">Show Power Icons</label>
+                        <input type="checkbox" checked={showPowerPieces} onChange={e => setShowPowerPieces(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <label className="text-sm text-gray-300">Show Power Rings</label>
+                        <input type="checkbox" checked={showPowerRings} onChange={e => setShowPowerRings(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <label className="text-sm text-gray-300">Show Original Piece</label>
+                        <input type="checkbox" checked={showOriginalType} onChange={e => setShowOriginalType(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                    </div>
                 </div>
 
                 {type === 'realtime' ? (
@@ -200,6 +219,9 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
     const [baseMinutes, setBaseMinutes] = useState('10');
     const [increment, setIncrement] = useState('5');
     const [daysPerMove, setDaysPerMove] = useState('2');
+    const [lobbyShowPowerPieces, setLobbyShowPowerPieces] = useState(true);
+    const [lobbyShowPowerRings, setLobbyShowPowerRings] = useState(true);
+    const [lobbyShowOriginalType, setLobbyShowOriginalType] = useState(true);
 
     // Player list state
     const [allUsers, setAllUsers] = useState<UserInfo[]>([]);
@@ -443,7 +465,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
 
     // --- CHALLENGE ACTIONS ---
 
-    const handleSendChallenge = async (settings: TimerSettings, isRated: boolean, challengeColor: string) => {
+    const handleSendChallenge = async (settings: TimerSettings, isRated: boolean, challengeColor: string, visualSettings: { showPowerPieces: boolean, showPowerRings: boolean, showOriginalType: boolean }) => {
         if (!challengeTarget || !myRatings) return;
 
         const category = getRatingCategory(settings);
@@ -458,7 +480,10 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
             ratingCategory: category,
             isRated: isRated,
             timestamp: window.firebase.database.ServerValue.TIMESTAMP,
-            challengeColor: challengeColor
+            challengeColor: challengeColor,
+            showPowerPieces: visualSettings.showPowerPieces,
+            showPowerRings: visualSettings.showPowerRings,
+            showOriginalType: visualSettings.showOriginalType
         };
 
         const newChallengeRef = db.ref(`challenges/${targetUid}`).push();
@@ -474,7 +499,10 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
             timerSettings: settings,
             ratingCategory: category,
             isRated: isRated,
-            challengeColor: challengeColor
+            challengeColor: challengeColor,
+            showPowerPieces: visualSettings.showPowerPieces,
+            showPowerRings: visualSettings.showPowerRings,
+            showOriginalType: visualSettings.showOriginalType
         });
 
         setChallengeTarget(null); // Close Modal
@@ -543,6 +571,9 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
             white: initialState.playerColors.white === userUid ? myRatings[challenge.ratingCategory] : challenge.fromRating,
             black: initialState.playerColors.black === userUid ? myRatings[challenge.ratingCategory] : challenge.fromRating,
         };
+        initialState.showPowerPieces = challenge.showPowerPieces;
+        initialState.showPowerRings = challenge.showPowerRings;
+        initialState.showOriginalType = challenge.showOriginalType;
 
         await newGameRef.set(initialState);
 
@@ -616,6 +647,9 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
             initialState.players[userUid] = playerInfo;
             initialState.playerColors[creatorColor] = userUid;
             initialState.status = 'waiting';
+            initialState.showPowerPieces = lobbyShowPowerPieces;
+            initialState.showPowerRings = lobbyShowPowerRings;
+            initialState.showOriginalType = lobbyShowOriginalType;
 
             await newGameRef.set(initialState);
             await db.ref(`userGames/${userUid}/${gameId}`).set(true);
@@ -1051,6 +1085,22 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                                     </div>
                                 </div>
                             )}
+
+                            <div className="bg-gray-800/80 p-3 rounded-lg border border-gray-700 space-y-2 mt-2">
+                                <p className="text-xs font-bold text-gray-400 uppercase mb-2">Visual Settings (Enforced for both)</p>
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm text-gray-300">Show Power Icons</label>
+                                    <input type="checkbox" checked={lobbyShowPowerPieces} onChange={e => setLobbyShowPowerPieces(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm text-gray-300">Show Power Rings</label>
+                                    <input type="checkbox" checked={lobbyShowPowerRings} onChange={e => setLobbyShowPowerRings(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm text-gray-300">Show Original Piece</label>
+                                    <input type="checkbox" checked={lobbyShowOriginalType} onChange={e => setLobbyShowOriginalType(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                                </div>
+                            </div>
 
                             <button onClick={handleCreateGame} disabled={isActionInProgress} className="w-full mt-2 px-6 py-3 bg-green-600 hover:bg-green-700 rounded-lg text-xl font-semibold transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed">{isCreatingGame ? 'Creating...' : 'Create Game'}</button>
                         </div>

@@ -11,11 +11,13 @@ import PowerLegend from './components/PowerLegend';
 import BoardEditor from './components/BoardEditor';
 import Analysis from './components/Analysis';
 import AnalysisManager from './components/AnalysisManager';
+import Tournament from './components/Tournament';
 import ConfirmationModal from './components/ConfirmationModal';
 import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, GameMode, TimerSettings, PlayerInfo, SentChallenge, Move, ChatMessage, LobbyGame, IncomingChallenge } from './types';
 import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, sanitizePiece } from './utils/game';
 import { getRatingCategory, RatingCategory, RATING_CATEGORIES } from './utils/ratings';
 import { getSharedFolders, getPublicFolders } from './utils/analysisFirebase';
+import { updatePairing, updatePlayerScore, recalculateTiebreaks } from './utils/tournamentFirebase';
 import { isFirebaseConfigured, auth, db } from './firebaseConfig';
 import SettingsModal from './components/SettingsModal';
 import useOnlineStatus from './utils/useOnlineStatus';
@@ -97,6 +99,10 @@ const App: React.FC = () => {
     const [challengedPlayerInfo, setChallengedPlayerInfo] = useState<{ uid: string; displayName: string } | null>(null);
     const [draggedPiece, setDraggedPiece] = useState<Position | null>(null);
     const [rejoinCountdown, setRejoinCountdown] = useState<number | null>(null);
+    const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
+    const [gameTournamentId, setGameTournamentId] = useState<string | null>(null);
+    const [gameTournamentRound, setGameTournamentRound] = useState<number | null>(null);
+    const [gameTournamentPairingId, setGameTournamentPairingId] = useState<string | null>(null);
     const [reviewingGame, setReviewingGame] = useState<GameState | null>(null);
     const [analysisState, setAnalysisState] = useState<GameState | null>(null);
     const [reviewReturnTo, setReviewReturnTo] = useState<{ mode: GameMode, lobbyView: any } | null>(null);
@@ -150,6 +156,9 @@ const App: React.FC = () => {
     const [highlightedSquares, setHighlightedSquares] = useState<Position[]>([]);
     const [arrows, setArrows] = useState<{ from: Position; to: Position }[]>([]);
     const [rightClickStartSquare, setRightClickStartSquare] = useState<Position | null>(null);
+    const [gameShowPowerPieces, setGameShowPowerPieces] = useState<boolean | undefined>(undefined);
+    const [gameShowPowerRings, setGameShowPowerRings] = useState<boolean | undefined>(undefined);
+    const [gameShowOriginalType, setGameShowOriginalType] = useState<boolean | undefined>(undefined);
 
     // Lifted Lobby State
     const [lobbyView, setLobbyView] = useState<'games' | 'players' | 'current_games' | 'finished_games' | 'challenges'>('games');
@@ -501,13 +510,21 @@ const App: React.FC = () => {
         enPassantTarget, halfmoveClock, positionHistory,
         ambiguousEnPassantData, drawOffer, playerTimes, moveDeadline, timerSettings, ratingCategory, players, playerColors, initialRatings,
         isRated, rematchOffer, nextGameId, ratingChange, challengedPlayerInfo, turnStartTime, premoves, lastMove, playersLeft,
-        completedAt, moveHistory, chat: chatMessages
+        completedAt, moveHistory, chat: chatMessages,
+        tournamentId: gameTournamentId,
+        tournamentRound: gameTournamentRound,
+        tournamentPairingId: gameTournamentPairingId,
+        showPowerPieces: gameShowPowerPieces,
+        showPowerRings: gameShowPowerRings,
+        showOriginalType: gameShowOriginalType
     }), [
         board, turn, status, winner, promotionData, capturedPieces,
         enPassantTarget, halfmoveClock, positionHistory,
         ambiguousEnPassantData, drawOffer, playerTimes, moveDeadline, timerSettings, ratingCategory, players, playerColors, initialRatings,
         isRated, rematchOffer, nextGameId, ratingChange, challengedPlayerInfo, turnStartTime, premoves, lastMove, playersLeft,
-        completedAt, moveHistory, chatMessages
+        completedAt, moveHistory, chatMessages,
+        gameTournamentId, gameTournamentRound, gameTournamentPairingId,
+        gameShowPowerPieces, gameShowPowerRings, gameShowOriginalType
     ]);
 
     useEffect(() => {
@@ -575,6 +592,12 @@ const App: React.FC = () => {
         setLastMove(state.lastMove || null);
         setMoveHistory(state.moveHistory || []);
         setChatMessages(state.chat || []);
+        setGameTournamentId(state.tournamentId || null);
+        setGameTournamentRound(state.tournamentRound ?? null);
+        setGameTournamentPairingId(state.tournamentPairingId || null);
+        setGameShowPowerPieces(state.showPowerPieces);
+        setGameShowPowerRings(state.showPowerRings);
+        setGameShowOriginalType(state.showOriginalType);
 
         // This is a transient UI state and should be reset whenever the game state is loaded.
         setDraggedPiece(null);
@@ -767,6 +790,57 @@ const App: React.FC = () => {
                     gameRef.root.update(updates);
                 }
             }
+
+            // Handle Tournament Results
+            if (finalState.tournamentId && finalState.tournamentRound !== undefined && finalState.tournamentPairingId) {
+                try {
+                    const tRef = db.ref(`tournaments/${finalState.tournamentId}`);
+                    const tSnap = await tRef.once('value');
+                    const tData = tSnap.val();
+                    if (tData) {
+                        const pairing = tData.rounds?.[finalState.tournamentRound]?.pairings?.[finalState.tournamentPairingId];
+                        if (pairing && pairing.status !== 'finished') {
+                            let tournamentResult: '1-0' | '0-1' | '0.5-0.5' = '0.5-0.5';
+                            if (newWinner === 'White' || newWinner === 'white') tournamentResult = '1-0';
+                            else if (newWinner === 'Black' || newWinner === 'black') tournamentResult = '0-1';
+
+                            await updatePairing(finalState.tournamentId, finalState.tournamentRound, finalState.tournamentPairingId, {
+                                result: tournamentResult,
+                                status: 'finished'
+                            });
+
+                            // Update scores using a transaction for consistency
+                            const playersRef = db.ref(`tournaments/${finalState.tournamentId}/players`);
+                            await playersRef.transaction((players) => {
+                                if (!players) return players;
+                                if (tournamentResult === '1-0') {
+                                    if (players[pairing.white]) players[pairing.white].score = (players[pairing.white].score || 0) + 1;
+                                    if (pairing.black !== 'BYE' && players[pairing.black]) {
+                                        players[pairing.black].score = (players[pairing.black].score || 0);
+                                    }
+                                } else if (tournamentResult === '0-1') {
+                                    if (players[pairing.white]) players[pairing.white].score = (players[pairing.white].score || 0);
+                                    if (pairing.black !== 'BYE' && players[pairing.black]) {
+                                        players[pairing.black].score = (players[pairing.black].score || 0) + 1;
+                                    }
+                                } else {
+                                    if (players[pairing.white]) players[pairing.white].score = (players[pairing.white].score || 0) + 0.5;
+                                    if (pairing.black !== 'BYE' && players[pairing.black]) {
+                                        players[pairing.black].score = (players[pairing.black].score || 0) + 0.5;
+                                    }
+                                }
+                                return players;
+                            });
+
+                            // Important: recalculate tiebreaks to keep standings up to date
+                            await recalculateTiebreaks(finalState.tournamentId);
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error updating tournament result:", e);
+                }
+            }
+
             // Logic is done. 'isProcessingGameOver' remains true until component unmounts or state changes via listener.
             // Actually, we should probably set it to false if we want to allow re-entry?
             // No, game is over. logic shouldn't run again for this game.
@@ -785,7 +859,7 @@ const App: React.FC = () => {
         promotion?: PieceType | null,
         moveDetails?: { isForcePower?: boolean }
     ) => {
-        const { turn, halfmoveClock, positionHistory, drawOffer, timerSettings, players, playerColors, initialRatings, isRated, ratingCategory, challengedPlayerInfo, playersLeft, moveHistory } = baseState;
+        const { turn, halfmoveClock, positionHistory, drawOffer, timerSettings, players, playerColors, initialRatings, isRated, ratingCategory, challengedPlayerInfo, playersLeft, moveHistory, tournamentId, tournamentRound, tournamentPairingId, showPowerPieces, showPowerRings, showOriginalType } = baseState;
 
         const newPlayerTimes = (baseState.playerTimes && timerSettings && 'increment' in timerSettings) ? { ...baseState.playerTimes, [turn]: baseState.playerTimes[turn] + timerSettings.increment } : baseState.playerTimes;
 
@@ -926,7 +1000,13 @@ const App: React.FC = () => {
             playersLeft,
             lastMove: move,
             moveHistory: newMoveHistory,
-            chat: baseState.chat
+            chat: baseState.chat,
+            tournamentId,
+            tournamentRound,
+            tournamentPairingId,
+            showPowerPieces,
+            showPowerRings,
+            showOriginalType
         };
 
         if (newStatus !== 'playing') {
@@ -1291,7 +1371,13 @@ const App: React.FC = () => {
 
         // Navigation Logic: Return to Lobby if logged in and online game, else Main Menu
         if (gameMode === 'online_playing' || gameMode === 'online_spectating') {
-            setGameMode('online_lobby');
+            const tournamentId = gameStateRef.current?.tournamentId || gameTournamentId;
+            if (tournamentId) {
+                setActiveTournamentId(tournamentId);
+                setGameMode('tournament');
+            } else {
+                setGameMode('online_lobby');
+            }
         } else {
             setGameMode('menu');
             if (gameMode === 'online_lobby') {
@@ -1306,7 +1392,10 @@ const App: React.FC = () => {
         setShowLocalSetup(false);
         randomizeNextGameColor();
         setChatMessages([]);
-    }, [gameId, myOnlineColor, currentUser, randomizeNextGameColor, gameMode, status, gameRef, timerSettings, ratingCategory, analysisReturnTo, lobbyView, reviewingGame]);
+        setGameTournamentId(null);
+        setGameTournamentRound(null);
+        setGameTournamentPairingId(null);
+    }, [gameId, myOnlineColor, currentUser, randomizeNextGameColor, gameMode, status, gameRef, timerSettings, ratingCategory, analysisReturnTo, lobbyView, reviewingGame, gameTournamentId]);
 
     const handleStartOnline = () => {
         if (currentUser) {
@@ -2515,8 +2604,12 @@ const App: React.FC = () => {
 
         const topPlayerName = isFlipped ? (whitePlayer?.displayName || 'White') : (blackPlayer?.displayName || 'Black');
         const bottomPlayerName = isFlipped ? (blackPlayer?.displayName || 'Black') : (whitePlayer?.displayName || 'White');
-        const topPlayerRating = isFlipped ? initialRatings?.white : initialRatings?.black;
-        const bottomPlayerRating = isFlipped ? initialRatings?.black : initialRatings?.white;
+        const topPlayerRating = isFlipped
+            ? (initialRatings?.white ?? whitePlayer?.ratings?.[ratingCategory])
+            : (initialRatings?.black ?? blackPlayer?.ratings?.[ratingCategory]);
+        const bottomPlayerRating = isFlipped
+            ? (initialRatings?.black ?? blackPlayer?.ratings?.[ratingCategory])
+            : (initialRatings?.white ?? whitePlayer?.ratings?.[ratingCategory]);
 
         const myColor = gameMode === 'online_playing' ? myOnlineColor : turn;
         const myPlayerHasPowerPiece = board.flat().some(p => p && p.color === myColor && p.power);
@@ -2605,9 +2698,9 @@ const App: React.FC = () => {
                             onBoardMouseDown={handleBoardMouseDown}
                             onBoardMouseUp={handleBoardMouseUp}
                             onBoardContextMenu={handleBoardContextMenu}
-                            showPowerPieces={showPowerPieces}
-                            showPowerRings={showPowerRings}
-                            showOriginalType={showOriginalType}
+                            showPowerPieces={gameShowPowerPieces !== undefined ? gameShowPowerPieces : showPowerPieces}
+                            showPowerRings={gameShowPowerRings !== undefined ? gameShowPowerRings : showPowerRings}
+                            showOriginalType={gameShowOriginalType !== undefined ? gameShowOriginalType : showOriginalType}
                         />
                     </div>
                     {/* Bottom Player Info (Mobile) */}
@@ -2647,6 +2740,7 @@ const App: React.FC = () => {
                                                 <p className="text-gray-400">Draw offer sent.</p>
                                             </div>
                                         )}
+
                                         <div className="grid grid-cols-2 gap-4">
                                             {!drawOffer && (
                                                 <button onClick={handleOfferDraw} className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors">Offer Draw</button>
@@ -2950,6 +3044,23 @@ const App: React.FC = () => {
             />;
         }
 
+        if (gameMode === 'tournament') {
+            return (
+                <Tournament
+                    userId={currentUser?.uid || ''}
+                    displayName={currentUser?.displayName || 'Guest'}
+                    myRatings={myRatings || {}}
+                    activeTournamentId={activeTournamentId}
+                    onTournamentJoined={setActiveTournamentId}
+                    getInitialGameState={resetGame}
+                    onGameStart={(gameId, playerColor) => {
+                        handleOnlineGameStart(gameId, playerColor);
+                    }}
+                    onBack={() => setGameMode('menu')}
+                />
+            );
+        }
+
         if (gameMode === 'analysis_manager') {
             return <AnalysisManager
                 userId={currentUser?.uid || ''}
@@ -3015,6 +3126,12 @@ const App: React.FC = () => {
                             className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 rounded-xl text-xl font-bold transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-3"
                         >
                             <span>🌐</span> Online Play
+                        </button>
+                        <button
+                            onClick={() => setGameMode('tournament')}
+                            className="w-full py-4 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 rounded-xl text-xl font-bold transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-3"
+                        >
+                            <span>🏆</span> Tournaments
                         </button>
                         <button
                             onClick={handleStartBoardEditor}
