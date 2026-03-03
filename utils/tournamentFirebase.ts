@@ -114,8 +114,43 @@ export const setPairings = async (
     pairings: TournamentPairing[]
 ): Promise<void> => {
     const pairingsMap: Record<string, TournamentPairing> = {};
-    pairings.forEach(p => { pairingsMap[p.id] = p; });
+    const scoreUpdates: Record<string, number> = {};
+
+    pairings.forEach(p => {
+        pairingsMap[p.id] = p;
+        if (p.status === 'finished' && p.result) {
+            if (p.result === '1-0') {
+                scoreUpdates[p.white] = (scoreUpdates[p.white] || 0) + 1;
+            } else if (p.result === '0-1') {
+                scoreUpdates[p.black] = (scoreUpdates[p.black] || 0) + 1;
+            } else if (p.result === '0.5-0.5') {
+                scoreUpdates[p.white] = (scoreUpdates[p.white] || 0) + 0.5;
+                if (p.black !== 'BYE') {
+                    scoreUpdates[p.black] = (scoreUpdates[p.black] || 0) + 0.5;
+                }
+            }
+        }
+    });
+
     await db.ref(`tournaments/${tournamentId}/rounds/${round}/pairings`).set(pairingsMap);
+
+    // Apply score updates for BYEs or finished games
+    if (Object.keys(scoreUpdates).length > 0) {
+        const tSnap = await db.ref(`tournaments/${tournamentId}/players`).once('value');
+        const players = tSnap.val() || {};
+        const updates: Record<string, any> = {};
+
+        Object.entries(scoreUpdates).forEach(([pid, scoreChange]) => {
+            if (players[pid]) {
+                updates[`tournaments/${tournamentId}/players/${pid}/score`] = (players[pid].score || 0) + scoreChange;
+            }
+        });
+
+        if (Object.keys(updates).length > 0) {
+            await db.ref().update(updates);
+            await recalculateTiebreaks(tournamentId);
+        }
+    }
 };
 
 // Update pairing (e.g., set gameId when game starts or set result)
@@ -125,6 +160,9 @@ export const updatePairing = async (
     pairingId: string,
     updates: Partial<TournamentPairing>
 ): Promise<void> => {
+    // If we're setting a result, we should ideally update scores too to be robust, 
+    // but we must avoid double-counting if the caller also does it.
+    // For now, let's keep it simple as the Swiss BYE issue was specifically in setPairings.
     await db.ref(`tournaments/${tournamentId}/rounds/${round}/pairings/${pairingId}`).update(updates);
 };
 
