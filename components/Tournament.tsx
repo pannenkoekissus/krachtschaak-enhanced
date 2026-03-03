@@ -8,7 +8,8 @@ import {
     createTournament, joinTournament, removePlayer,
     startTournament, endTournament, setPairings, updatePairing,
     updatePlayerScore, advanceRound, getTournament,
-    listActiveTournaments, generateSwissPairings, recalculateTiebreaks
+    listActiveTournaments, generateSwissPairings, recalculateTiebreaks,
+    toggleHostParticipation
 } from '../utils/tournamentFirebase';
 import { createInitialBoard } from '../utils/game';
 import { getRatingCategory } from '../utils/ratings';
@@ -44,6 +45,7 @@ const Tournament: React.FC<TournamentProps> = ({
     const [createDaysPerMove, setCreateDaysPerMove] = useState('1');
     const [createTimeControlType, setCreateTimeControlType] = useState<'realtime' | 'daily'>('realtime');
     const [hostParticipates, setHostParticipates] = useState(true);
+    const [createIsPrivate, setCreateIsPrivate] = useState(false);
     const [createShowPowerPieces, setCreateShowPowerPieces] = useState(true);
     const [createShowPowerRings, setCreateShowPowerRings] = useState(true);
     const [createShowOriginalType, setCreateShowOriginalType] = useState(true);
@@ -106,6 +108,24 @@ const Tournament: React.FC<TournamentProps> = ({
         };
     }, []);
 
+    // AUTO-WARP LOGIC: Listen for new pairings involving me
+    useEffect(() => {
+        if (!activeTournament || !myPlayerId) return;
+
+        const currentRound = activeTournament.currentRound;
+        const pairings = activeTournament.rounds?.[currentRound]?.pairings || {};
+
+        Object.values(pairings).forEach((pairing: TournamentPairing) => {
+            if (pairing.status === 'playing' && pairing.gameId) {
+                if (pairing.white === myPlayerId) {
+                    onGameStart(pairing.gameId, Color.White);
+                } else if (pairing.black === myPlayerId) {
+                    onGameStart(pairing.gameId, Color.Black);
+                }
+            }
+        });
+    }, [activeTournament, myPlayerId, onGameStart]);
+
     const isHost = activeTournament?.hostUid === userId;
     const players = Object.values(activeTournament?.players || {}) as TournamentPlayer[];
     const currentRound = activeTournament?.currentRound || 0;
@@ -136,7 +156,7 @@ const Tournament: React.FC<TournamentProps> = ({
                 showPowerPieces: createShowPowerPieces,
                 showPowerRings: createShowPowerRings,
                 showOriginalType: createShowOriginalType
-            });
+            }, createIsPrivate);
             onTournamentJoined(id);
             subscribeToTournament(id);
             setView('lobby');
@@ -145,28 +165,26 @@ const Tournament: React.FC<TournamentProps> = ({
         }
     };
 
-    // Handle join
     const handleJoin = async (tournamentId?: string) => {
         const id = (tournamentId || joinCode).trim().toUpperCase();
         if (!id) { setError('Enter a tournament code'); return; }
+
         try {
             setError(null);
-            // Check if tournament exists
             const t = await getTournament(id);
             if (!t) { setError('Tournament not found'); return; }
-            if (t.status !== 'lobby') { setError('Tournament already started'); return; }
 
-            // Check if already joined
             const existing = Object.values(t.players || {}).find((p: any) => p.uid === userId);
-            if (existing) {
-                // Already in, just subscribe
-                onTournamentJoined(id);
-                subscribeToTournament(id);
-                setView('lobby');
+
+            if (t.status !== 'lobby' && !existing) {
+                setError('Tournament has already started or finished');
                 return;
             }
 
-            await joinTournament(id, displayName, userId);
+            if (!existing) {
+                await joinTournament(id, userId, displayName);
+            }
+
             onTournamentJoined(id);
             subscribeToTournament(id);
             setView('lobby');
@@ -194,14 +212,13 @@ const Tournament: React.FC<TournamentProps> = ({
         await setPairings(activeTournament.id, currentRound, pairings);
     };
 
-    // Host: add manual pairing
     const handleAddManualPairing = async () => {
-        if (!activeTournament || !manualWhite || !manualBlack || manualWhite === manualBlack) return;
+        if (!activeTournament || !manualWhite || !manualBlack || (manualWhite === manualBlack && manualBlack !== 'BYE')) return;
 
         // Prevent duplicate pairing in the same round
         const alreadyPaired = currentPairings.some(p =>
-            p.white === manualWhite || p.white === manualBlack ||
-            p.black === manualWhite || p.black === manualBlack
+            p.white === manualWhite || (manualBlack !== 'BYE' && p.white === manualBlack) ||
+            p.black === manualWhite || (manualBlack !== 'BYE' && p.black === manualBlack)
         );
         if (alreadyPaired) { setError('One or both players are already paired in this round'); return; }
 
@@ -211,11 +228,17 @@ const Tournament: React.FC<TournamentProps> = ({
             white: manualWhite,
             black: manualBlack,
             gameId: null,
-            result: null,
-            status: 'pending'
+            result: manualBlack === 'BYE' ? '1-0' : null,
+            status: manualBlack === 'BYE' ? 'finished' : 'pending'
         };
-        const existingPairings = [...currentPairings, newPairing];
-        await setPairings(activeTournament.id, currentRound, existingPairings);
+
+        await updatePairing(activeTournament.id, currentRound, pairingId, newPairing);
+
+        if (manualBlack === 'BYE') {
+            await updatePlayerScore(activeTournament.id, manualWhite, 1);
+            await recalculateTiebreaks(activeTournament.id);
+        }
+
         setManualWhite('');
         setManualBlack('');
     };
@@ -322,17 +345,29 @@ const Tournament: React.FC<TournamentProps> = ({
             status: 'finished'
         });
 
-        // Update scores
+        // Update scores via a single transaction/update to ensure consistency
+        const tSnap = await db.ref(`tournaments/${activeTournament.id}`).once('value');
+        const tData = tSnap.val();
+        if (!tData) return;
+
+        const updates: any = {};
         if (result === '1-0') {
-            await updatePlayerScore(activeTournament.id, pairing.white, 1);
-            if (pairing.black !== 'BYE') await updatePlayerScore(activeTournament.id, pairing.black, 0);
+            updates[`tournaments/${activeTournament.id}/players/${pairing.white}/score`] = (tData.players[pairing.white]?.score || 0) + 1;
+            if (pairing.black !== 'BYE') {
+                updates[`tournaments/${activeTournament.id}/players/${pairing.black}/score`] = (tData.players[pairing.black]?.score || 0);
+            }
         } else if (result === '0-1') {
-            await updatePlayerScore(activeTournament.id, pairing.white, 0);
-            await updatePlayerScore(activeTournament.id, pairing.black, 1);
+            updates[`tournaments/${activeTournament.id}/players/${pairing.white}/score`] = (tData.players[pairing.white]?.score || 0);
+            if (pairing.black !== 'BYE') {
+                updates[`tournaments/${activeTournament.id}/players/${pairing.black}/score`] = (tData.players[pairing.black]?.score || 0) + 1;
+            }
         } else {
-            await updatePlayerScore(activeTournament.id, pairing.white, 0.5);
-            await updatePlayerScore(activeTournament.id, pairing.black, 0.5);
+            updates[`tournaments/${activeTournament.id}/players/${pairing.white}/score`] = (tData.players[pairing.white]?.score || 0) + 0.5;
+            if (pairing.black !== 'BYE') {
+                updates[`tournaments/${activeTournament.id}/players/${pairing.black}/score`] = (tData.players[pairing.black]?.score || 0) + 0.5;
+            }
         }
+        await db.ref().update(updates);
 
         // Recalculate tiebreaks
         await recalculateTiebreaks(activeTournament.id);
@@ -409,12 +444,13 @@ const Tournament: React.FC<TournamentProps> = ({
                                 maxLength={6}
                             />
                             <button
-                                onClick={() => handleJoin()}
+                                onClick={() => { if (joinCode.trim()) subscribeToTournament(joinCode.toUpperCase().trim()); }}
                                 className="px-6 py-2 bg-green-600 hover:bg-green-500 rounded-lg font-bold transition-colors"
                             >
-                                Join
+                                Find & Join
                             </button>
                         </div>
+                        <p className="text-xs text-gray-400 mt-2">Private tournaments only appear with the correct code.</p>
                     </div>
 
                     {/* Create button */}
@@ -584,6 +620,19 @@ const Tournament: React.FC<TournamentProps> = ({
                             </label>
                         </div>
 
+                        <div className="flex items-center gap-2 p-2 bg-gray-800 rounded-lg">
+                            <input
+                                type="checkbox"
+                                id="isPrivateTournament"
+                                checked={createIsPrivate}
+                                onChange={e => setCreateIsPrivate(e.target.checked)}
+                                className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
+                            />
+                            <label htmlFor="isPrivateTournament" className="text-sm font-semibold text-gray-300">
+                                Private Tournament (only via code)
+                            </label>
+                        </div>
+
                         <div className="bg-gray-800 p-3 rounded-lg space-y-2 border border-yellow-900/30">
                             <p className="text-xs font-bold text-yellow-500 uppercase mb-2">Visual Settings (Enforced for all games)</p>
                             <div className="flex items-center justify-between">
@@ -668,7 +717,20 @@ const Tournament: React.FC<TournamentProps> = ({
                     {activeTournament.status === 'lobby' && (
                         <div className="space-y-4">
                             <div className="p-4 bg-gray-800 rounded-xl border border-gray-700">
-                                <h2 className="text-lg font-bold mb-3">Players ({players.length})</h2>
+                                <div className="flex items-center justify-between mb-3">
+                                    <h2 className="text-lg font-bold">Players ({players.length})</h2>
+                                    {isHost && (
+                                        <button
+                                            onClick={() => {
+                                                const participating = players.some(p => p.uid === userId);
+                                                toggleHostParticipation(activeTournament.id, userId, displayName, !participating);
+                                            }}
+                                            className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded border border-gray-600 font-bold transition-colors"
+                                        >
+                                            {players.some(p => p.uid === userId) ? '🚶 Leave' : '🎮 Join'}
+                                        </button>
+                                    )}
+                                </div>
                                 <div className="space-y-2">
                                     {players.map(p => (
                                         <div key={p.oderId} className="flex items-center justify-between p-2 bg-gray-700 rounded-lg">
@@ -855,12 +917,13 @@ const Tournament: React.FC<TournamentProps> = ({
                                                             <label className="text-[10px] text-gray-400">Black</label>
                                                             <select value={manualBlack} onChange={e => setManualBlack(e.target.value)} className="w-full px-2 py-1 bg-gray-600 rounded text-sm">
                                                                 <option value="">Select...</option>
-                                                                {players.map(p => <option key={p.oderId} value={p.oderId}>{p.nickname}</option>)}
+                                                                <option value="BYE">BYE (Auto-Win for White)</option>
+                                                                {players.filter(p => p.oderId !== manualWhite).map(p => <option key={p.oderId} value={p.oderId}>{p.nickname}</option>)}
                                                             </select>
                                                         </div>
                                                         <button
                                                             onClick={handleAddManualPairing}
-                                                            disabled={!manualWhite || !manualBlack || manualWhite === manualBlack}
+                                                            disabled={!manualWhite || !manualBlack || (manualWhite === manualBlack && manualWhite !== 'BYE')}
                                                             className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded font-bold text-sm transition-colors disabled:opacity-50"
                                                         >
                                                             Add

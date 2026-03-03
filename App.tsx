@@ -799,17 +799,24 @@ const App: React.FC = () => {
                                 status: 'finished'
                             });
 
-                            // Update scores
+                            const updates: any = {};
                             if (tournamentResult === '1-0') {
-                                await updatePlayerScore(finalState.tournamentId, pairing.white, 1);
-                                if (pairing.black !== 'BYE') await updatePlayerScore(finalState.tournamentId, pairing.black, 0);
+                                updates[`tournaments/${finalState.tournamentId}/players/${pairing.white}/score`] = (tData.players[pairing.white]?.score || 0) + 1;
+                                if (pairing.black !== 'BYE' && tData.players[pairing.black]) {
+                                    updates[`tournaments/${finalState.tournamentId}/players/${pairing.black}/score`] = (tData.players[pairing.black]?.score || 0);
+                                }
                             } else if (tournamentResult === '0-1') {
-                                await updatePlayerScore(finalState.tournamentId, pairing.white, 0);
-                                await updatePlayerScore(finalState.tournamentId, pairing.black, 1);
+                                updates[`tournaments/${finalState.tournamentId}/players/${pairing.white}/score`] = (tData.players[pairing.white]?.score || 0);
+                                if (pairing.black !== 'BYE' && tData.players[pairing.black]) {
+                                    updates[`tournaments/${finalState.tournamentId}/players/${pairing.black}/score`] = (tData.players[pairing.black]?.score || 0) + 1;
+                                }
                             } else {
-                                await updatePlayerScore(finalState.tournamentId, pairing.white, 0.5);
-                                await updatePlayerScore(finalState.tournamentId, pairing.black, 0.5);
+                                updates[`tournaments/${finalState.tournamentId}/players/${pairing.white}/score`] = (tData.players[pairing.white]?.score || 0) + 0.5;
+                                if (pairing.black !== 'BYE' && tData.players[pairing.black]) {
+                                    updates[`tournaments/${finalState.tournamentId}/players/${pairing.black}/score`] = (tData.players[pairing.black]?.score || 0) + 0.5;
+                                }
                             }
+                            await db.ref().update(updates);
                             // Important: recalculate tiebreaks to keep standings up to date
                             await recalculateTiebreaks(finalState.tournamentId);
                         }

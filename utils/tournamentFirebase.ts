@@ -21,7 +21,8 @@ export const createTournament = async (
     pairingMode: PairingMode,
     totalRounds: number,
     hostParticipates: boolean = true,
-    visualSettings?: { showPowerPieces: boolean, showPowerRings: boolean, showOriginalType: boolean }
+    visualSettings?: { showPowerPieces: boolean, showPowerRings: boolean, showOriginalType: boolean },
+    isPrivate: boolean = false
 ): Promise<string> => {
     const id = generateTournamentId();
     const players: Record<string, TournamentPlayer> = {};
@@ -49,6 +50,7 @@ export const createTournament = async (
         currentRound: 0,
         totalRounds,
         pairingMode,
+        isPrivate,
         createdAt: Date.now(),
         players,
         rounds: {},
@@ -149,11 +151,37 @@ export const getTournament = async (tournamentId: string): Promise<TournamentDat
     return snap.val();
 };
 
-// List active tournaments
+// List active tournaments - public ones ONLY
 export const listActiveTournaments = async (): Promise<TournamentData[]> => {
     const snap = await db.ref('tournaments').orderByChild('status').once('value');
     const data = snap.val() || {};
-    return Object.values(data).filter((t: any) => t.status !== 'finished') as TournamentData[];
+    return Object.values(data).filter((t: any) => t.status !== 'finished' && !t.isPrivate) as TournamentData[];
+};
+
+// Toggle host participation during lobby
+export const toggleHostParticipation = async (tournamentId: string, hostUid: string, hostName: string, shouldParticipate: boolean): Promise<void> => {
+    const tSnap = await db.ref(`tournaments/${tournamentId}`).once('value');
+    const tData: TournamentData = tSnap.val();
+    if (!tData || tData.status !== 'lobby') return;
+
+    const existingPlayer = Object.values(tData.players || {}).find(p => p.uid === hostUid);
+
+    if (shouldParticipate && !existingPlayer) {
+        // Add host as player
+        const newPlayerId = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+        await db.ref(`tournaments/${tournamentId}/players/${newPlayerId}`).set({
+            oderId: newPlayerId,
+            uid: hostUid,
+            nickname: hostName,
+            score: 0,
+            buchholz: 0,
+            sonnebornBerger: 0,
+            joinedAt: Date.now()
+        });
+    } else if (!shouldParticipate && existingPlayer) {
+        // Remove host from players
+        await db.ref(`tournaments/${tournamentId}/players/${existingPlayer.oderId}`).remove();
+    }
 };
 
 // Swiss pairing algorithm

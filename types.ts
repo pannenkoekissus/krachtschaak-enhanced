@@ -230,6 +230,7 @@ export interface TournamentData {
   currentRound: number;
   totalRounds: number;
   pairingMode: PairingMode;
+  isPrivate: boolean;
   createdAt: number;
   players: Record<string, TournamentPlayer>;
   rounds: Record<number, TournamentRound>;

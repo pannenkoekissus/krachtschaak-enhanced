@@ -182,6 +182,15 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
         }
 
         try {
+            // Check if nickname is taken
+            const usersRef = db.ref('users');
+            const nicknameSnapshot = await usersRef.orderByChild('displayName').equalTo(trimmedNickname).once('value');
+            if (nicknameSnapshot.exists()) {
+                setError("This nickname is already taken.");
+                setIsLoading(false);
+                return;
+            }
+
             const userCredential = await auth.signInAnonymously();
 
             // Set display name for guest
