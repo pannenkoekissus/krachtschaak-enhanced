@@ -502,36 +502,55 @@ const Tournament: React.FC<TournamentProps> = ({
                                     No {listTab} tournaments found.
                                 </div>
                             ) : (
-                                (listTab === 'active' ? tournaments : history).map(t => (
-                                    <div
-                                        key={t.id}
-                                        onClick={() => handleJoin(t.id)}
-                                        className="p-4 bg-gray-700 hover:bg-gray-600 rounded-xl border border-gray-600 transition-all cursor-pointer group"
-                                    >
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <h3 className="font-bold text-lg group-hover:text-yellow-400 transition-colors">{t.name}</h3>
-                                                <div className="text-sm text-gray-400">
-                                                    Host: {t.hostName} • {Object.keys(t.players || {}).length} players
+                                (listTab === 'active' ? tournaments : history).map(t => {
+                                    const timeLabel = !t.timerSettings ? 'Unlimited' :
+                                        'daysPerMove' in t.timerSettings ? `${t.timerSettings.daysPerMove}d / move` :
+                                            `${t.timerSettings.initialTime / 60}m + ${t.timerSettings.increment}s`;
+
+                                    const visualTags: string[] = [];
+                                    if (t.showPowerPieces !== undefined) visualTags.push(t.showPowerPieces ? '🔮 Icons' : '🚫 No Icons');
+                                    if (t.showPowerRings !== undefined) visualTags.push(t.showPowerRings ? '💍 Rings' : '🚫 No Rings');
+                                    if (t.showOriginalType !== undefined) visualTags.push(t.showOriginalType ? '♟ Original' : '🚫 No Original');
+
+                                    return (
+                                        <div
+                                            key={t.id}
+                                            onClick={() => handleJoin(t.id)}
+                                            className="p-4 bg-gray-700 hover:bg-gray-600 rounded-xl border border-gray-600 transition-all cursor-pointer group"
+                                        >
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <h3 className="font-bold text-lg group-hover:text-yellow-400 transition-colors">{t.name}</h3>
+                                                    <div className="text-sm text-gray-400">
+                                                        Host: {t.hostName} • {Object.keys(t.players || {}).length} players
+                                                    </div>
+                                                    <div className="text-sm text-gray-400 mt-0.5">
+                                                        ⏱ {timeLabel} • {t.totalRounds} round{t.totalRounds !== 1 ? 's' : ''}
+                                                    </div>
+                                                    <div className="mt-1 flex gap-2 flex-wrap">
+                                                        <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${t.pairingMode === 'swiss' ? 'bg-blue-900/50 text-blue-400' : 'bg-purple-900/50 text-purple-400'}`}>
+                                                            {t.pairingMode}
+                                                        </span>
+                                                        {t.isPrivate && <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-500">Private</span>}
+                                                        {t.isRated && <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-green-900/50 text-green-500">Rated</span>}
+                                                    </div>
+                                                    {visualTags.length > 0 && (
+                                                        <div className="text-xs text-gray-500 mt-1.5">
+                                                            {visualTags.join(' • ')}
+                                                        </div>
+                                                    )}
                                                 </div>
-                                                <div className="mt-1 flex gap-2">
-                                                    <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${t.pairingMode === 'swiss' ? 'bg-blue-900/50 text-blue-400' : 'bg-purple-900/50 text-purple-400'}`}>
-                                                        {t.pairingMode}
+                                                <div className="flex flex-col items-end gap-2">
+                                                    <span className={`px-2 py-1 rounded text-xs font-bold ${t.status === 'lobby' ? 'bg-green-900 text-green-400' : t.status === 'in_progress' ? 'bg-blue-900 text-blue-400' : 'bg-gray-600 text-gray-300'
+                                                        }`}>
+                                                        {t.status.replace('_', ' ')}
                                                     </span>
-                                                    {t.isPrivate && <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-500">Private</span>}
-                                                    {t.isRated && <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-green-900/50 text-green-500">Rated</span>}
+                                                    <div className="text-[10px] font-mono text-gray-500">{t.id}</div>
                                                 </div>
-                                            </div>
-                                            <div className="flex flex-col items-end gap-2">
-                                                <span className={`px-2 py-1 rounded text-xs font-bold ${t.status === 'lobby' ? 'bg-green-900 text-green-400' : t.status === 'in_progress' ? 'bg-blue-900 text-blue-400' : 'bg-gray-600 text-gray-300'
-                                                    }`}>
-                                                    {t.status.replace('_', ' ')}
-                                                </span>
-                                                <div className="text-[10px] font-mono text-gray-500">{t.id}</div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))
+                                    );
+                                })
                             )}
                         </div>
                     </div>
