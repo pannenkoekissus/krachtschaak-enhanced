@@ -129,10 +129,20 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
       setAnalyses(analysesData);
       setSharedFolders(sharedFoldersData);
       setPublicFolders(publicFoldersData);
-      // Default to showing root folder or initial folder from deep link
+
+      // Smart folder selection from deep link
       if (initialFolderId) {
-        const id = initialSourceType ? `${initialSourceType}_${initialFolderId}` : initialFolderId;
-        setSelectedFolderId(id);
+        if (foldersData[initialFolderId]) {
+          setSelectedFolderId(initialFolderId);
+        } else if (sharedFoldersData[initialFolderId]) {
+          setSelectedFolderId(`shared_${initialFolderId}`);
+        } else if (publicFoldersData[initialFolderId]) {
+          setSelectedFolderId(`public_${initialFolderId}`);
+        } else {
+          // Fallback to specified source type if provided
+          const id = initialSourceType ? `${initialSourceType}_${initialFolderId}` : initialFolderId;
+          setSelectedFolderId(id);
+        }
       } else {
         setSelectedFolderId(null);
       }
@@ -605,16 +615,6 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleShareFolderLink(folderId, userId);
-                          }}
-                          className="p-1 text-xs bg-blue-600 hover:bg-blue-500 rounded font-semibold transition-all"
-                          title="Copy direct folder link"
-                        >
-                          {showFolderLinkCopied === folderId ? 'Link Copied!' : '🔗 Copy Link'}
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
                             setModal({ type: 'rename_folder', targetId: folderId });
                             setInputValue(folder.name);
                           }}
@@ -1036,6 +1036,17 @@ const AnalysisManager: React.FC<AnalysisManagerProps> = ({
                 <option value="read">Read Only</option>
                 <option value="edit">Can Edit</option>
               </select>
+            </div>
+
+            {/* Direct Link always available for shared/own folders */}
+            <div className="mb-4 text-center">
+              <button
+                onClick={() => handleShareFolderLink(sharingFolderId!, userId)}
+                className="w-full py-2 bg-blue-700 hover:bg-blue-600 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2"
+              >
+                {showFolderLinkCopied === sharingFolderId && !folderIsPublic ? '✅ Direct Link Copied!' : '🔗 Copy Direct Share Link'}
+              </button>
+              <p className="text-[10px] text-gray-500 mt-1">Recipients must be logged in and have access to see private folders.</p>
             </div>
 
             {/* Public folder toggle */}
