@@ -8,7 +8,7 @@ import {
     createTournament, joinTournament, removePlayer,
     startTournament, endTournament, setPairings, updatePairing,
     updatePlayerScore, advanceRound, getTournament,
-    listActiveTournaments, generateSwissPairings, recalculateTiebreaks,
+    listActiveTournaments, listTournamentHistory, generateSwissPairings, recalculateTiebreaks,
     toggleHostParticipation
 } from '../utils/tournamentFirebase';
 import { createInitialBoard } from '../utils/game';
@@ -33,6 +33,8 @@ const Tournament: React.FC<TournamentProps> = ({
 }) => {
     const [view, setView] = useState<View>('list');
     const [tournaments, setTournaments] = useState<TournamentData[]>([]);
+    const [history, setHistory] = useState<TournamentData[]>([]);
+    const [listTab, setListTab] = useState<'active' | 'history'>('active');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -46,6 +48,7 @@ const Tournament: React.FC<TournamentProps> = ({
     const [createTimeControlType, setCreateTimeControlType] = useState<'realtime' | 'daily'>('realtime');
     const [hostParticipates, setHostParticipates] = useState(true);
     const [createIsPrivate, setCreateIsPrivate] = useState(false);
+    const [createIsRated, setCreateIsRated] = useState(true);
     const [createShowPowerPieces, setCreateShowPowerPieces] = useState(true);
     const [createShowPowerRings, setCreateShowPowerRings] = useState(true);
     const [createShowOriginalType, setCreateShowOriginalType] = useState(true);
@@ -69,13 +72,17 @@ const Tournament: React.FC<TournamentProps> = ({
             setView('lobby');
         }
         loadTournaments();
-    }, [activeTournamentId]);
+    }, [activeTournamentId, userId]);
 
     const loadTournaments = async () => {
         try {
             setLoading(true);
-            const list = await listActiveTournaments();
-            setTournaments(list);
+            const [activeList, historyList] = await Promise.all([
+                listActiveTournaments(userId),
+                listTournamentHistory(userId)
+            ]);
+            setTournaments(activeList);
+            setHistory(historyList);
         } catch (err) {
             setError('Failed to load tournaments');
         } finally {
@@ -156,7 +163,7 @@ const Tournament: React.FC<TournamentProps> = ({
                 showPowerPieces: createShowPowerPieces,
                 showPowerRings: createShowPowerRings,
                 showOriginalType: createShowOriginalType
-            }, createIsPrivate);
+            }, createIsPrivate, createIsRated);
             onTournamentJoined(id);
             subscribeToTournament(id);
             setView('lobby');
@@ -165,8 +172,8 @@ const Tournament: React.FC<TournamentProps> = ({
         }
     };
 
-    const handleJoin = async (tournamentId?: string) => {
-        const id = (tournamentId || joinCode).trim().toUpperCase();
+    const handleJoin = async (tournamentId?: any) => {
+        const id = (typeof tournamentId === 'string' ? tournamentId : joinCode).trim().toUpperCase();
         if (!id) { setError('Enter a tournament code'); return; }
 
         try {
@@ -285,7 +292,7 @@ const Tournament: React.FC<TournamentProps> = ({
         initialState.players[blackPlayer.uid] = blackInfo;
         initialState.playerColors = { white: whitePlayer.uid, black: blackPlayer.uid };
         initialState.status = 'playing';
-        initialState.isRated = false; // Tournaments usually unrated for ELO but have their own score
+        initialState.isRated = activeTournament.isRated ?? false;
 
         // Enforce tournament's visual settings
         initialState.showPowerPieces = activeTournament.showPowerPieces;
@@ -433,63 +440,96 @@ const Tournament: React.FC<TournamentProps> = ({
 
                     {/* Join by code */}
                     <div className="mb-6 p-4 bg-gray-800 rounded-xl border border-gray-700">
-                        <h2 className="text-lg font-bold mb-3">Join Tournament</h2>
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                value={joinCode}
-                                onChange={e => setJoinCode(e.target.value.toUpperCase())}
-                                placeholder="Enter code (e.g. AB12CD)"
-                                className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 uppercase tracking-widest text-center font-mono text-lg"
-                                maxLength={6}
-                            />
+                        <div className="flex gap-2 mb-6 border-b border-gray-700 pb-2">
                             <button
-                                onClick={handleJoin}
-                                className="px-6 py-2 bg-green-600 hover:bg-green-500 rounded-lg font-bold transition-colors"
+                                onClick={() => setListTab('active')}
+                                className={`px-4 py-2 font-bold transition-colors ${listTab === 'active' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-gray-400 hover:text-white'}`}
                             >
-                                Find & Join
+                                Active
+                            </button>
+                            <button
+                                onClick={() => setListTab('history')}
+                                className={`px-4 py-2 font-bold transition-colors ${listTab === 'history' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-gray-400 hover:text-white'}`}
+                            >
+                                History
                             </button>
                         </div>
-                        <p className="text-xs text-gray-400 mt-2">Private tournaments only appear with the correct code.</p>
+
+                        {listTab === 'active' && (
+                            <>
+                                <h2 className="text-lg font-bold mb-3">Join Tournament</h2>
+                                <div className="flex gap-2 mb-6">
+                                    <input
+                                        type="text"
+                                        value={joinCode}
+                                        onChange={e => setJoinCode(e.target.value.toUpperCase())}
+                                        placeholder="Enter code (e.g. AB12CD)"
+                                        className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 uppercase tracking-widest text-center font-mono text-lg"
+                                        maxLength={6}
+                                    />
+                                    <button
+                                        onClick={handleJoin}
+                                        className="px-6 py-2 bg-green-600 hover:bg-green-500 rounded-lg font-bold transition-colors"
+                                    >
+                                        Find & Join
+                                    </button>
+                                </div>
+                            </>
+                        )}
+
+                        <div className="space-y-3">
+                            {loading ? (
+                                <div className="text-center py-8 text-gray-500">Loading...</div>
+                            ) : (listTab === 'active' ? tournaments : history).length === 0 ? (
+                                <div className="text-center py-8 text-gray-500 italic">
+                                    No {listTab} tournaments found.
+                                </div>
+                            ) : (
+                                (listTab === 'active' ? tournaments : history).map(t => (
+                                    <div
+                                        key={t.id}
+                                        onClick={() => handleJoin(t.id)}
+                                        className="p-4 bg-gray-700 hover:bg-gray-600 rounded-xl border border-gray-600 transition-all cursor-pointer group"
+                                    >
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <h3 className="font-bold text-lg group-hover:text-yellow-400 transition-colors">{t.name}</h3>
+                                                <div className="text-sm text-gray-400">
+                                                    Host: {t.hostName} • {Object.keys(t.players || {}).length} players
+                                                </div>
+                                                <div className="mt-1 flex gap-2">
+                                                    <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${t.pairingMode === 'swiss' ? 'bg-blue-900/50 text-blue-400' : 'bg-purple-900/50 text-purple-400'}`}>
+                                                        {t.pairingMode}
+                                                    </span>
+                                                    {t.isPrivate && <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-500">Private</span>}
+                                                    {t.isRated && <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-green-900/50 text-green-500">Rated</span>}
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col items-end gap-2">
+                                                <span className={`px-2 py-1 rounded text-xs font-bold ${t.status === 'lobby' ? 'bg-green-900 text-green-400' : t.status === 'in_progress' ? 'bg-blue-900 text-blue-400' : 'bg-gray-600 text-gray-300'
+                                                    }`}>
+                                                    {t.status.replace('_', ' ')}
+                                                </span>
+                                                <div className="text-[10px] font-mono text-gray-500">{t.id}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
                     </div>
+
+                    <p className="text-xs text-gray-400 mt-2 mb-6 text-center">
+                        Private tournaments only appear for the host or if you have the join code.
+                    </p>
 
                     {/* Create button */}
                     <button
                         onClick={() => setView('create')}
-                        className="w-full mb-6 py-3 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 rounded-xl text-lg font-bold transition-all transform hover:scale-[1.02] shadow-lg"
+                        className="w-full py-3 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 rounded-xl text-lg font-bold transition-all transform hover:scale-[1.02] shadow-lg"
                     >
                         + Create Tournament
                     </button>
-
-                    {/* Active tournaments */}
-                    <h2 className="text-lg font-bold mb-3 text-gray-300">Active Tournaments</h2>
-                    {loading ? (
-                        <div className="text-center text-gray-500 py-8">Loading...</div>
-                    ) : tournaments.length === 0 ? (
-                        <div className="text-center text-gray-500 py-8">No active tournaments</div>
-                    ) : (
-                        <div className="space-y-3">
-                            {tournaments.map(t => (
-                                <div key={t.id} className="p-4 bg-gray-800 rounded-xl border border-gray-700 hover:border-gray-600 transition-colors">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <div className="font-bold text-lg">{t.name}</div>
-                                            <div className="text-sm text-gray-400">
-                                                Host: {t.hostName} • {Object.keys(t.players || {}).length} players • {t.pairingMode === 'swiss' ? 'Swiss' : 'Manual'} • {t.status === 'lobby' ? '🟢 Open' : '🟡 In Progress'}
-                                            </div>
-                                            <div className="text-xs text-gray-500 mt-1 font-mono">Code: {t.id}</div>
-                                        </div>
-                                        <button
-                                            onClick={() => handleJoin(t.id)}
-                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold transition-colors"
-                                        >
-                                            {t.status === 'lobby' ? 'Join' : 'View'}
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
                 </div>
             </div>
         );
@@ -630,6 +670,19 @@ const Tournament: React.FC<TournamentProps> = ({
                             />
                             <label htmlFor="isPrivateTournament" className="text-sm font-semibold text-gray-300">
                                 Private Tournament (only via code)
+                            </label>
+                        </div>
+
+                        <div className="flex items-center gap-2 p-2 bg-gray-800 rounded-lg">
+                            <input
+                                type="checkbox"
+                                id="isRatedTournament"
+                                checked={createIsRated}
+                                onChange={e => setCreateIsRated(e.target.checked)}
+                                className="w-4 h-4 text-green-600 bg-gray-700 border-gray-600 rounded focus:ring-green-500"
+                            />
+                            <label htmlFor="isRatedTournament" className="text-sm font-semibold text-gray-300">
+                                Rated Tournament (updates player ELO/Glicko)
                             </label>
                         </div>
 

@@ -22,7 +22,8 @@ export const createTournament = async (
     totalRounds: number,
     hostParticipates: boolean = true,
     visualSettings?: { showPowerPieces: boolean, showPowerRings: boolean, showOriginalType: boolean },
-    isPrivate: boolean = false
+    isPrivate: boolean = false,
+    isRated: boolean = true
 ): Promise<string> => {
     const id = generateTournamentId();
     const players: Record<string, TournamentPlayer> = {};
@@ -54,6 +55,7 @@ export const createTournament = async (
         createdAt: Date.now(),
         players,
         rounds: {},
+        isRated,
         showPowerPieces: visualSettings?.showPowerPieces ?? true,
         showPowerRings: visualSettings?.showPowerRings ?? true,
         showOriginalType: visualSettings?.showOriginalType ?? true
@@ -151,11 +153,23 @@ export const getTournament = async (tournamentId: string): Promise<TournamentDat
     return snap.val();
 };
 
-// List active tournaments - public ones ONLY
-export const listActiveTournaments = async (): Promise<TournamentData[]> => {
+// List active tournaments
+export const listActiveTournaments = async (userId?: string): Promise<TournamentData[]> => {
     const snap = await db.ref('tournaments').orderByChild('status').once('value');
     const data = snap.val() || {};
-    return Object.values(data).filter((t: any) => t.status !== 'finished' && !t.isPrivate) as TournamentData[];
+    // Return tournaments that are NOT finished, AND (not private OR hosted by me)
+    return Object.values(data).filter((t: any) => t.status !== 'finished' && (!t.isPrivate || t.hostUid === userId)) as TournamentData[];
+};
+
+// List tournament history for a user (finished tournaments they participated in or hosted)
+export const listTournamentHistory = async (userId: string): Promise<TournamentData[]> => {
+    const snap = await db.ref('tournaments').orderByChild('status').equalTo('finished').once('value');
+    const data = snap.val() || {};
+    return Object.values(data).filter((t: any) => {
+        const isHost = t.hostUid === userId;
+        const isPlayer = t.players && Object.values(t.players).some((p: any) => p.uid === userId);
+        return isHost || isPlayer;
+    }) as TournamentData[];
 };
 
 // Toggle host participation during lobby
