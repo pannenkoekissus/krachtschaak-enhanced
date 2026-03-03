@@ -379,6 +379,37 @@ const App: React.FC = () => {
         }
     }, [currentUser]);
 
+    // URL Deep Linking for Analysis
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const urlAnalysisId = params.get('analysisId');
+        const urlOwnerId = params.get('ownerId');
+        const urlFolderId = params.get('folderId');
+        const urlSourceType = params.get('sourceType');
+
+        if (urlAnalysisId && urlOwnerId) {
+            setAnalysisId(urlAnalysisId);
+            setAnalysisOwnerUserId(urlOwnerId);
+            setAnalysisFolderId(urlFolderId);
+            setAnalysisSourceFolderType(urlSourceType as 'shared' | 'public' | null);
+            setAnalysisCanEdit(true); // Allow edit if user has permissions (Firebase will enforce)
+            setGameMode('analysis');
+
+            // Clear params from URL without reloading
+            const newUrl = window.location.origin + window.location.pathname;
+            window.history.replaceState({}, document.title, newUrl);
+        } else if (urlFolderId && urlOwnerId) {
+            // Link to a folder
+            setAnalysisFolderId(urlFolderId);
+            setAnalysisSourceFolderType(urlSourceType as 'shared' | 'public' | null);
+            setGameMode('analysis_manager');
+
+            // Clear params from URL without reloading
+            const newUrl = window.location.origin + window.location.pathname;
+            window.history.replaceState({}, document.title, newUrl);
+        }
+    }, []);
+
     // AUTH & PRESENCE EFFECT
     useEffect(() => {
         if (!isFirebaseConfigured) {
@@ -2920,24 +2951,32 @@ const App: React.FC = () => {
         }
 
         if (gameMode === 'analysis_manager') {
-            return <AnalysisManager userId={currentUser?.uid || ''} onSelectAnalysis={(id, ownerUserId, folderId, canEdit, sourceType) => {
-                setAnalysisId(id);
-                setAnalysisOwnerUserId(ownerUserId || currentUser?.uid || null);
-                setAnalysisFolderId(folderId || null);
-                setAnalysisCanEdit(canEdit !== false);
-                setAnalysisSourceFolderType(sourceType || null);
-                setGameMode('analysis');
-            }} onBack={() => {
-                if (analysisReturnTo) {
-                    setGameMode(analysisReturnTo.mode);
-                    setLobbyView(analysisReturnTo.lobbyView);
-                    setReviewingGame(analysisReturnTo.reviewingGame);
-                    setAnalysisReturnTo(null);
-                } else {
-                    setGameMode('menu');
-                }
-            }}
+            return <AnalysisManager
+                userId={currentUser?.uid || ''}
+                initialFolderId={analysisFolderId}
+                initialSourceType={analysisSourceFolderType}
+                onSelectAnalysis={(id, ownerUserId, folderId, canEdit, sourceType) => {
+                    setAnalysisId(id);
+                    setAnalysisOwnerUserId(ownerUserId || currentUser?.uid || null);
+                    setAnalysisFolderId(folderId || null);
+                    setAnalysisCanEdit(canEdit !== false);
+                    setAnalysisSourceFolderType(sourceType || null);
+                    setGameMode('analysis');
+                }} onBack={() => {
+                    setAnalysisFolderId(null);
+                    setAnalysisSourceFolderType(null);
+                    if (analysisReturnTo) {
+                        setGameMode(analysisReturnTo.mode);
+                        setLobbyView(analysisReturnTo.lobbyView);
+                        setReviewingGame(analysisReturnTo.reviewingGame);
+                        setAnalysisReturnTo(null);
+                    } else {
+                        setGameMode('menu');
+                    }
+                }}
                 onBackToMenu={() => {
+                    setAnalysisFolderId(null);
+                    setAnalysisSourceFolderType(null);
                     setGameMode('menu');
                     setAnalysisReturnTo(null);
                 }}
@@ -2992,7 +3031,7 @@ const App: React.FC = () => {
                                     }}
                                     className="w-full py-4 bg-gray-700 hover:bg-gray-600 rounded-xl text-xl font-bold transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-3"
                                 >
-                                    <span>📊</span> Analysis
+                                    <span>📊</span> Analysis Manager
                                 </button>
                                 <button
                                     onClick={handleContinueOnlineGame}
@@ -3026,15 +3065,27 @@ const App: React.FC = () => {
                         )}
                     </div>
 
-                    <div className="mt-6">
+                    <div className="mt-8 flex flex-col items-center gap-3">
                         <a
                             href="https://gratis-5137332.jouwweb.site/de-officiele-krachtschaak-regels"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300 underline text-lg font-medium"
+                            className="text-blue-400 hover:text-blue-300 underline text-lg font-medium transition-colors"
                         >
-                            How to Play (Official Rules in Dutch)
+                            How to Play (Official Rules on Official Website in Dutch)
                         </a>
+                        {!((window as any).Capacitor?.isNativePlatform?.()) && (
+                            <a
+                                href="https://github.com/pannenkoekissus/krachtschaak-enhanced/releases/latest/download/krachtschaak.apk"
+                                className="px-5 py-2 bg-green-700/40 hover:bg-green-700/60 border border-green-600/50 rounded-full text-green-300 text-sm font-bold flex items-center gap-2 transition-all"
+                            >
+                                Download Android App APK
+                            </a>
+                        )}
+                    </div>
+
+                    <div className="mt-4 text-xs text-gray-500">
+                        Bug reports and feature requests: <a href="mailto:pannenkoekissus@gmail.com" className="text-gray-400 hover:text-blue-400 underline transition-colors">pannenkoekissus@gmail.com</a>
                     </div>
 
                     {showLocalSetup && (

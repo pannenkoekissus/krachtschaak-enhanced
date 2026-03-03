@@ -260,6 +260,9 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                             applyState(newNodes[(saved as any).lastNodeId || (saved as any).rootNodeId].gameState);
                         }
                         setSaveName((saved as any).name || '');
+                        if (saved.folderId) {
+                            setSelectedFolderId(saved.folderId);
+                        }
                         // mark as loaded once so we don't re-query Firebase for this analysis
                         setLoadedOnceFromFirebase(true);
                     }
@@ -334,6 +337,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
     const [lastMove, setLastMove] = useState<Move | null>(null);
     const [saveName, setSaveName] = useState<string>('');
     const [saveModalOpen, setSaveModalOpen] = useState(false);
+    const [showLinkCopied, setShowLinkCopied] = useState(false);
 
     // UI State
     const [highlightedSquares, setHighlightedSquares] = useState<Position[]>([]);
@@ -579,6 +583,21 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [handleUndo, handleRedo]);
+
+    const handleShareLink = () => {
+        if (!currentAnalysisId) return;
+        const ownerId = analysisOwnerUserId || currentUser?.uid;
+        if (!ownerId) return;
+
+        let url = `${window.location.origin}${window.location.pathname}?analysisId=${currentAnalysisId}&ownerId=${ownerId}`;
+        if (analysisFolderId) url += `&folderId=${analysisFolderId}`;
+        if (analysisSourceFolderType) url += `&sourceType=${analysisSourceFolderType}`;
+
+        navigator.clipboard.writeText(url).then(() => {
+            setShowLinkCopied(true);
+            setTimeout(() => setShowLinkCopied(false), 2000);
+        });
+    };
 
     const getCurrentState = (): GameState => ({
         board, turn, status, winner, promotionData, capturedPieces,
@@ -1269,6 +1288,15 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                             </div>
                         )}
                     </div>
+
+                    <button
+                        onClick={handleShareLink}
+                        className={`w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${!currentAnalysisId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        disabled={!currentAnalysisId}
+                        title={!currentAnalysisId ? 'Save the analysis first to get a shareable link' : 'Copy direct link to clipboard'}
+                    >
+                        <span>{showLinkCopied ? '✅ Link Copied!' : '🔗 Share Link'}</span>
+                    </button>
 
                     <button
                         onClick={() => {
