@@ -104,6 +104,9 @@ export interface IncomingChallenge {
   isRated: boolean;
   timestamp: number;
   challengeColor?: string;
+  showPowerPieces?: boolean;
+  showPowerRings?: boolean;
+  showOriginalType?: boolean;
 }
 
 export interface SentChallenge {
@@ -116,6 +119,9 @@ export interface SentChallenge {
   ratingCategory: RatingCategory;
   isRated: boolean;
   challengeColor?: string;
+  showPowerPieces?: boolean;
+  showPowerRings?: boolean;
+  showOriginalType?: boolean;
 }
 
 export interface ActiveGameSummary {
@@ -169,6 +175,9 @@ export interface GameState {
   tournamentId?: string;
   tournamentRound?: number;
   tournamentPairingId?: string;
+  showPowerPieces?: boolean;
+  showPowerRings?: boolean;
+  showOriginalType?: boolean;
 }
 
 export interface LobbyGame {
@@ -224,4 +233,7 @@ export interface TournamentData {
   createdAt: number;
   players: Record<string, TournamentPlayer>;
   rounds: Record<number, TournamentRound>;
+  showPowerPieces?: boolean;
+  showPowerRings?: boolean;
+  showOriginalType?: boolean;
 }

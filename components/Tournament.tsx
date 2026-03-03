@@ -41,6 +41,12 @@ const Tournament: React.FC<TournamentProps> = ({
     const [createRounds, setCreateRounds] = useState('3');
     const [createBaseMinutes, setCreateBaseMinutes] = useState('10');
     const [createIncrement, setCreateIncrement] = useState('0');
+    const [createDaysPerMove, setCreateDaysPerMove] = useState('1');
+    const [createTimeControlType, setCreateTimeControlType] = useState<'realtime' | 'daily'>('realtime');
+    const [hostParticipates, setHostParticipates] = useState(true);
+    const [createShowPowerPieces, setCreateShowPowerPieces] = useState(true);
+    const [createShowPowerRings, setCreateShowPowerRings] = useState(true);
+    const [createShowOriginalType, setCreateShowOriginalType] = useState(true);
 
     // Join
     const [joinCode, setJoinCode] = useState('');
@@ -117,12 +123,20 @@ const Tournament: React.FC<TournamentProps> = ({
         if (!createName.trim()) { setError('Enter a tournament name'); return; }
         try {
             setError(null);
-            const baseTime = (parseFloat(createBaseMinutes) || 0) * 60;
-            const inc = parseInt(createIncrement) || 0;
-            const settings: TimerSettings = baseTime > 0 ? { initialTime: baseTime, increment: inc } : null;
+            const baseTime = createTimeControlType === 'realtime' ? (parseFloat(createBaseMinutes) || 0) * 60 : 0;
+            const inc = createTimeControlType === 'realtime' ? (parseInt(createIncrement) || 0) : 0;
+            const days = createTimeControlType === 'daily' ? (parseInt(createDaysPerMove) || 1) : 0;
+
+            const settings: TimerSettings = createTimeControlType === 'realtime'
+                ? (baseTime > 0 ? { initialTime: baseTime, increment: inc } : null)
+                : { daysPerMove: days };
             const rounds = parseInt(createRounds) || 3;
 
-            const id = await createTournament(createName.trim(), userId, displayName, settings, createPairingMode, rounds);
+            const id = await createTournament(createName.trim(), userId, displayName, settings, createPairingMode, rounds, hostParticipates, {
+                showPowerPieces: createShowPowerPieces,
+                showPowerRings: createShowPowerRings,
+                showOriginalType: createShowOriginalType
+            });
             onTournamentJoined(id);
             subscribeToTournament(id);
             setView('lobby');
@@ -183,6 +197,14 @@ const Tournament: React.FC<TournamentProps> = ({
     // Host: add manual pairing
     const handleAddManualPairing = async () => {
         if (!activeTournament || !manualWhite || !manualBlack || manualWhite === manualBlack) return;
+
+        // Prevent duplicate pairing in the same round
+        const alreadyPaired = currentPairings.some(p =>
+            p.white === manualWhite || p.white === manualBlack ||
+            p.black === manualWhite || p.black === manualBlack
+        );
+        if (alreadyPaired) { setError('One or both players are already paired in this round'); return; }
+
         const pairingId = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
         const newPairing: TournamentPairing = {
             id: pairingId,
@@ -211,22 +233,54 @@ const Tournament: React.FC<TournamentProps> = ({
         const gameId = newGameRef.key;
         if (!gameId) return;
 
+        // Fetch actual ratings for both players
+        let whiteRatings = {};
+        let blackRatings = {};
+        try {
+            const whiteSnap = await db.ref(`userRatings/${whitePlayer.uid}/ratings`).once('value');
+            const blackSnap = await db.ref(`userRatings/${blackPlayer.uid}/ratings`).once('value');
+            if (whiteSnap.exists()) whiteRatings = whiteSnap.val();
+            if (blackSnap.exists()) blackRatings = blackSnap.val();
+        } catch (e) {
+            console.error("Error fetching ratings for tournament game:", e);
+        }
+
+        const category = getRatingCategory(activeTournament.timerSettings);
+
         const initialState = getInitialGameState('online_playing', activeTournament.timerSettings, true, false);
 
         const whiteInfo: PlayerInfo = {
             uid: whitePlayer.uid, displayName: whitePlayer.nickname,
-            disconnectTimestamp: null, ratings: myRatings || {}
+            disconnectTimestamp: null, ratings: whiteRatings as any
         };
         const blackInfo: PlayerInfo = {
             uid: blackPlayer.uid, displayName: blackPlayer.nickname,
-            disconnectTimestamp: null, ratings: myRatings || {}
+            disconnectTimestamp: null, ratings: blackRatings as any
         };
 
         initialState.players[whitePlayer.uid] = whiteInfo;
         initialState.players[blackPlayer.uid] = blackInfo;
         initialState.playerColors = { white: whitePlayer.uid, black: blackPlayer.uid };
         initialState.status = 'playing';
-        initialState.isRated = false;
+        initialState.isRated = false; // Tournaments usually unrated for ELO but have their own score
+
+        // Enforce tournament's visual settings
+        initialState.showPowerPieces = activeTournament.showPowerPieces;
+        initialState.showPowerRings = activeTournament.showPowerRings;
+        initialState.showOriginalType = activeTournament.showOriginalType;
+
+        initialState.ratingCategory = category;
+        initialState.initialRatings = {
+            white: (whiteRatings as any)[category] ?? 1200,
+            black: (blackRatings as any)[category] ?? 1200
+        };
+
+        if (activeTournament.timerSettings && 'initialTime' in activeTournament.timerSettings) {
+            initialState.turnStartTime = window.firebase.database.ServerValue.TIMESTAMP as any;
+        } else if (activeTournament.timerSettings && 'daysPerMove' in activeTournament.timerSettings) {
+            initialState.moveDeadline = Date.now() + activeTournament.timerSettings.daysPerMove * 24 * 60 * 60 * 1000;
+        }
+
         // Tag it as a tournament game
         (initialState as any).tournamentId = activeTournament.id;
         (initialState as any).tournamentRound = currentRound;
@@ -462,29 +516,88 @@ const Tournament: React.FC<TournamentProps> = ({
 
                         <div>
                             <label className="block text-sm font-semibold text-gray-300 mb-1">Time Control</label>
-                            <div className="flex gap-2">
-                                <div className="flex-1">
-                                    <label className="block text-xs text-gray-400 mb-1">Base (min)</label>
-                                    <input
-                                        type="number"
-                                        value={createBaseMinutes}
-                                        onChange={e => setCreateBaseMinutes(e.target.value)}
-                                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-center"
-                                        min="0"
-                                    />
-                                </div>
-                                <div className="flex-1">
-                                    <label className="block text-xs text-gray-400 mb-1">Increment (sec)</label>
-                                    <input
-                                        type="number"
-                                        value={createIncrement}
-                                        onChange={e => setCreateIncrement(e.target.value)}
-                                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-center"
-                                        min="0"
-                                    />
-                                </div>
+                            <div className="flex gap-2 mb-2">
+                                <button
+                                    onClick={() => setCreateTimeControlType('realtime')}
+                                    className={`flex-1 py-1 rounded-md font-bold text-xs transition-all ${createTimeControlType === 'realtime' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}
+                                >
+                                    Real-time
+                                </button>
+                                <button
+                                    onClick={() => setCreateTimeControlType('daily')}
+                                    className={`flex-1 py-1 rounded-md font-bold text-xs transition-all ${createTimeControlType === 'daily' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}
+                                >
+                                    Daily
+                                </button>
                             </div>
-                            <p className="text-xs text-gray-500 mt-1">Set base to 0 for unlimited time</p>
+
+                            {createTimeControlType === 'realtime' ? (
+                                <div className="flex gap-2">
+                                    <div className="flex-1">
+                                        <label className="block text-xs text-gray-400 mb-1">Base (min)</label>
+                                        <input
+                                            type="number"
+                                            value={createBaseMinutes}
+                                            onChange={e => setCreateBaseMinutes(e.target.value)}
+                                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-center"
+                                            min="0"
+                                        />
+                                    </div>
+                                    <div className="flex-1">
+                                        <label className="block text-xs text-gray-400 mb-1">Increment (sec)</label>
+                                        <input
+                                            type="number"
+                                            value={createIncrement}
+                                            onChange={e => setCreateIncrement(e.target.value)}
+                                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-center"
+                                            min="0"
+                                        />
+                                    </div>
+                                </div>
+                            ) : (
+                                <div>
+                                    <label className="block text-xs text-gray-400 mb-1 text-center">Days per move</label>
+                                    <input
+                                        type="number"
+                                        value={createDaysPerMove}
+                                        onChange={e => setCreateDaysPerMove(e.target.value)}
+                                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-center"
+                                        min="1"
+                                    />
+                                </div>
+                            )}
+                            <p className="text-xs text-gray-500 mt-1">
+                                {createTimeControlType === 'realtime' ? 'Set base to 0 for unlimited time' : 'A player loses if they do not move within this time.'}
+                            </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 p-2 bg-gray-800 rounded-lg">
+                            <input
+                                type="checkbox"
+                                id="hostParticipates"
+                                checked={hostParticipates}
+                                onChange={e => setHostParticipates(e.target.checked)}
+                                className="w-4 h-4 text-yellow-600 bg-gray-700 border-gray-600 rounded focus:ring-yellow-500"
+                            />
+                            <label htmlFor="hostParticipates" className="text-sm font-semibold text-gray-300">
+                                Participate as player
+                            </label>
+                        </div>
+
+                        <div className="bg-gray-800 p-3 rounded-lg space-y-2 border border-yellow-900/30">
+                            <p className="text-xs font-bold text-yellow-500 uppercase mb-2">Visual Settings (Enforced for all games)</p>
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm text-gray-300">Show Power Icons</label>
+                                <input type="checkbox" checked={createShowPowerPieces} onChange={e => setCreateShowPowerPieces(e.target.checked)} className="w-4 h-4 text-yellow-600 rounded" />
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm text-gray-300">Show Power Rings</label>
+                                <input type="checkbox" checked={createShowPowerRings} onChange={e => setCreateShowPowerRings(e.target.checked)} className="w-4 h-4 text-yellow-600 rounded" />
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm text-gray-300">Show Original Piece</label>
+                                <input type="checkbox" checked={createShowOriginalType} onChange={e => setCreateShowOriginalType(e.target.checked)} className="w-4 h-4 text-yellow-600 rounded" />
+                            </div>
                         </div>
 
                         <div className="flex gap-3 pt-2">

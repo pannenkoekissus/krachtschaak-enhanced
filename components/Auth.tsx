@@ -19,6 +19,8 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
     const [message, setMessage] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+    const [guestNickname, setGuestNickname] = useState('');
+    const [showGuestNicknameEntry, setShowGuestNicknameEntry] = useState(false);
 
     const clearState = () => {
         setError(null);
@@ -155,6 +157,21 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
     };
 
     const handleAnonymousSignIn = async () => {
+        if (!showGuestNicknameEntry) {
+            setShowGuestNicknameEntry(true);
+            return;
+        }
+
+        const trimmedNickname = guestNickname.trim();
+        if (trimmedNickname.length < 3) {
+            setError("Nickname must be at least 3 characters.");
+            return;
+        }
+        if (trimmedNickname.includes("@")) {
+            setError("Nickname must not contain @");
+            return;
+        }
+
         setIsLoading(true);
         clearState();
 
@@ -166,6 +183,16 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
 
         try {
             const userCredential = await auth.signInAnonymously();
+
+            // Set display name for guest
+            await userCredential.user.updateProfile({ displayName: trimmedNickname });
+
+            // Also store in 'users' collection for the lobby
+            await db.ref(`users/${userCredential.user.uid}`).set({
+                displayName: trimmedNickname,
+                isOnline: true
+            });
+
             const userRatingRef = db.ref(`userRatings/${userCredential.user.uid}`);
             const ratingSnapshot = await userRatingRef.once('value');
             let ratingsData = ratingSnapshot.val();
@@ -296,9 +323,28 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
                         <p className="text-gray-300">Remember your password? <a href="#" onClick={(e) => { e.preventDefault(); resetToSignIn(); }} className="font-semibold text-green-400 hover:underline">Sign In</a></p>
                     )}
                     <div className="my-4 flex items-center"><div className="flex-grow border-t border-gray-600"></div><span className="flex-shrink mx-4 text-gray-400">OR</span><div className="flex-grow border-t border-gray-600"></div></div>
+                    {showGuestNicknameEntry && (
+                        <div className="mb-4 animate-in slide-in-from-top duration-300">
+                            <label className="block mb-1 text-sm font-medium text-gray-300">Guest Nickname</label>
+                            <input
+                                type="text"
+                                value={guestNickname}
+                                onChange={e => { setGuestNickname(e.target.value); clearState(); }}
+                                placeholder="Enter a name to use"
+                                className="w-full p-2 bg-gray-700 text-white rounded-lg border-2 border-gray-600 focus:outline-none focus:border-green-500"
+                                maxLength={20}
+                                autoFocus
+                            />
+                        </div>
+                    )}
                     <button onClick={handleAnonymousSignIn} disabled={isLoading} className="w-full py-3 bg-gray-600 hover:bg-gray-700 rounded-lg text-lg font-semibold transition-colors disabled:bg-gray-500">
-                        {isLoading ? 'Loading...' : 'Continue as Guest'}
+                        {isLoading ? 'Loading...' : showGuestNicknameEntry ? 'Start as Guest' : 'Continue as Guest'}
                     </button>
+                    {showGuestNicknameEntry && (
+                        <button onClick={() => { setShowGuestNicknameEntry(false); clearState(); }} className="mt-2 text-xs text-gray-400 hover:text-white underline">
+                            Cancel Guest Mode
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

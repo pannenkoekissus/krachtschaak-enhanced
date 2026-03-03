@@ -153,6 +153,9 @@ const App: React.FC = () => {
     const [highlightedSquares, setHighlightedSquares] = useState<Position[]>([]);
     const [arrows, setArrows] = useState<{ from: Position; to: Position }[]>([]);
     const [rightClickStartSquare, setRightClickStartSquare] = useState<Position | null>(null);
+    const [gameShowPowerPieces, setGameShowPowerPieces] = useState<boolean | undefined>(undefined);
+    const [gameShowPowerRings, setGameShowPowerRings] = useState<boolean | undefined>(undefined);
+    const [gameShowOriginalType, setGameShowOriginalType] = useState<boolean | undefined>(undefined);
 
     // Lifted Lobby State
     const [lobbyView, setLobbyView] = useState<'games' | 'players' | 'current_games' | 'finished_games' | 'challenges'>('games');
@@ -504,13 +507,17 @@ const App: React.FC = () => {
         enPassantTarget, halfmoveClock, positionHistory,
         ambiguousEnPassantData, drawOffer, playerTimes, moveDeadline, timerSettings, ratingCategory, players, playerColors, initialRatings,
         isRated, rematchOffer, nextGameId, ratingChange, challengedPlayerInfo, turnStartTime, premoves, lastMove, playersLeft,
-        completedAt, moveHistory, chat: chatMessages
+        completedAt, moveHistory, chat: chatMessages,
+        showPowerPieces: gameShowPowerPieces,
+        showPowerRings: gameShowPowerRings,
+        showOriginalType: gameShowOriginalType
     }), [
         board, turn, status, winner, promotionData, capturedPieces,
         enPassantTarget, halfmoveClock, positionHistory,
         ambiguousEnPassantData, drawOffer, playerTimes, moveDeadline, timerSettings, ratingCategory, players, playerColors, initialRatings,
         isRated, rematchOffer, nextGameId, ratingChange, challengedPlayerInfo, turnStartTime, premoves, lastMove, playersLeft,
-        completedAt, moveHistory, chatMessages
+        completedAt, moveHistory, chatMessages,
+        gameShowPowerPieces, gameShowPowerRings, gameShowOriginalType
     ]);
 
     useEffect(() => {
@@ -578,6 +585,9 @@ const App: React.FC = () => {
         setLastMove(state.lastMove || null);
         setMoveHistory(state.moveHistory || []);
         setChatMessages(state.chat || []);
+        setGameShowPowerPieces(state.showPowerPieces);
+        setGameShowPowerRings(state.showPowerRings);
+        setGameShowOriginalType(state.showOriginalType);
 
         // This is a transient UI state and should be reset whenever the game state is loaded.
         setDraggedPiece(null);
@@ -800,6 +810,7 @@ const App: React.FC = () => {
                                 await updatePlayerScore(finalState.tournamentId, pairing.white, 0.5);
                                 await updatePlayerScore(finalState.tournamentId, pairing.black, 0.5);
                             }
+                            // Important: recalculate tiebreaks to keep standings up to date
                             await recalculateTiebreaks(finalState.tournamentId);
                         }
                     }
@@ -2561,8 +2572,12 @@ const App: React.FC = () => {
 
         const topPlayerName = isFlipped ? (whitePlayer?.displayName || 'White') : (blackPlayer?.displayName || 'Black');
         const bottomPlayerName = isFlipped ? (blackPlayer?.displayName || 'Black') : (whitePlayer?.displayName || 'White');
-        const topPlayerRating = isFlipped ? initialRatings?.white : initialRatings?.black;
-        const bottomPlayerRating = isFlipped ? initialRatings?.black : initialRatings?.white;
+        const topPlayerRating = isFlipped
+            ? (initialRatings?.white ?? whitePlayer?.ratings?.[ratingCategory])
+            : (initialRatings?.black ?? blackPlayer?.ratings?.[ratingCategory]);
+        const bottomPlayerRating = isFlipped
+            ? (initialRatings?.black ?? blackPlayer?.ratings?.[ratingCategory])
+            : (initialRatings?.white ?? whitePlayer?.ratings?.[ratingCategory]);
 
         const myColor = gameMode === 'online_playing' ? myOnlineColor : turn;
         const myPlayerHasPowerPiece = board.flat().some(p => p && p.color === myColor && p.power);
@@ -2651,9 +2666,9 @@ const App: React.FC = () => {
                             onBoardMouseDown={handleBoardMouseDown}
                             onBoardMouseUp={handleBoardMouseUp}
                             onBoardContextMenu={handleBoardContextMenu}
-                            showPowerPieces={showPowerPieces}
-                            showPowerRings={showPowerRings}
-                            showOriginalType={showOriginalType}
+                            showPowerPieces={gameShowPowerPieces !== undefined ? gameShowPowerPieces : showPowerPieces}
+                            showPowerRings={gameShowPowerRings !== undefined ? gameShowPowerRings : showPowerRings}
+                            showOriginalType={gameShowOriginalType !== undefined ? gameShowOriginalType : showOriginalType}
                         />
                     </div>
                     {/* Bottom Player Info (Mobile) */}

@@ -13,17 +13,31 @@ const generatePlayerId = (): string => {
     return Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
 };
 
-// Create a new tournament
 export const createTournament = async (
     name: string,
     hostUid: string,
     hostName: string,
     timerSettings: TimerSettings,
     pairingMode: PairingMode,
-    totalRounds: number
+    totalRounds: number,
+    hostParticipates: boolean = true,
+    visualSettings?: { showPowerPieces: boolean, showPowerRings: boolean, showOriginalType: boolean }
 ): Promise<string> => {
     const id = generateTournamentId();
-    const hostPlayerId = generatePlayerId();
+    const players: Record<string, TournamentPlayer> = {};
+
+    if (hostParticipates) {
+        const hostPlayerId = generatePlayerId();
+        players[hostPlayerId] = {
+            oderId: hostPlayerId,
+            uid: hostUid,
+            nickname: hostName,
+            score: 0,
+            buchholz: 0,
+            sonnebornBerger: 0,
+            joinedAt: Date.now()
+        };
+    }
 
     const tournament: TournamentData = {
         id,
@@ -36,18 +50,11 @@ export const createTournament = async (
         totalRounds,
         pairingMode,
         createdAt: Date.now(),
-        players: {
-            [hostPlayerId]: {
-                oderId: hostPlayerId,
-                uid: hostUid,
-                nickname: hostName,
-                score: 0,
-                buchholz: 0,
-                sonnebornBerger: 0,
-                joinedAt: Date.now()
-            }
-        },
-        rounds: {}
+        players,
+        rounds: {},
+        showPowerPieces: visualSettings?.showPowerPieces ?? true,
+        showPowerRings: visualSettings?.showPowerRings ?? true,
+        showOriginalType: visualSettings?.showOriginalType ?? true
     };
 
     await db.ref(`tournaments/${id}`).set(tournament);
