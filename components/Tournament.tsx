@@ -406,6 +406,23 @@ const Tournament: React.FC<TournamentProps> = ({
         await removePlayer(activeTournament.id, playerId);
     };
 
+    // Self: withdraw from tournament
+    const handleWithdraw = async () => {
+        if (!activeTournament || !myPlayerId) return;
+        if (window.confirm('Are you sure you want to withdraw from this tournament?')) {
+            try {
+                await removePlayer(activeTournament.id, myPlayerId);
+                if (listenerRef.current) listenerRef.current.off();
+                setActiveTournament(null);
+                onTournamentJoined(null);
+                setView('list');
+                loadTournaments();
+            } catch (err: any) {
+                setError(err.message);
+            }
+        }
+    };
+
     // Check if all pairings in current round are finished
     const allPairingsFinished = currentPairings.length > 0 && currentPairings.every(p => p.status === 'finished');
     const isLastRound = currentRound >= (activeTournament?.totalRounds || 0);
@@ -742,18 +759,28 @@ const Tournament: React.FC<TournamentProps> = ({
                                 {' • '}{activeTournament.timerSettings ? `${(activeTournament.timerSettings as any).initialTime / 60}+${(activeTournament.timerSettings as any).increment}` : 'Unlimited'}
                             </div>
                         </div>
-                        <button
-                            onClick={() => {
-                                if (listenerRef.current) listenerRef.current.off();
-                                setActiveTournament(null);
-                                onTournamentJoined(null);
-                                setView('list');
-                                loadTournaments();
-                            }}
-                            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-semibold transition-colors"
-                        >
-                            ← Leave
-                        </button>
+                        <div className="flex gap-2">
+                            {myPlayerId && activeTournament.status !== 'finished' && (
+                                <button
+                                    onClick={handleWithdraw}
+                                    className="px-4 py-2 bg-red-900/50 hover:bg-red-800/50 text-red-200 border border-red-700/50 rounded-lg font-semibold transition-colors text-sm"
+                                >
+                                    Withdraw
+                                </button>
+                            )}
+                            <button
+                                onClick={() => {
+                                    if (listenerRef.current) listenerRef.current.off();
+                                    setActiveTournament(null);
+                                    onTournamentJoined(null);
+                                    setView('list');
+                                    loadTournaments();
+                                }}
+                                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-semibold transition-colors"
+                            >
+                                ← Back
+                            </button>
+                        </div>
                     </div>
 
                     {error && (
