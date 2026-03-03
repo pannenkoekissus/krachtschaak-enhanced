@@ -100,6 +100,9 @@ const App: React.FC = () => {
     const [draggedPiece, setDraggedPiece] = useState<Position | null>(null);
     const [rejoinCountdown, setRejoinCountdown] = useState<number | null>(null);
     const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
+    const [gameTournamentId, setGameTournamentId] = useState<string | null>(null);
+    const [gameTournamentRound, setGameTournamentRound] = useState<number | null>(null);
+    const [gameTournamentPairingId, setGameTournamentPairingId] = useState<string | null>(null);
     const [reviewingGame, setReviewingGame] = useState<GameState | null>(null);
     const [analysisState, setAnalysisState] = useState<GameState | null>(null);
     const [reviewReturnTo, setReviewReturnTo] = useState<{ mode: GameMode, lobbyView: any } | null>(null);
@@ -508,6 +511,9 @@ const App: React.FC = () => {
         ambiguousEnPassantData, drawOffer, playerTimes, moveDeadline, timerSettings, ratingCategory, players, playerColors, initialRatings,
         isRated, rematchOffer, nextGameId, ratingChange, challengedPlayerInfo, turnStartTime, premoves, lastMove, playersLeft,
         completedAt, moveHistory, chat: chatMessages,
+        tournamentId: gameTournamentId,
+        tournamentRound: gameTournamentRound,
+        tournamentPairingId: gameTournamentPairingId,
         showPowerPieces: gameShowPowerPieces,
         showPowerRings: gameShowPowerRings,
         showOriginalType: gameShowOriginalType
@@ -517,6 +523,7 @@ const App: React.FC = () => {
         ambiguousEnPassantData, drawOffer, playerTimes, moveDeadline, timerSettings, ratingCategory, players, playerColors, initialRatings,
         isRated, rematchOffer, nextGameId, ratingChange, challengedPlayerInfo, turnStartTime, premoves, lastMove, playersLeft,
         completedAt, moveHistory, chatMessages,
+        gameTournamentId, gameTournamentRound, gameTournamentPairingId,
         gameShowPowerPieces, gameShowPowerRings, gameShowOriginalType
     ]);
 
@@ -585,6 +592,9 @@ const App: React.FC = () => {
         setLastMove(state.lastMove || null);
         setMoveHistory(state.moveHistory || []);
         setChatMessages(state.chat || []);
+        setGameTournamentId(state.tournamentId || null);
+        setGameTournamentRound(state.tournamentRound ?? null);
+        setGameTournamentPairingId(state.tournamentPairingId || null);
         setGameShowPowerPieces(state.showPowerPieces);
         setGameShowPowerRings(state.showPowerRings);
         setGameShowOriginalType(state.showOriginalType);
@@ -799,24 +809,29 @@ const App: React.FC = () => {
                                 status: 'finished'
                             });
 
-                            const updates: any = {};
-                            if (tournamentResult === '1-0') {
-                                updates[`tournaments/${finalState.tournamentId}/players/${pairing.white}/score`] = (tData.players[pairing.white]?.score || 0) + 1;
-                                if (pairing.black !== 'BYE' && tData.players[pairing.black]) {
-                                    updates[`tournaments/${finalState.tournamentId}/players/${pairing.black}/score`] = (tData.players[pairing.black]?.score || 0);
+                            // Update scores using a transaction for consistency
+                            const playersRef = db.ref(`tournaments/${finalState.tournamentId}/players`);
+                            await playersRef.transaction((players) => {
+                                if (!players) return players;
+                                if (tournamentResult === '1-0') {
+                                    if (players[pairing.white]) players[pairing.white].score = (players[pairing.white].score || 0) + 1;
+                                    if (pairing.black !== 'BYE' && players[pairing.black]) {
+                                        players[pairing.black].score = (players[pairing.black].score || 0);
+                                    }
+                                } else if (tournamentResult === '0-1') {
+                                    if (players[pairing.white]) players[pairing.white].score = (players[pairing.white].score || 0);
+                                    if (pairing.black !== 'BYE' && players[pairing.black]) {
+                                        players[pairing.black].score = (players[pairing.black].score || 0) + 1;
+                                    }
+                                } else {
+                                    if (players[pairing.white]) players[pairing.white].score = (players[pairing.white].score || 0) + 0.5;
+                                    if (pairing.black !== 'BYE' && players[pairing.black]) {
+                                        players[pairing.black].score = (players[pairing.black].score || 0) + 0.5;
+                                    }
                                 }
-                            } else if (tournamentResult === '0-1') {
-                                updates[`tournaments/${finalState.tournamentId}/players/${pairing.white}/score`] = (tData.players[pairing.white]?.score || 0);
-                                if (pairing.black !== 'BYE' && tData.players[pairing.black]) {
-                                    updates[`tournaments/${finalState.tournamentId}/players/${pairing.black}/score`] = (tData.players[pairing.black]?.score || 0) + 1;
-                                }
-                            } else {
-                                updates[`tournaments/${finalState.tournamentId}/players/${pairing.white}/score`] = (tData.players[pairing.white]?.score || 0) + 0.5;
-                                if (pairing.black !== 'BYE' && tData.players[pairing.black]) {
-                                    updates[`tournaments/${finalState.tournamentId}/players/${pairing.black}/score`] = (tData.players[pairing.black]?.score || 0) + 0.5;
-                                }
-                            }
-                            await db.ref().update(updates);
+                                return players;
+                            });
+
                             // Important: recalculate tiebreaks to keep standings up to date
                             await recalculateTiebreaks(finalState.tournamentId);
                         }
@@ -844,7 +859,7 @@ const App: React.FC = () => {
         promotion?: PieceType | null,
         moveDetails?: { isForcePower?: boolean }
     ) => {
-        const { turn, halfmoveClock, positionHistory, drawOffer, timerSettings, players, playerColors, initialRatings, isRated, ratingCategory, challengedPlayerInfo, playersLeft, moveHistory } = baseState;
+        const { turn, halfmoveClock, positionHistory, drawOffer, timerSettings, players, playerColors, initialRatings, isRated, ratingCategory, challengedPlayerInfo, playersLeft, moveHistory, tournamentId, tournamentRound, tournamentPairingId, showPowerPieces, showPowerRings, showOriginalType } = baseState;
 
         const newPlayerTimes = (baseState.playerTimes && timerSettings && 'increment' in timerSettings) ? { ...baseState.playerTimes, [turn]: baseState.playerTimes[turn] + timerSettings.increment } : baseState.playerTimes;
 
@@ -985,7 +1000,13 @@ const App: React.FC = () => {
             playersLeft,
             lastMove: move,
             moveHistory: newMoveHistory,
-            chat: baseState.chat
+            chat: baseState.chat,
+            tournamentId,
+            tournamentRound,
+            tournamentPairingId,
+            showPowerPieces,
+            showPowerRings,
+            showOriginalType
         };
 
         if (newStatus !== 'playing') {
@@ -1350,8 +1371,9 @@ const App: React.FC = () => {
 
         // Navigation Logic: Return to Lobby if logged in and online game, else Main Menu
         if (gameMode === 'online_playing' || gameMode === 'online_spectating') {
-            if (gameStateRef.current?.tournamentId) {
-                setActiveTournamentId(gameStateRef.current.tournamentId);
+            const tournamentId = gameStateRef.current?.tournamentId || gameTournamentId;
+            if (tournamentId) {
+                setActiveTournamentId(tournamentId);
                 setGameMode('tournament');
             } else {
                 setGameMode('online_lobby');
@@ -1370,7 +1392,10 @@ const App: React.FC = () => {
         setShowLocalSetup(false);
         randomizeNextGameColor();
         setChatMessages([]);
-    }, [gameId, myOnlineColor, currentUser, randomizeNextGameColor, gameMode, status, gameRef, timerSettings, ratingCategory, analysisReturnTo, lobbyView, reviewingGame]);
+        setGameTournamentId(null);
+        setGameTournamentRound(null);
+        setGameTournamentPairingId(null);
+    }, [gameId, myOnlineColor, currentUser, randomizeNextGameColor, gameMode, status, gameRef, timerSettings, ratingCategory, analysisReturnTo, lobbyView, reviewingGame, gameTournamentId]);
 
     const handleStartOnline = () => {
         if (currentUser) {

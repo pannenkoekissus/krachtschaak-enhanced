@@ -172,9 +172,9 @@ export interface GameState {
   premoves?: { [color in Color]?: { from: Position, to: Position, isForcePower: boolean } | null };
   moveHistory?: Move[];
   chat?: ChatMessage[];
-  tournamentId?: string;
-  tournamentRound?: number;
-  tournamentPairingId?: string;
+  tournamentId?: string | null;
+  tournamentRound?: number | null;
+  tournamentPairingId?: string | null;
   showPowerPieces?: boolean;
   showPowerRings?: boolean;
   showOriginalType?: boolean;

@@ -182,7 +182,15 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
         }
 
         try {
-            // Check if nickname is taken
+            // Check if nickname is taken by a registered user
+            const registeredSnapshot = await db.ref(`usernames/${trimmedNickname.toLowerCase()}`).once('value');
+            if (registeredSnapshot.exists()) {
+                setError("This nickname is already taken by a registered player.");
+                setIsLoading(false);
+                return;
+            }
+
+            // Check if nickname is taken by another guest/user
             const usersRef = db.ref('users');
             const nicknameSnapshot = await usersRef.orderByChild('displayName').equalTo(trimmedNickname).once('value');
             if (nicknameSnapshot.exists()) {

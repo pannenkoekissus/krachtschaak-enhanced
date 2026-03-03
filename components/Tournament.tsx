@@ -182,7 +182,7 @@ const Tournament: React.FC<TournamentProps> = ({
             }
 
             if (!existing) {
-                await joinTournament(id, userId, displayName);
+                await joinTournament(id, displayName, userId);
             }
 
             onTournamentJoined(id);
@@ -305,9 +305,9 @@ const Tournament: React.FC<TournamentProps> = ({
         }
 
         // Tag it as a tournament game
-        (initialState as any).tournamentId = activeTournament.id;
-        (initialState as any).tournamentRound = currentRound;
-        (initialState as any).tournamentPairingId = pairing.id;
+        initialState.tournamentId = activeTournament.id;
+        initialState.tournamentRound = currentRound;
+        initialState.tournamentPairingId = pairing.id;
 
         await newGameRef.set(initialState);
         await db.ref(`userGames/${whitePlayer.uid}/${gameId}`).set(true);
@@ -444,7 +444,7 @@ const Tournament: React.FC<TournamentProps> = ({
                                 maxLength={6}
                             />
                             <button
-                                onClick={() => { if (joinCode.trim()) subscribeToTournament(joinCode.toUpperCase().trim()); }}
+                                onClick={handleJoin}
                                 className="px-6 py-2 bg-green-600 hover:bg-green-500 rounded-lg font-bold transition-colors"
                             >
                                 Find & Join
@@ -680,6 +680,11 @@ const Tournament: React.FC<TournamentProps> = ({
                             <h1 className="text-2xl font-bold">{activeTournament.name}</h1>
                             <div className="text-sm text-gray-400">
                                 Code: <span className="font-mono text-yellow-400 text-lg">{activeTournament.id}</span>
+                                {activeTournament.isPrivate && (
+                                    <span className="ml-2 px-2 py-0.5 bg-purple-900/50 text-purple-300 border border-purple-500/50 rounded-full text-[10px] uppercase font-bold">
+                                        🔒 Private
+                                    </span>
+                                )}
                                 {' • '}{activeTournament.pairingMode === 'swiss' ? 'Swiss' : 'Manual'}
                                 {' • '}{activeTournament.timerSettings ? `${(activeTournament.timerSettings as any).initialTime / 60}+${(activeTournament.timerSettings as any).increment}` : 'Unlimited'}
                             </div>
