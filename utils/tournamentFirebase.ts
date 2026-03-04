@@ -307,36 +307,49 @@ export const generateSwissPairings = (
 
     const paired = new Set<string>();
 
+    // Explicitly track match counts to find who was played LEAST against
+    const matchCounts: Record<string, Record<string, number>> = {};
+    players.forEach(p => matchCounts[p.oderId] = {});
+
+    Object.values(previousRounds || {}).forEach(round => {
+        Object.values(round.pairings || {}).forEach(pairing => {
+            if (pairing.black !== 'BYE') {
+                matchCounts[pairing.white][pairing.black] = (matchCounts[pairing.white][pairing.black] || 0) + 1;
+                matchCounts[pairing.black][pairing.white] = (matchCounts[pairing.black][pairing.white] || 0) + 1;
+            }
+        });
+    });
+
     for (let i = 0; i < available.length; i++) {
         const p1 = available[i];
         if (paired.has(p1.oderId)) continue;
 
         let bestMatch: TournamentPlayer | null = null;
+        let minPlayCount = Infinity;
+
+        // Greedy search for an opponent among the remaining players
         for (let j = i + 1; j < available.length; j++) {
             const p2 = available[j];
             if (paired.has(p2.oderId)) continue;
-            // Avoid rematches if possible
-            if (!playedAgainst[p1.oderId]?.has(p2.oderId)) {
-                bestMatch = p2;
-                break;
-            }
-        }
 
-        // If no fresh opponent, pair with closest available
-        if (!bestMatch) {
-            for (let j = i + 1; j < available.length; j++) {
-                if (!paired.has(available[j].oderId)) {
-                    bestMatch = available[j];
-                    break;
-                }
+            const count = matchCounts[p1.oderId][p2.oderId] || 0;
+
+            // Priority 1: High priority if they have NEVER played (count === 0)
+            if (count === 0) {
+                bestMatch = p2;
+                break; // Swiss rule: take closest rank among fresh opponents
+            }
+
+            // Priority 2: If we must rematch, find the one with the lowest count
+            if (count < minPlayCount) {
+                minPlayCount = count;
+                bestMatch = p2;
             }
         }
 
         if (bestMatch) {
             const pairingId = generatePlayerId();
 
-            // Color logic: try to balance
-            // If p1 has more White games (+), and p2 has fewer (-), p2 should be White
             let p1White = Math.random() < 0.5;
             const bal1 = colorBalance[p1.oderId] || 0;
             const bal2 = colorBalance[bestMatch.oderId] || 0;
