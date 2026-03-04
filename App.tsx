@@ -1067,7 +1067,7 @@ const App: React.FC = () => {
                 }
                 const newTime = timeAtTurnStart - elapsedSeconds;
 
-                if (newTime <= 10 && newTime > 0 && !hasPlayedLowTimeSoundRef.current) {
+                if (newTime <= 10 && newTime > 0 && !hasPlayedLowTimeSoundRef.current && timeAtTurnStart > 10) {
                     const isGameScreen = gameMode === 'online_playing' || gameMode === 'local' || gameMode === 'online_spectating';
                     if (isGameScreen && !reviewingGame) {
                         if (soundsEnabled) {
@@ -1373,8 +1373,25 @@ const App: React.FC = () => {
         if (gameMode === 'online_playing' || gameMode === 'online_spectating') {
             const tournamentId = gameStateRef.current?.tournamentId || gameTournamentId;
             if (tournamentId) {
-                setActiveTournamentId(tournamentId);
-                setGameMode('tournament');
+                let shouldGoToTournament = true;
+                if (gameMode === 'online_spectating') {
+                    try {
+                        const tSnap = await db.ref(`tournaments/${tournamentId}`).once('value');
+                        const tData = tSnap.val();
+                        if (tData && tData.isPrivate) {
+                            shouldGoToTournament = false;
+                        }
+                    } catch (e) {
+                        console.error("Error checking tournament privacy:", e);
+                    }
+                }
+
+                if (shouldGoToTournament) {
+                    setActiveTournamentId(tournamentId);
+                    setGameMode('tournament');
+                } else {
+                    setGameMode('online_lobby');
+                }
             } else {
                 setGameMode('online_lobby');
             }
@@ -3061,6 +3078,9 @@ const App: React.FC = () => {
                     getInitialGameState={resetGame}
                     onGameStart={(gameId, playerColor) => {
                         handleOnlineGameStart(gameId, playerColor);
+                    }}
+                    onSpectate={(gameId) => {
+                        handleOnlineGameStart(gameId, null);
                     }}
                     onBack={() => setGameMode('menu')}
                 />
