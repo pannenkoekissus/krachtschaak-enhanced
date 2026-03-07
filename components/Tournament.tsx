@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { db, auth } from '../firebaseConfig';
 import {
     TournamentData, TournamentPlayer, TournamentPairing, TournamentRound,
-    TimerSettings, PairingMode, Color, GameState, PlayerInfo
+    TimerSettings, PairingMode, Color, GameState, PlayerInfo, PairingResult
 } from '../types';
 import {
     createTournament, joinTournament, removePlayer,
@@ -232,29 +232,33 @@ const Tournament: React.FC<TournamentProps> = ({
     };
 
     const handleAddManualPairing = async () => {
-        if (!activeTournament || !manualWhite || !manualBlack || (manualWhite === manualBlack && manualBlack !== 'BYE')) return;
+        if (!activeTournament || !manualWhite || !manualBlack) return;
+        const isBye = manualBlack === 'BYE' || manualBlack === 'HALF_BYE';
+        if (!isBye && manualWhite === manualBlack) return;
 
         // Prevent duplicate pairing in the same round
         const alreadyPaired = currentPairings.some(p =>
-            p.white === manualWhite || (manualBlack !== 'BYE' && p.white === manualBlack) ||
-            p.black === manualWhite || (manualBlack !== 'BYE' && p.black === manualBlack)
+            p.white === manualWhite || (!isBye && p.white === manualBlack) ||
+            p.black === manualWhite || (!isBye && p.black === manualBlack)
         );
         if (alreadyPaired) { setError('One or both players are already paired in this round'); return; }
 
         const pairingId = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+        const result: PairingResult = manualBlack === 'BYE' ? '1-0' : (manualBlack === 'HALF_BYE' ? '0.5-0.5' : null);
         const newPairing: TournamentPairing = {
             id: pairingId,
             white: manualWhite,
-            black: manualBlack,
+            black: isBye ? 'BYE' : manualBlack,
             gameId: null,
-            result: manualBlack === 'BYE' ? '1-0' : null,
-            status: manualBlack === 'BYE' ? 'finished' : 'pending'
+            result: result,
+            status: isBye ? 'finished' : 'pending'
         };
 
         await updatePairing(activeTournament.id, currentRound, pairingId, newPairing);
 
-        if (manualBlack === 'BYE') {
-            await updatePlayerScore(activeTournament.id, manualWhite, 1);
+        if (isBye) {
+            const scoreToAdd = manualBlack === 'BYE' ? 1 : 0.5;
+            await updatePlayerScore(activeTournament.id, manualWhite, scoreToAdd);
             await recalculateTiebreaks(activeTournament.id);
         }
 
@@ -1092,13 +1096,14 @@ const Tournament: React.FC<TournamentProps> = ({
                                                             <label className="text-[10px] text-gray-400">Black</label>
                                                             <select value={manualBlack} onChange={e => setManualBlack(e.target.value)} className="w-full px-2 py-1 bg-gray-600 rounded text-sm">
                                                                 <option value="">Select...</option>
-                                                                <option value="BYE">BYE (Auto-Win for White)</option>
+                                                                <option value="BYE">Full BYE (1.0 pt)</option>
+                                                                <option value="HALF_BYE">Half BYE (0.5 pt)</option>
                                                                 {players.filter(p => p.oderId !== manualWhite).map(p => <option key={p.oderId} value={p.oderId}>{p.nickname}</option>)}
                                                             </select>
                                                         </div>
                                                         <button
                                                             onClick={handleAddManualPairing}
-                                                            disabled={!manualWhite || !manualBlack || (manualWhite === manualBlack && manualWhite !== 'BYE')}
+                                                            disabled={!manualWhite || !manualBlack || (manualWhite === manualBlack && manualBlack !== 'BYE' && manualBlack !== 'HALF_BYE')}
                                                             className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded font-bold text-sm transition-colors disabled:opacity-50"
                                                         >
                                                             Add
