@@ -233,7 +233,7 @@ const Tournament: React.FC<TournamentProps> = ({
 
     const handleAddManualPairing = async () => {
         if (!activeTournament || !manualWhite || !manualBlack) return;
-        const isBye = manualBlack === 'BYE' || manualBlack === 'HALF_BYE';
+        const isBye = manualBlack === 'BYE' || manualBlack === 'HALF_BYE' || manualBlack === 'ZERO_BYE';
         if (!isBye && manualWhite === manualBlack) return;
 
         // Prevent duplicate pairing in the same round
@@ -244,7 +244,7 @@ const Tournament: React.FC<TournamentProps> = ({
         if (alreadyPaired) { setError('One or both players are already paired in this round'); return; }
 
         const pairingId = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
-        const result: PairingResult = manualBlack === 'BYE' ? '1-0' : (manualBlack === 'HALF_BYE' ? '0.5-0.5' : null);
+        const result: PairingResult = manualBlack === 'BYE' ? '1-0' : (manualBlack === 'HALF_BYE' ? '0.5-0.5' : (manualBlack === 'ZERO_BYE' ? '0-1' : null));
         const newPairing: TournamentPairing = {
             id: pairingId,
             white: manualWhite,
@@ -257,8 +257,10 @@ const Tournament: React.FC<TournamentProps> = ({
         await updatePairing(activeTournament.id, currentRound, pairingId, newPairing);
 
         if (isBye) {
-            const scoreToAdd = manualBlack === 'BYE' ? 1 : 0.5;
-            await updatePlayerScore(activeTournament.id, manualWhite, scoreToAdd);
+            const scoreToAdd = manualBlack === 'BYE' ? 1 : (manualBlack === 'HALF_BYE' ? 0.5 : 0);
+            if (scoreToAdd > 0) {
+                await updatePlayerScore(activeTournament.id, manualWhite, scoreToAdd);
+            }
             await recalculateTiebreaks(activeTournament.id);
         }
 
@@ -1098,12 +1100,13 @@ const Tournament: React.FC<TournamentProps> = ({
                                                                 <option value="">Select...</option>
                                                                 <option value="BYE">Full BYE (1.0 pt)</option>
                                                                 <option value="HALF_BYE">Half BYE (0.5 pt)</option>
+                                                                <option value="ZERO_BYE">0 point BYE (0.0 pt)</option>
                                                                 {players.filter(p => p.oderId !== manualWhite).map(p => <option key={p.oderId} value={p.oderId}>{p.nickname}</option>)}
                                                             </select>
                                                         </div>
                                                         <button
                                                             onClick={handleAddManualPairing}
-                                                            disabled={!manualWhite || !manualBlack || (manualWhite === manualBlack && manualBlack !== 'BYE' && manualBlack !== 'HALF_BYE')}
+                                                            disabled={!manualWhite || !manualBlack || (manualWhite === manualBlack && manualBlack !== 'BYE' && manualBlack !== 'HALF_BYE' && manualBlack !== 'ZERO_BYE')}
                                                             className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded font-bold text-sm transition-colors disabled:opacity-50"
                                                         >
                                                             Add
