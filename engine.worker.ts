@@ -10,12 +10,12 @@ self.addEventListener('message', async (e: MessageEvent) => {
         KrachtschaakAI.resetStopFlag();
 
         try {
-            const best = await (KrachtschaakAI as any).getBestMoveIterative(board, turn, maxDepth, (move: any, depth: number, pv: string[]) => {
+            const results = await (KrachtschaakAI as any).getBestMoveIterative(board, turn, maxDepth, (bestResults: any[], depth: number) => {
                 // send intermediate updates
-                (self as any).postMessage({ type: 'update', move, depth, requestId, pv });
-            });
+                (self as any).postMessage({ type: 'update', results: bestResults, depth, requestId });
+            }, data.multiPv || 1);
 
-            (self as any).postMessage({ type: 'done', move: best?.move, pv: best?.pv, requestId });
+            (self as any).postMessage({ type: 'done', results, requestId });
         } catch (err) {
             (self as any).postMessage({ type: 'error', error: String(err), requestId });
         }

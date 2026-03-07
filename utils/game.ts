@@ -493,6 +493,7 @@ export const getNotation = (
             case PieceType.Rook: promChar = 'R'; break;
             case PieceType.Bishop: promChar = 'B'; break;
             case PieceType.Knight: promChar = 'N'; break;
+            case PieceType.King: promChar = 'K'; break;
         }
         notation += `=${promChar}`;
     }

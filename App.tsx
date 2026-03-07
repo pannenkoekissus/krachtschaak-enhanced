@@ -878,8 +878,8 @@ const App: React.FC = () => {
         } else if (newCount >= 3) {
             newStatus = 'draw_threefold';
         } else {
-            const capturedKing = newCaptured.white.some(p => p.isKing || p.originalType === PieceType.King) ||
-                newCaptured.black.some(p => p.isKing || p.originalType === PieceType.King);
+            const capturedKing = newCaptured.white.some(p => p.isKing || p.originalType === PieceType.King || p.type === PieceType.King || p.power === PieceType.King) ||
+                newCaptured.black.some(p => p.isKing || p.originalType === PieceType.King || p.type === PieceType.King || p.power === PieceType.King);
             if (capturedKing) {
                 newStatus = 'kingCaptured';
                 newWinner = turn.charAt(0).toUpperCase() + turn.slice(1);

@@ -346,10 +346,9 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
     // Engine State
     const [engineThinking, setEngineThinking] = useState(false);
-    const [engineSuggestion, setEngineSuggestion] = useState<string | null>(null);
-    const [engineDepth, setEngineDepth] = useState(3);
-    const [enginePv, setEnginePv] = useState<string[]>([]);
-    const [engineBestMove, setEngineBestMove] = useState<Move | null>(null);
+    const [engineDepth, setEngineDepth] = useState(99);
+    const [numLines, setNumLines] = useState(1);
+    const [engineResults, setEngineResults] = useState<any[]>([]);
     const workerRef = useRef<Worker | null>(null);
     const requestIdRef = useRef<number | null>(null);
 
@@ -363,9 +362,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         }
         requestIdRef.current = null;
         setEngineThinking(false);
-        setEngineSuggestion(null);
-        setEnginePv([]);
-        setEngineBestMove(null);
+        setEngineResults([]);
     };
 
     const handleGoingBack = (target?: 'menu' | 'whereIcameFrom' | 'manager') => {
@@ -404,9 +401,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         }
 
         setEngineThinking(true);
-        setEngineSuggestion(null);
-        setEnginePv([]);
-        setEngineBestMove(null);
+        setEngineResults([]);
         setArrows([]);
 
         const requestId = Date.now();
@@ -418,26 +413,21 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                 const msg = ev.data || {};
                 if (msg.requestId !== requestIdRef.current) return;
 
-                if (msg.type === 'update') {
-                    setEngineSuggestion(`${msg.move.notation} (depth ${msg.depth})`);
-                    setEnginePv(msg.pv || []);
-                    setEngineBestMove(msg.move);
-                    if (msg.move) {
-                        setArrows([{ from: msg.move.from, to: msg.move.to }]);
+                if (msg.type === 'update' || msg.type === 'done') {
+                    if (msg.results && msg.results.length > 0) {
+                        setEngineResults(msg.results);
+                        // Draw arrow for the very best move (first result)
+                        const bestMove = msg.results[0].move;
+                        if (bestMove) {
+                            setArrows([{ from: bestMove.from, to: bestMove.to }]);
+                        }
                     }
-                }
-                if (msg.type === 'done') {
-                    if (msg.move) {
-                        setEngineSuggestion(msg.move.notation);
-                        setEngineBestMove(msg.move);
-                        setArrows([{ from: msg.move.from, to: msg.move.to }]);
+                    if (msg.type === 'done') {
+                        setEngineThinking(false);
+                        requestIdRef.current = null;
                     }
-                    setEnginePv(msg.pv || []);
-                    setEngineThinking(false);
-                    requestIdRef.current = null;
                 }
                 if (msg.type === 'error') {
-                    setEngineSuggestion('Error');
                     setEngineThinking(false);
                     workerRef.current?.terminate();
                     workerRef.current = null;
@@ -445,7 +435,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
             };
         }
 
-        workerRef.current.postMessage({ type: 'start', board, turn, maxDepth: engineDepth, requestId });
+        workerRef.current.postMessage({ type: 'start', board, turn, maxDepth: engineDepth, requestId, multiPv: numLines });
     };
 
     useEffect(() => {
@@ -787,8 +777,8 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         let newStatus: GameStatus = 'playing';
         let newWinner: string | null = null;
 
-        const capturedKing = newCaptured.white.some(p => p.isKing || p.originalType === PieceType.King) ||
-            newCaptured.black.some(p => p.isKing || p.originalType === PieceType.King);
+        const capturedKing = newCaptured.white.some(p => p.isKing || p.originalType === PieceType.King || p.type === PieceType.King || p.power === PieceType.King) ||
+            newCaptured.black.some(p => p.isKing || p.originalType === PieceType.King || p.type === PieceType.King || p.power === PieceType.King);
         if (capturedKing) {
             newStatus = 'kingCaptured';
             newWinner = turn === Color.White ? 'White' : 'Black';
@@ -1066,6 +1056,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                                 setArrows(prev => prev.some(a => a.from.row === rightClickStartSquare.row && a.from.col === rightClickStartSquare.col && a.to.row === end.row && a.to.col === end.col) ? prev.filter(a => a.from.row !== rightClickStartSquare.row || a.from.col !== rightClickStartSquare.col || a.to.row !== end.row || a.to.col !== end.col) : [...prev, { from: rightClickStartSquare, to: end }]);
                             }
                         }
+                        setRightClickStartSquare(null);
                     }}
                     onBoardContextMenu={(e) => e.preventDefault()}
                 />
@@ -1303,12 +1294,21 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
                     <div className="bg-gray-700 p-3 rounded-lg flex flex-col gap-2">
                         <div className="flex items-center justify-between">
-                            <label className="text-xs font-bold text-gray-400">ENGINE DEPTH: {engineDepth}</label>
-                            <input
-                                type="range" min="1" max="20" value={engineDepth}
-                                onChange={(e) => setEngineDepth(parseInt(e.target.value))}
-                                className="w-2/3 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
-                            />
+                            <span className="text-xs font-bold text-gray-400">ANALYSIS LINES</span>
+                            <div className="flex gap-1">
+                                {[1, 2, 3, 4, 5].map(n => (
+                                    <button
+                                        key={n}
+                                        onClick={() => {
+                                            setNumLines(n);
+                                            if (engineThinking) stopWorker();
+                                        }}
+                                        className={`w-7 h-7 rounded flex items-center justify-center text-xs font-bold transition-all ${numLines === n ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-600'}`}
+                                    >
+                                        {n}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                         <button
                             onClick={handleGetEngineMove}
@@ -1317,33 +1317,45 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                             {engineThinking ? 'STOP ENGINE' : 'RUN ENGINE ANALYSIS'}
                         </button>
 
-                        {(engineSuggestion || enginePv.length > 0) && (
-                            <div className="mt-1 p-3 bg-gray-900 rounded-lg border border-blue-500/30 shadow-inner">
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="text-[10px] font-bold text-blue-400 uppercase tracking-tighter">Engine Evaluation</span>
-                                    {engineThinking && <span className="text-[10px] text-gray-400 italic">Thinking...</span>}
-                                </div>
+                        {engineResults.length > 0 && (
+                            <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-1 mt-1">
+                                {engineResults.map((result, idx) => {
+                                    const score = result.score;
+                                    const isMate = Math.abs(score) > 15000;
+                                    const formattedScore = isMate
+                                        ? `M${Math.ceil((20000 - Math.abs(score)) / 2) * (score > 0 ? 1 : -1)}`
+                                        : (score / 100).toFixed(2);
 
-                                {engineSuggestion && (
-                                    <div className="mb-2">
-                                        <p className="text-xs text-gray-400 mb-0.5">Best Move:</p>
-                                        <p className="text-lg font-black text-green-400 drop-shadow-sm">{engineSuggestion}</p>
-                                    </div>
-                                )}
+                                    return (
+                                        <div key={idx} className="p-3 bg-gray-900 rounded-lg border border-gray-700 hover:border-blue-500/50 transition-all shadow-inner group mb-2 last:mb-0">
+                                            <div className="flex justify-between items-center mb-1.5">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] w-4 h-4 flex items-center justify-center bg-gray-800 rounded text-gray-500 font-bold group-hover:text-blue-400 transition-colors">{idx + 1}</span>
+                                                    <span className="text-sm font-black text-green-400">{result.move?.notation}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {idx === 0 && <span className="text-[9px] font-bold text-blue-500 uppercase tracking-widest animate-pulse">BEST</span>}
+                                                    <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${score >= 0 ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
+                                                        {score > 0 && !isMate ? '+' : ''}{formattedScore}
+                                                    </span>
+                                                </div>
+                                            </div>
 
-                                {enginePv.length > 1 && (
-                                    <div className="pt-2 border-t border-gray-800">
-                                        <p className="text-[10px] text-gray-400 mb-1 uppercase font-bold tracking-widest">Main Line</p>
-                                        <div className="flex flex-wrap gap-1">
-                                            {enginePv.map((move, idx) => (
-                                                <span key={idx} className={`text-xs px-1.5 py-0.5 rounded ${idx === 0 ? 'bg-blue-900/40 text-blue-300 font-bold' : 'bg-gray-800 text-gray-400'}`}>
-                                                    {idx % 2 === 0 && <span className="text-[9px] mr-1 text-gray-500">{(idx / 2) + 1}.</span>}
-                                                    {move}
-                                                </span>
-                                            ))}
+                                            <div className="flex flex-wrap gap-1">
+                                                {result.pv.slice(0, 8).map((mv: string, mIdx: number) => (
+                                                    <span key={mIdx} className="text-[10px] text-gray-500 bg-gray-800/50 px-1 rounded hover:text-gray-300 pointer-events-none">
+                                                        {mv}
+                                                    </span>
+                                                ))}
+                                                {result.pv.length > 8 && <span className="text-[10px] text-gray-600 italic">...</span>}
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
+                                    );
+                                })}
+
+
+
+
                             </div>
                         )}
                     </div>

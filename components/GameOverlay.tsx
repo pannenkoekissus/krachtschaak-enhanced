@@ -31,7 +31,7 @@ interface GameOverlayProps {
     currentGameState?: GameState | null;
 }
 
-const promotionPieces = [PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight];
+const promotionPieces = [PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight, PieceType.King];
 
 const GameOverlay: React.FC<GameOverlayProps> = ({
     status, winner, onRestart, onPromote, promotionData, onResolveAmbiguousEnPassant,

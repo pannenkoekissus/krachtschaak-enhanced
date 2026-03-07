@@ -322,10 +322,11 @@ export default class KrachtschaakAI {
     static async getBestMoveIterative(
         board: BoardState,
         turn: Color,
-        maxDepth: number = 3,
-        onUpdate?: (move: any, depth: number, pv: string[]) => void
-    ): Promise<any> {
-        let bestResult = null;
+        maxDepth: number = 99,
+        onUpdate?: (results: any[], depth: number) => void,
+        multiPv: number = 1
+    ): Promise<any[]> {
+        let bestResults: any[] = [];
 
         if (TT.size > MAX_TT_SIZE) TT.clear();
         this.nodesVisited = 0;
@@ -334,11 +335,11 @@ export default class KrachtschaakAI {
         for (let depth = 1; depth <= maxDepth; depth++) {
             if (this.shouldStop) break;
 
-            const result = KrachtschaakAI.searchRoot(board, turn, depth);
-            if (result.move) bestResult = result;
+            const results = KrachtschaakAI.searchRoot(board, turn, depth, multiPv);
+            if (results.length > 0) bestResults = results;
 
-            if (bestResult && onUpdate) {
-                onUpdate(bestResult.move, depth, result.pv || []);
+            if (bestResults.length > 0 && onUpdate) {
+                onUpdate(bestResults, depth);
             }
             await new Promise(resolve => setTimeout(resolve, 0));
         }
@@ -346,38 +347,27 @@ export default class KrachtschaakAI {
         const duration = Date.now() - startTime;
         console.log(`Search completed: Depth ${maxDepth}, Nodes: ${this.nodesVisited}, Time: ${duration}ms, NPS: ${Math.round(this.nodesVisited / (duration / 1000 + 0.001))}`);
 
-        return bestResult;
+        return bestResults;
     }
 
-    static searchRoot(board: BoardState, turn: Color, depth: number): { move: Move | null, score: number, pv: string[] } {
+    static searchRoot(board: BoardState, turn: Color, depth: number, multiPv: number = 1): { move: Move | null, score: number, pv: string[] }[] {
         const mutableBoard = new MutableBoard(board, turn, null);
         const moves = KrachtschaakAI.getOrderedMoves(mutableBoard, depth, null);
-
-        let bestMove: Move | null = null;
-        let bestScore = -Infinity;
-        let alpha = -Infinity;
-        let beta = Infinity;
-        let bestPv: string[] = [];
+        const results: { move: Move | null, score: number, pv: string[] }[] = [];
 
         for (const move of moves) {
             if (this.shouldStop) break;
 
             const nextPv: string[] = [];
             const undoInfo = mutableBoard.makeMove(move);
-            const score = -KrachtschaakAI.alphaBeta(mutableBoard, depth - 1, -beta, -alpha, true, nextPv);
+            // We use full window for root moves in multi-pv to ensure accurate ranking
+            const score = -KrachtschaakAI.alphaBeta(mutableBoard, depth - 1, -Infinity, Infinity, true, nextPv);
             mutableBoard.unmakeMove(undoInfo);
 
-            if (score > bestScore) {
-                bestScore = score;
-                bestMove = move;
-                bestPv = [move.notation, ...nextPv];
-            }
-            if (score > alpha) {
-                alpha = score;
-            }
+            results.push({ move, score, pv: [move.notation, ...nextPv] });
         }
 
-        return { move: bestMove, score: bestScore, pv: bestPv };
+        return results.sort((a, b) => b.score - a.score).slice(0, multiPv);
     }
 
     static alphaBeta(mutableBoard: MutableBoard, depth: number, alpha: number, beta: number, allowNull: boolean, pv: string[]): number {
@@ -549,8 +539,10 @@ export default class KrachtschaakAI {
                         const isPower = isPowerMove(board, pos, target, enPassant);
 
                         const promotionRank = color === Color.White ? 0 : 7;
-                        if (piece.type === PieceType.Pawn && target.row === promotionRank) {
-                            const promotionTypes = [PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight];
+                        const hasPawnAbility = piece.type === PieceType.Pawn || piece.power === PieceType.Pawn;
+                        const isCapturingPawnOnPromotionRank = targetPiece && targetPiece.originalType === PieceType.Pawn && target.row === promotionRank;
+                        if ((hasPawnAbility && target.row === promotionRank) || isCapturingPawnOnPromotionRank) {
+                            const promotionTypes = [PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight, PieceType.King];
                             for (const promType of promotionTypes) {
                                 const move: Move = {
                                     from: pos,
