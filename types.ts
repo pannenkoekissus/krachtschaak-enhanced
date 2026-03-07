@@ -72,6 +72,7 @@ export interface PromotionData {
   position: Position;
   promotingPiece: Piece;
   powerAfterPromotion: PieceType | null;
+  capturedPiece?: Piece | null;
 }
 
 export type GameMode = 'menu' | 'local' | 'online_lobby' | 'online_playing' | 'online_spectating' | 'analysis' | 'board_editor' | 'analysis_manager' | 'tournament';

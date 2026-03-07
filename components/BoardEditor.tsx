@@ -49,7 +49,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                 color: selectedPalettePiece.color,
                 power: selectedPower,
                 originalType: selectedOriginalType || selectedPalettePiece.type,
-                isKing: selectedPalettePiece.type === PieceType.King,
+                isKing: selectedPalettePiece.type === PieceType.King || (selectedOriginalType === PieceType.King),
                 hasMoved: false
             };
         } else {
@@ -157,7 +157,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                 <div className="flex flex-col gap-3">
                     <label className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Original Piece Type</label>
                     <div className="grid grid-cols-6 gap-2 bg-gray-700 p-2 rounded-lg">
-                        {[PieceType.Pawn, PieceType.Knight, PieceType.Bishop, PieceType.Rook, PieceType.Queen].map((type) => (
+                        {[PieceType.Pawn, PieceType.Knight, PieceType.Bishop, PieceType.Rook, PieceType.Queen, PieceType.King].map((type) => (
                             <div
                                 key={type}
                                 className={`aspect-square cursor-pointer rounded-md flex items-center justify-center transition-all ${selectedOriginalType === type ? 'bg-blue-900 ring-2 ring-blue-400 scale-110 shadow-lg' : 'bg-gray-600 hover:bg-gray-500'

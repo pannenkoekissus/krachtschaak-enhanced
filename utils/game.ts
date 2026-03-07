@@ -352,7 +352,7 @@ export const findKingPosition = (board: BoardState, color: Color): Position | nu
     for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
             const piece = board[r][c];
-            if (piece && piece.color === color && piece.isKing) {
+            if (piece && piece.color === color && (piece.isKing || piece.originalType === PieceType.King)) {
                 return { row: r, col: c };
             }
         }

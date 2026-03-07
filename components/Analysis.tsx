@@ -756,6 +756,8 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         resetClock: boolean,
         newCaptured: typeof capturedPieces,
         move: { from: Position; to: Position },
+        movingPiece: Piece,
+        capturedPiece: Piece | null = null,
         promotion?: PieceType | null,
     ) => {
         const nextTurn = turn === Color.White ? Color.Black : Color.White;
@@ -767,7 +769,8 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         let newStatus: GameStatus = 'playing';
         let newWinner: string | null = null;
 
-        const capturedKing = newCaptured.white.some(p => p.isKing) || newCaptured.black.some(p => p.isKing);
+        const capturedKing = newCaptured.white.some(p => p.isKing || p.originalType === PieceType.King) ||
+            newCaptured.black.some(p => p.isKing || p.originalType === PieceType.King);
         if (capturedKing) {
             newStatus = 'kingCaptured';
             newWinner = turn === Color.White ? 'White' : 'Black';
@@ -786,8 +789,8 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
             }
         }
 
-        const notation = getNotation(board, move.from, move.to, board[move.from.row][move.from.col]!, null, promotion || null, isForcePowerMode);
-        const newMoveHistory = [...moveHistory, { ...move, notation, piece: board[move.from.row][move.from.col]!.type, color: turn, captured: board[move.to.row][move.to.col]?.type, promotion: promotion || undefined }];
+        const notation = getNotation(board, move.from, move.to, movingPiece, capturedPiece, promotion || null, isForcePowerMode);
+        const newMoveHistory = [...moveHistory, { ...move, notation, piece: movingPiece.type, color: turn, captured: capturedPiece?.type, promotion: promotion || undefined }];
 
         const newState: GameState = {
             ...getCurrentState(),
@@ -811,7 +814,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         } else if (newStatus === 'stalemate') {
             playDrawSound();
         } else {
-            const isCapture = newCaptured.white.length > capturedPieces.white.length || newCaptured.black.length > capturedPieces.black.length;
+            const isCapture = !!capturedPiece;
             if (isCapture) {
                 playCaptureSound();
             } else {
@@ -852,14 +855,19 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         if (actualCapturedPiece) {
             resetHalfmoveClock = true;
             newCapturedPieces[actualCapturedPiece.color].push(actualCapturedPiece);
-            if (actualCapturedPiece.isKing) {
-                // Game Over logic in analysis? Usually just move and set status
+            if (actualCapturedPiece.isKing || actualCapturedPiece.originalType === PieceType.King) {
+                // Potential king capture - finalized in finalizeTurn
             } else {
                 acquiredPower = actualCapturedPiece.originalType;
             }
         }
 
-        // Only clear power if NOT a capture
+        const promotionRank = turn === Color.White ? 0 : 7;
+        const hasPawnAbility = pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn;
+        const isMovingToPromotionRank = to.row === promotionRank;
+        const isCapturingPawnOnPromotionRank = actualCapturedPiece && actualCapturedPiece?.originalType === PieceType.Pawn && isMovingToPromotionRank;
+
+        // Update power AFTER saving Pawn ability for promotion check
         let powerAfterMove = pieceToMove.power;
         if (actualCapturedPiece && acquiredPower) {
             powerAfterMove = acquiredPower;
@@ -868,12 +876,9 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         }
         pieceToMove.power = powerAfterMove;
 
-        const promotionRank = turn === Color.White ? 0 : 7;
-        if (to.row === promotionRank && (pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn)) {
+        if ((isMovingToPromotionRank && hasPawnAbility) || isCapturingPawnOnPromotionRank) {
             // Determine power after promotion, mirroring App.tsx logic
             let promotionPowerAfterMove: PieceType | null = null;
-            const isCapturingPawnOnPromotionRank = actualCapturedPiece && actualCapturedPiece?.originalType === PieceType.Pawn;
-
             if (isCapturingPawnOnPromotionRank) {
                 promotionPowerAfterMove = null;
             } else if (actualCapturedPiece) {
@@ -886,13 +891,15 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                 }
             }
 
-            setPromotionData({ from, position: to, promotingPiece: pieceToMove, powerAfterPromotion: promotionPowerAfterMove });
+            pieceToMove.hasMoved = true;
+            newBoard[to.row][to.col] = pieceToMove;
+            newBoard[from.row][from.col] = null;
+            setBoard(newBoard);
+            setCapturedPieces(newCapturedPieces);
+            setPromotionData({ from, position: to, promotingPiece: pieceToMove, powerAfterPromotion: promotionPowerAfterMove, capturedPiece: actualCapturedPiece });
             setStatus('promotion');
             return;
         }
-
-        // Special handling for Power-move consumption if it wasn't a standard move and not explicit power move?
-        // Actually isPowerMove handles it. If it's a power move, power is already consumed above.
 
         pieceToMove.hasMoved = true;
         newBoard[to.row][to.col] = pieceToMove;
@@ -915,7 +922,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
             nextEnPassantTarget = { row: (from.row + to.row) / 2, col: from.col };
         }
 
-        finalizeTurn(newBoard, nextEnPassantTarget, resetHalfmoveClock, newCapturedPieces, { from, to });
+        finalizeTurn(newBoard, nextEnPassantTarget, resetHalfmoveClock, newCapturedPieces, { from, to }, pieceToMove, actualCapturedPiece);
     };
 
     const handleSquareClick = useCallback((row: number, col: number) => {
@@ -953,11 +960,20 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
     const handlePromotion = (type: PieceType) => {
         if (!promotionData || !canEditAnalysis) return;
-        const { from, position, promotingPiece, powerAfterPromotion } = promotionData;
+        const { from, position, promotingPiece, powerAfterPromotion, capturedPiece } = promotionData;
         const newBoard = board.map(r => [...r]);
-        newBoard[position.row][position.col] = { ...promotingPiece, type, hasMoved: true, power: powerAfterPromotion };
+        const promotedPiece: Piece = {
+            ...promotingPiece,
+            type: type,
+            originalType: (promotingPiece.originalType === PieceType.King || type === PieceType.King) ? PieceType.King : type,
+            isKing: type === PieceType.King || promotingPiece.isKing || promotingPiece.originalType === PieceType.King,
+            hasMoved: true,
+            power: powerAfterPromotion
+        };
+
+        newBoard[position.row][position.col] = promotedPiece;
         newBoard[from.row][from.col] = null;
-        finalizeTurn(newBoard, null, true, capturedPieces, { from, to: position }, type);
+        finalizeTurn(newBoard, null, true, capturedPieces, { from, to: position }, promotingPiece, capturedPiece, type);
     };
 
     const resolveAmbiguousEnPassant = (choice: 'move' | 'capture') => {
@@ -980,7 +996,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         newBoard[to.row][to.col] = pieceToMove;
         newBoard[from.row][from.col] = null;
 
-        finalizeTurn(newBoard, null, true, newCaptured, { from, to });
+        finalizeTurn(newBoard, null, true, newCaptured, { from, to }, pieceToMove, choice === 'capture' ? board[from.row][to.col] : null);
     };
 
     return (
