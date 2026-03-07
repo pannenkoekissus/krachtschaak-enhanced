@@ -348,6 +348,8 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
     const [engineThinking, setEngineThinking] = useState(false);
     const [engineSuggestion, setEngineSuggestion] = useState<string | null>(null);
     const [engineDepth, setEngineDepth] = useState(3);
+    const [enginePv, setEnginePv] = useState<string[]>([]);
+    const [engineBestMove, setEngineBestMove] = useState<Move | null>(null);
     const workerRef = useRef<Worker | null>(null);
     const requestIdRef = useRef<number | null>(null);
 
@@ -361,6 +363,9 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         }
         requestIdRef.current = null;
         setEngineThinking(false);
+        setEngineSuggestion(null);
+        setEnginePv([]);
+        setEngineBestMove(null);
     };
 
     const handleGoingBack = (target?: 'menu' | 'whereIcameFrom' | 'manager') => {
@@ -400,6 +405,9 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
         setEngineThinking(true);
         setEngineSuggestion(null);
+        setEnginePv([]);
+        setEngineBestMove(null);
+        setArrows([]);
 
         const requestId = Date.now();
         requestIdRef.current = requestId;
@@ -412,9 +420,19 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
                 if (msg.type === 'update') {
                     setEngineSuggestion(`${msg.move.notation} (depth ${msg.depth})`);
+                    setEnginePv(msg.pv || []);
+                    setEngineBestMove(msg.move);
+                    if (msg.move) {
+                        setArrows([{ from: msg.move.from, to: msg.move.to }]);
+                    }
                 }
                 if (msg.type === 'done') {
-                    if (msg.move) setEngineSuggestion(msg.move.notation);
+                    if (msg.move) {
+                        setEngineSuggestion(msg.move.notation);
+                        setEngineBestMove(msg.move);
+                        setArrows([{ from: msg.move.from, to: msg.move.to }]);
+                    }
+                    setEnginePv(msg.pv || []);
                     setEngineThinking(false);
                     requestIdRef.current = null;
                 }
@@ -1283,24 +1301,49 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                         </button>
                     </div>
 
-                    <div className="bg-gray-700 p-3 rounded-lg">
-                        <div className="flex items-center justify-between mb-2">
-                            <label className="text-xs font-bold text-gray-400">DEPTH: {engineDepth}</label>
+                    <div className="bg-gray-700 p-3 rounded-lg flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold text-gray-400">ENGINE DEPTH: {engineDepth}</label>
                             <input
-                                type="range" min="1" max="100" value={engineDepth}
+                                type="range" min="1" max="20" value={engineDepth}
                                 onChange={(e) => setEngineDepth(parseInt(e.target.value))}
                                 className="w-2/3 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
                             />
                         </div>
                         <button
                             onClick={handleGetEngineMove}
-                            className={`w-full py-2 rounded-lg font-bold text-sm transition-all ${engineThinking ? 'bg-red-600 animate-pulse' : 'bg-blue-600 hover:bg-blue-500'}`}
+                            className={`w-full py-2 rounded-lg font-bold text-sm transition-all shadow-md ${engineThinking ? 'bg-red-600 animate-pulse' : 'bg-blue-600 hover:bg-blue-500'}`}
                         >
-                            {engineThinking ? 'STOP ENGINE' : 'ENGINE ANALYSIS'}
+                            {engineThinking ? 'STOP ENGINE' : 'RUN ENGINE ANALYSIS'}
                         </button>
-                        {engineSuggestion && (
-                            <div className="mt-2 p-2 bg-gray-900 rounded border border-green-500 text-center">
-                                <span className="text-green-400 font-bold">{engineSuggestion}</span>
+
+                        {(engineSuggestion || enginePv.length > 0) && (
+                            <div className="mt-1 p-3 bg-gray-900 rounded-lg border border-blue-500/30 shadow-inner">
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="text-[10px] font-bold text-blue-400 uppercase tracking-tighter">Engine Evaluation</span>
+                                    {engineThinking && <span className="text-[10px] text-gray-400 italic">Thinking...</span>}
+                                </div>
+
+                                {engineSuggestion && (
+                                    <div className="mb-2">
+                                        <p className="text-xs text-gray-400 mb-0.5">Best Move:</p>
+                                        <p className="text-lg font-black text-green-400 drop-shadow-sm">{engineSuggestion}</p>
+                                    </div>
+                                )}
+
+                                {enginePv.length > 1 && (
+                                    <div className="pt-2 border-t border-gray-800">
+                                        <p className="text-[10px] text-gray-400 mb-1 uppercase font-bold tracking-widest">Main Line</p>
+                                        <div className="flex flex-wrap gap-1">
+                                            {enginePv.map((move, idx) => (
+                                                <span key={idx} className={`text-xs px-1.5 py-0.5 rounded ${idx === 0 ? 'bg-blue-900/40 text-blue-300 font-bold' : 'bg-gray-800 text-gray-400'}`}>
+                                                    {idx % 2 === 0 && <span className="text-[9px] mr-1 text-gray-500">{(idx / 2) + 1}.</span>}
+                                                    {move}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

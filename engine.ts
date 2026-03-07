@@ -207,7 +207,8 @@ export class MutableBoard {
 
         if (move.promotion) {
             piece.type = move.promotion;
-            piece.originalType = move.promotion;
+            piece.originalType = (oldOriginalType === PieceType.King || move.promotion === PieceType.King) ? PieceType.King : move.promotion;
+            piece.isKing = piece.type === PieceType.King || piece.originalType === PieceType.King;
         }
 
         if (move.powerConsumed || move.isForcePower) {
@@ -264,7 +265,7 @@ export class MutableBoard {
             oldScore,
             captured: actualCaptured,
             epCapturedPos,
-            oldPieceState: { type: oldType, power: oldPower, originalType: oldOriginalType, hasMoved: oldHasMoved },
+            oldPieceState: { type: oldType, power: oldPower, originalType: oldOriginalType, isKing: piece.isKing, hasMoved: oldHasMoved },
             rookMove
         };
     }
@@ -284,6 +285,7 @@ export class MutableBoard {
         piece.type = oldPieceState.type;
         piece.power = oldPieceState.power;
         piece.originalType = oldPieceState.originalType;
+        piece.isKing = oldPieceState.isKing;
         piece.hasMoved = oldPieceState.hasMoved;
 
         this.board[move.from.row][move.from.col] = piece;
@@ -321,9 +323,9 @@ export default class KrachtschaakAI {
         board: BoardState,
         turn: Color,
         maxDepth: number = 3,
-        onUpdate?: (move: any, depth: number) => void
+        onUpdate?: (move: any, depth: number, pv: string[]) => void
     ): Promise<any> {
-        let bestMove = null;
+        let bestResult = null;
 
         if (TT.size > MAX_TT_SIZE) TT.clear();
         this.nodesVisited = 0;
@@ -333,10 +335,10 @@ export default class KrachtschaakAI {
             if (this.shouldStop) break;
 
             const result = KrachtschaakAI.searchRoot(board, turn, depth);
-            if (result.move) bestMove = result.move;
+            if (result.move) bestResult = result;
 
-            if (bestMove && onUpdate) {
-                onUpdate(bestMove, depth);
+            if (bestResult && onUpdate) {
+                onUpdate(bestResult.move, depth, result.pv || []);
             }
             await new Promise(resolve => setTimeout(resolve, 0));
         }
@@ -344,10 +346,10 @@ export default class KrachtschaakAI {
         const duration = Date.now() - startTime;
         console.log(`Search completed: Depth ${maxDepth}, Nodes: ${this.nodesVisited}, Time: ${duration}ms, NPS: ${Math.round(this.nodesVisited / (duration / 1000 + 0.001))}`);
 
-        return bestMove;
+        return bestResult;
     }
 
-    static searchRoot(board: BoardState, turn: Color, depth: number): { move: Move | null, score: number } {
+    static searchRoot(board: BoardState, turn: Color, depth: number): { move: Move | null, score: number, pv: string[] } {
         const mutableBoard = new MutableBoard(board, turn, null);
         const moves = KrachtschaakAI.getOrderedMoves(mutableBoard, depth, null);
 
@@ -355,27 +357,30 @@ export default class KrachtschaakAI {
         let bestScore = -Infinity;
         let alpha = -Infinity;
         let beta = Infinity;
+        let bestPv: string[] = [];
 
         for (const move of moves) {
             if (this.shouldStop) break;
 
+            const nextPv: string[] = [];
             const undoInfo = mutableBoard.makeMove(move);
-            const score = -KrachtschaakAI.alphaBeta(mutableBoard, depth - 1, -beta, -alpha, true);
+            const score = -KrachtschaakAI.alphaBeta(mutableBoard, depth - 1, -beta, -alpha, true, nextPv);
             mutableBoard.unmakeMove(undoInfo);
 
             if (score > bestScore) {
                 bestScore = score;
                 bestMove = move;
+                bestPv = [move.notation, ...nextPv];
             }
             if (score > alpha) {
                 alpha = score;
             }
         }
 
-        return { move: bestMove, score: bestScore };
+        return { move: bestMove, score: bestScore, pv: bestPv };
     }
 
-    static alphaBeta(mutableBoard: MutableBoard, depth: number, alpha: number, beta: number, allowNull: boolean): number {
+    static alphaBeta(mutableBoard: MutableBoard, depth: number, alpha: number, beta: number, allowNull: boolean, pv: string[]): number {
         this.nodesVisited++;
         if (depth <= 0) return KrachtschaakAI.quiescenceSearch(mutableBoard, alpha, beta);
 
@@ -394,7 +399,8 @@ export default class KrachtschaakAI {
             const staticEval = KrachtschaakAI.evaluate(mutableBoard);
             if (staticEval >= beta) {
                 const undoInfo = mutableBoard.makeNullMove();
-                const score = -KrachtschaakAI.alphaBeta(mutableBoard, depth - 1 - 2, -beta, -beta + 1, false);
+                const dummyPv: string[] = [];
+                const score = -KrachtschaakAI.alphaBeta(mutableBoard, depth - 1 - 2, -beta, -beta + 1, false, dummyPv);
                 mutableBoard.unmakeNullMove(undoInfo);
 
                 if (score >= beta) {
@@ -416,13 +422,17 @@ export default class KrachtschaakAI {
         let bestMove: Move | null = null;
 
         for (const move of moves) {
+            const nextPv: string[] = [];
             const undoInfo = mutableBoard.makeMove(move);
-            const score = -KrachtschaakAI.alphaBeta(mutableBoard, depth - 1, -beta, -alpha, true);
+            const score = -KrachtschaakAI.alphaBeta(mutableBoard, depth - 1, -beta, -alpha, true, nextPv);
             mutableBoard.unmakeMove(undoInfo);
 
             if (score > bestScore) {
                 bestScore = score;
                 bestMove = move;
+
+                pv.length = 0;
+                pv.push(move.notation, ...nextPv);
             }
 
             if (score > alpha) alpha = score;
@@ -538,21 +548,43 @@ export default class KrachtschaakAI {
                         const captured = targetPiece ? targetPiece.type : undefined;
                         const isPower = isPowerMove(board, pos, target, enPassant);
 
-                        const move: Move = {
-                            from: pos,
-                            to: target,
-                            piece: piece.type,
-                            color: piece.color,
-                            captured,
-                            isForcePower: isPower,
-                            notation: getNotation(board, pos, target, piece, targetPiece || null, null, isPower)
-                        };
+                        const promotionRank = color === Color.White ? 0 : 7;
+                        if (piece.type === PieceType.Pawn && target.row === promotionRank) {
+                            const promotionTypes = [PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight];
+                            for (const promType of promotionTypes) {
+                                const move: Move = {
+                                    from: pos,
+                                    to: target,
+                                    piece: piece.type,
+                                    color: piece.color,
+                                    captured,
+                                    isForcePower: isPower,
+                                    promotion: promType,
+                                    notation: getNotation(board, pos, target, piece, targetPiece || null, promType, isPower)
+                                };
+                                const undo = mutableBoard.makeMove(move);
+                                if (!isKingInCheck(mutableBoard.board, color)) {
+                                    legalMoves.push(move);
+                                }
+                                mutableBoard.unmakeMove(undo);
+                            }
+                        } else {
+                            const move: Move = {
+                                from: pos,
+                                to: target,
+                                piece: piece.type,
+                                color: piece.color,
+                                captured,
+                                isForcePower: isPower,
+                                notation: getNotation(board, pos, target, piece, targetPiece || null, null, isPower)
+                            };
 
-                        const undo = mutableBoard.makeMove(move);
-                        if (!isKingInCheck(mutableBoard.board, color)) {
-                            legalMoves.push(move);
+                            const undo = mutableBoard.makeMove(move);
+                            if (!isKingInCheck(mutableBoard.board, color)) {
+                                legalMoves.push(move);
+                            }
+                            mutableBoard.unmakeMove(undo);
                         }
-                        mutableBoard.unmakeMove(undo);
                     }
                 }
             }
