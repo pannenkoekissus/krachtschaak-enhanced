@@ -534,7 +534,9 @@ const App: React.FC = () => {
     const updateGameInDb = useCallback((newState: GameState) => {
         if (gameMode === 'online_playing' && gameRef) {
             try {
-                gameRef.set(newState);
+                // IMPORTANT: Remove undefined fields for Firebase compatibility
+                const cleanState = JSON.parse(JSON.stringify(newState));
+                gameRef.set(cleanState);
             } catch (e) {
                 console.error("Error updating game in DB:", e);
             }
@@ -956,9 +958,9 @@ const App: React.FC = () => {
             tournamentId,
             tournamentRound,
             tournamentPairingId,
-            showPowerPieces,
-            showPowerRings,
-            showOriginalType
+            showPowerPieces: showPowerPieces ?? true,
+            showPowerRings: showPowerRings ?? true,
+            showOriginalType: showOriginalType ?? true
         };
 
         if (newStatus !== 'playing') {
@@ -1118,7 +1120,10 @@ const App: React.FC = () => {
             premoves: {},
             lastMove: null,
             moveHistory: [],
-            chat: []
+            chat: [],
+            showPowerPieces: true,
+            showPowerRings: true,
+            showOriginalType: true
         };
 
         if (!dontLoad) {

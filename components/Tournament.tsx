@@ -348,9 +348,9 @@ const Tournament: React.FC<TournamentProps> = ({
             initialState.status = 'playing';
             initialState.isRated = activeTournament.isRated ?? false;
 
-            initialState.showPowerPieces = activeTournament.showPowerPieces;
-            initialState.showPowerRings = activeTournament.showPowerRings;
-            initialState.showOriginalType = activeTournament.showOriginalType;
+            initialState.showPowerPieces = activeTournament.showPowerPieces ?? true;
+            initialState.showPowerRings = activeTournament.showPowerRings ?? true;
+            initialState.showOriginalType = activeTournament.showOriginalType ?? true;
 
             initialState.ratingCategory = category;
             initialState.initialRatings = {

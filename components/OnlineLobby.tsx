@@ -694,9 +694,9 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
             white: initialState.playerColors.white === userUid ? myRatings[challenge.ratingCategory] : challenge.fromRating,
             black: initialState.playerColors.black === userUid ? myRatings[challenge.ratingCategory] : challenge.fromRating,
         };
-        initialState.showPowerPieces = challenge.showPowerPieces;
-        initialState.showPowerRings = challenge.showPowerRings;
-        initialState.showOriginalType = challenge.showOriginalType;
+        initialState.showPowerPieces = challenge.showPowerPieces ?? true;
+        initialState.showPowerRings = challenge.showPowerRings ?? true;
+        initialState.showOriginalType = challenge.showOriginalType ?? true;
 
         await newGameRef.set(initialState);
 
