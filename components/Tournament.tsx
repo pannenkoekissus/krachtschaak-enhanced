@@ -6,7 +6,7 @@ import {
 } from '../types';
 import {
     createTournament, joinTournament, removePlayer,
-    startTournament, endTournament, setPairings, updatePairing,
+    startTournament, endTournament, deleteTournament, setPairings, updatePairing,
     updatePlayerScore, advanceRound, getTournament,
     listActiveTournaments, listTournamentHistory, generateSwissPairings, recalculateTiebreaks,
     toggleHostParticipation, listPublicTournamentHistory
@@ -106,10 +106,15 @@ const Tournament: React.FC<TournamentProps> = ({
             const data = snap.val();
             if (data) {
                 setActiveTournament(data);
-                // Find my player ID (reset if not found, e.g. host who is not a player)
                 const players = data.players || {};
                 const myEntry = Object.values(players).find((p: any) => p.uid === userId);
                 setMyPlayerId(myEntry ? (myEntry as TournamentPlayer).oderId : null);
+            } else {
+                // Tournament deleted or not found
+                setActiveTournament(null);
+                onTournamentJoined(null);
+                setView('list');
+                loadTournaments();
             }
         });
         listenerRef.current = ref;
@@ -229,6 +234,31 @@ const Tournament: React.FC<TournamentProps> = ({
         if (!activeTournament) return;
         const pairings = generateSwissPairings(players, activeTournament.rounds || {});
         await setPairings(activeTournament.id, currentRound, pairings);
+    };
+
+    const handleDeleteTournament = async () => {
+        if (!activeTournament || !isHost) return;
+
+        // Literal interpretation: "no players in it"
+        // But practically, many hosts participate. We'll allow deletion if no OTHER players are present.
+        const otherPlayers = players.filter(p => p.uid !== userId);
+        if (otherPlayers.length > 0) {
+            setError('Cannot delete tournament while other players are joined');
+            return;
+        }
+
+        if (window.confirm('Are you sure you want to delete this tournament?')) {
+            try {
+                await deleteTournament(activeTournament.id);
+                if (listenerRef.current) listenerRef.current.off();
+                setActiveTournament(null);
+                onTournamentJoined(null);
+                setView('list');
+                loadTournaments();
+            } catch (err: any) {
+                setError(err.message);
+            }
+        }
     };
 
     const handleAddManualPairing = async () => {
@@ -835,6 +865,14 @@ const Tournament: React.FC<TournamentProps> = ({
                             </div>
                         </div>
                         <div className="flex gap-2">
+                            {isHost && activeTournament.status === 'lobby' && players.filter(p => p.uid !== userId).length === 0 && (
+                                <button
+                                    onClick={handleDeleteTournament}
+                                    className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-semibold transition-colors text-sm"
+                                >
+                                    Delete
+                                </button>
+                            )}
                             {myPlayerId && activeTournament.status !== 'finished' && (
                                 <button
                                     onClick={handleWithdraw}

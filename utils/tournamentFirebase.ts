@@ -107,6 +107,11 @@ export const endTournament = async (tournamentId: string): Promise<void> => {
     await db.ref(`tournaments/${tournamentId}/status`).set('finished');
 };
 
+// Delete a tournament
+export const deleteTournament = async (tournamentId: string): Promise<void> => {
+    await db.ref(`tournaments/${tournamentId}`).remove();
+};
+
 // Set pairings for a round
 export const setPairings = async (
     tournamentId: string,
