@@ -341,7 +341,8 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
     // UI State
     const [highlightedSquares, setHighlightedSquares] = useState<Position[]>([]);
-    const [arrows, setArrows] = useState<{ from: Position; to: Position }[]>([]);
+    const [arrows, setArrows] = useState<{ from: Position; to: Position, color?: string }[]>([]);
+    const [engineArrows, setEngineArrows] = useState<{ from: Position; to: Position, color?: string }[]>([]);
     const [rightClickStartSquare, setRightClickStartSquare] = useState<Position | null>(null);
 
     // Engine State
@@ -363,6 +364,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         requestIdRef.current = null;
         setEngineThinking(false);
         setEngineResults([]);
+        setEngineArrows([]);
     };
 
     const handleGoingBack = (target?: 'menu' | 'whereIcameFrom' | 'manager') => {
@@ -370,6 +372,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         stopWorker();
         setHighlightedSquares([]);
         setArrows([]);
+        setEngineArrows([]);
         setSelectedPiece(null);
         setValidMoves([]);
         setPromotionData(null);
@@ -402,7 +405,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
         setEngineThinking(true);
         setEngineResults([]);
-        setArrows([]);
+        setEngineArrows([]);
 
         const requestId = Date.now();
         requestIdRef.current = requestId;
@@ -419,7 +422,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                         // Draw arrow for the very best move (first result)
                         const bestMove = msg.results[0].move;
                         if (bestMove) {
-                            setArrows([{ from: bestMove.from, to: bestMove.to }]);
+                            setEngineArrows([{ from: bestMove.from, to: bestMove.to, color: 'orange' }]);
                         }
                     }
                     if (msg.type === 'done') {
@@ -675,6 +678,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         setValidMoves([]);
         setHighlightedSquares([]);
         setArrows([]);
+        setEngineArrows([]);
         setDraggedPiece(null);
     };
 
@@ -831,6 +835,84 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         }
 
         commitNewState(newState, notation);
+    };
+
+    const applyEngineMove = (move: Move) => {
+        if (!canEditAnalysis) return;
+        const newBoard = board.map(row => [...row]);
+        const pieceToMove = { ...newBoard[move.from.row][move.from.col]! };
+        const capturedPieceOnTarget = newBoard[move.to.row][move.to.col];
+        let resetHalfmoveClock = pieceToMove.type === PieceType.Pawn;
+
+        const newCapturedPieces = {
+            white: [...capturedPieces.white],
+            black: [...capturedPieces.black],
+        };
+
+        const isEnPassantCapture = (pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn) && enPassantTarget && move.to.row === enPassantTarget.row && move.to.col === enPassantTarget.col && !capturedPieceOnTarget;
+
+        let actualCapturedPiece = capturedPieceOnTarget;
+        if (isEnPassantCapture) {
+            actualCapturedPiece = newBoard[move.from.row][move.to.col];
+            newBoard[move.from.row][move.to.col] = null;
+        }
+
+        let acquiredPower: PieceType | null = null;
+        if (actualCapturedPiece) {
+            resetHalfmoveClock = true;
+            newCapturedPieces[actualCapturedPiece.color].push(actualCapturedPiece);
+            if (!(actualCapturedPiece.isKing || actualCapturedPiece.originalType === PieceType.King)) {
+                acquiredPower = actualCapturedPiece.originalType;
+            }
+        }
+
+        let powerAfterMove = pieceToMove.power;
+        if (actualCapturedPiece && acquiredPower) {
+            powerAfterMove = acquiredPower;
+        } else if (move.isForcePower) {
+            powerAfterMove = null;
+        }
+        pieceToMove.power = powerAfterMove;
+
+        if (move.promotion) {
+            pieceToMove.type = move.promotion;
+            pieceToMove.originalType = (pieceToMove.originalType === PieceType.King || move.promotion === PieceType.King) ? PieceType.King : move.promotion;
+            pieceToMove.isKing = move.promotion === PieceType.King || pieceToMove.isKing || pieceToMove.originalType === PieceType.King;
+
+            if (isEnPassantCapture && newBoard[move.from.row][move.to.col] === actualCapturedPiece) {
+                pieceToMove.power = null;
+            } else if (actualCapturedPiece) {
+                pieceToMove.power = actualCapturedPiece.originalType === PieceType.Pawn ? null : actualCapturedPiece.originalType;
+            } else {
+                if (pieceToMove.originalType === PieceType.Pawn && !move.isForcePower) {
+                    pieceToMove.power = pieceToMove.power === PieceType.Pawn ? null : pieceToMove.power;
+                } else {
+                    pieceToMove.power = null;
+                }
+            }
+        }
+
+        pieceToMove.hasMoved = true;
+        newBoard[move.to.row][move.to.col] = pieceToMove;
+        newBoard[move.from.row][move.from.col] = null;
+
+        if (pieceToMove.type === PieceType.King && Math.abs(move.from.col - move.to.col) === 2) {
+            const isKingside = move.to.col > move.from.col;
+            const rookFromCol = isKingside ? 7 : 0;
+            const rookToCol = isKingside ? 5 : 3;
+            const rook = newBoard[move.from.row][rookFromCol];
+            if (rook) {
+                newBoard[move.from.row][rookToCol] = { ...rook, hasMoved: true };
+                newBoard[move.from.row][rookFromCol] = null;
+            }
+        }
+
+        let nextEnPassantTarget: Position | null = null;
+        if (pieceToMove.type === PieceType.Pawn && Math.abs(move.from.row - move.to.row) === 2) {
+            nextEnPassantTarget = { row: (move.from.row + move.to.row) / 2, col: move.from.col };
+        }
+
+        finalizeTurn(newBoard, nextEnPassantTarget, resetHalfmoveClock, newCapturedPieces, { from: move.from, to: move.to }, pieceToMove, actualCapturedPiece, move.promotion);
     };
 
     const movePiece = (from: Position, to: Position) => {
@@ -1039,7 +1121,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                     premove={null}
                     lastMove={lastMove}
                     highlightedSquares={highlightedSquares}
-                    arrows={arrows}
+                    arrows={[...arrows, ...engineArrows]}
                     onBoardMouseDown={(e, r, c) => {
                         if (e.button === 0) setHighlightedSquares([]);
                         if (e.button === 2) {
@@ -1327,27 +1409,24 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                                         : (score / 100).toFixed(2);
 
                                     return (
-                                        <div key={idx} className="p-3 bg-gray-900 rounded-lg border border-gray-700 hover:border-blue-500/50 transition-all shadow-inner group mb-2 last:mb-0">
-                                            <div className="flex justify-between items-center mb-1.5">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-[10px] w-4 h-4 flex items-center justify-center bg-gray-800 rounded text-gray-500 font-bold group-hover:text-blue-400 transition-colors">{idx + 1}</span>
-                                                    <span className="text-sm font-black text-green-400">{result.move?.notation}</span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    {idx === 0 && <span className="text-[9px] font-bold text-blue-500 uppercase tracking-widest animate-pulse">BEST</span>}
-                                                    <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${score >= 0 ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
-                                                        {score > 0 && !isMate ? '+' : ''}{formattedScore}
-                                                    </span>
-                                                </div>
+                                        <div key={idx} className="p-3 bg-gray-900 rounded-lg border border-gray-700 hover:border-blue-500/50 transition-all shadow-inner group mb-2 last:mb-0 cursor-pointer" onClick={() => { if (result.move) applyEngineMove(result.move); }}>
+                                            <div className="flex items-center gap-2 mb-1.5">
+                                                {idx === 0 && <span className="text-[9px] font-bold text-blue-500 uppercase tracking-widest animate-pulse">BEST</span>}
+                                                <span className="text-[10px] w-4 h-4 flex items-center justify-center bg-gray-800 rounded text-gray-500 font-bold group-hover:text-blue-400 transition-colors">{idx + 1}</span>
+                                                <span className="text-sm font-black text-green-400">{result.move?.notation}</span>
                                             </div>
 
-                                            <div className="flex flex-wrap gap-1">
+                                            <div className="flex flex-wrap items-center gap-1">
                                                 {result.pv.slice(0, 8).map((mv: string, mIdx: number) => (
                                                     <span key={mIdx} className="text-[10px] text-gray-500 bg-gray-800/50 px-1 rounded hover:text-gray-300 pointer-events-none">
                                                         {mv}
                                                     </span>
                                                 ))}
                                                 {result.pv.length > 8 && <span className="text-[10px] text-gray-600 italic">...</span>}
+                                                <div className="flex-grow"></div>
+                                                <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ml-auto ${score >= 0 ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
+                                                    {score > 0 && !isMate ? '+' : ''}{formattedScore}
+                                                </span>
                                             </div>
                                         </div>
                                     );

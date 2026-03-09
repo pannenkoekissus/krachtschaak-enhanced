@@ -20,7 +20,7 @@ interface BoardProps {
     // Highlighting and arrows
     lastMove: { from: Position, to: Position } | null;
     highlightedSquares: Position[];
-    arrows: { from: Position, to: Position }[];
+    arrows: { from: Position, to: Position, color?: string }[];
     onBoardMouseDown: (e: React.MouseEvent, row: number, col: number) => void;
     onBoardMouseUp: (e: React.MouseEvent, row: number, col: number) => void;
     onBoardContextMenu: (e: React.MouseEvent) => void;
@@ -154,6 +154,28 @@ const Board: React.FC<BoardProps> = ({
                     >
                         <polygon points="0 0, 3 1.5, 0 3" fill="rgba(34, 197, 94, 0.8)" />
                     </marker>
+                    <marker
+                        id="arrowhead-long-orange"
+                        markerWidth="4"
+                        markerHeight="4"
+                        refX="3"
+                        refY="2"
+                        orient="auto"
+                        markerUnits="strokeWidth"
+                    >
+                        <polygon points="0 0, 4 2, 0 4" fill="rgba(249, 115, 22, 0.8)" />
+                    </marker>
+                    <marker
+                        id="arrowhead-short-orange"
+                        markerWidth="3"
+                        markerHeight="3"
+                        refX="2.5"
+                        refY="1.5"
+                        orient="auto"
+                        markerUnits="strokeWidth"
+                    >
+                        <polygon points="0 0, 3 1.5, 0 3" fill="rgba(249, 115, 22, 0.8)" />
+                    </marker>
                 </defs>
                 {arrows.map((arrow, i) => {
                     const from = getSquareCenter(arrow.from.row, arrow.from.col);
@@ -164,6 +186,9 @@ const Board: React.FC<BoardProps> = ({
                     // Threshold for "1 square" logic: adjacent (1) or diagonal (~1.41) are both < 1.5
                     const isShort = dist < 1.5;
 
+                    const colorStr = arrow.color === 'orange' ? 'rgba(249, 115, 22, 0.8)' : 'rgba(34, 197, 94, 0.8)';
+                    const markerSuffix = arrow.color === 'orange' ? '-orange' : '';
+
                     return (
                         <line
                             key={i}
@@ -171,9 +196,9 @@ const Board: React.FC<BoardProps> = ({
                             y1={`${from.y}%`}
                             x2={`${to.x}%`}
                             y2={`${to.y}%`}
-                            stroke="rgba(34, 197, 94, 0.8)"
+                            stroke={colorStr}
                             strokeWidth={isShort ? "3.5" : "1.8"} // Thick for 1-square, Thin for others
-                            markerEnd={isShort ? "url(#arrowhead-short)" : "url(#arrowhead-long)"}
+                            markerEnd={isShort ? `url(#arrowhead-short${markerSuffix})` : `url(#arrowhead-long${markerSuffix})`}
                         />
                     );
                 })}
