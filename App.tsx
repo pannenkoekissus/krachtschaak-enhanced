@@ -2636,8 +2636,8 @@ const App: React.FC = () => {
 
 
         return (
-            <div className="min-h-screen flex flex-col md:flex-row items-center justify-center p-2 md:p-4 gap-4 md:gap-8">
-                <div className="w-full max-w-lg md:max-w-md lg:max-w-lg xl:max-w-2xl flex flex-col">
+            <div className="min-h-screen flex flex-col md:flex-row items-center justify-center p-2 md:p-4 gap-4 md:gap-8 overflow-x-hidden">
+                <div className="w-full max-w-lg md:max-w-md lg:max-w-lg xl:max-w-2xl flex flex-col flex-shrink-0">
                     {/* Top Player Info (Mobile) */}
                     <div className="w-full mb-2 md:hidden">
                         <PlayerInfoPanel
@@ -2833,7 +2833,7 @@ const App: React.FC = () => {
                 </div>
 
                 {/* Side Panel (Desktop) */}
-                <div className="w-full md:w-80 bg-gray-800 p-4 rounded-lg shadow-xl hidden md:flex flex-col h-[600px]">
+                <div className="w-full md:w-80 bg-gray-800 p-4 rounded-lg shadow-xl hidden md:flex flex-col h-[600px] flex-shrink-0">
                     <div className="flex mb-4 border-b border-gray-600">
                         <button type="button" onClick={() => setActiveTab('controls')} className={`flex-1 py-2 font-semibold ${activeTab === 'controls' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}>Game</button>
                         <button type="button" onClick={() => setActiveTab('chat')} className={`flex-1 py-2 font-semibold relative ${activeTab === 'chat' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}>

@@ -135,8 +135,8 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
     ];
 
     return (
-        <div className="min-h-screen flex flex-col md:flex-row items-center justify-center p-4 gap-8 bg-gray-900 text-white">
-            <div className="w-full max-w-lg">
+        <div className="min-h-screen flex flex-col md:flex-row items-center justify-center p-4 gap-8 bg-gray-900 text-white overflow-x-hidden">
+            <div className="w-full max-w-lg flex-shrink-0">
                 <Board
                     board={board}
                     selectedPiece={null}
@@ -160,7 +160,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                 />
             </div>
 
-            <div className="w-full md:w-80 bg-gray-800 p-6 rounded-xl shadow-2xl flex flex-col gap-6">
+            <div className="w-full md:w-80 bg-gray-800 p-6 rounded-xl shadow-2xl flex flex-col gap-6 max-h-[90vh] overflow-y-auto custom-scrollbar flex-shrink-0">
                 <h2 className="text-3xl font-bold text-center text-green-400">Board Editor</h2>
 
                 <div className="grid grid-cols-6 gap-2 bg-gray-700 p-4 rounded-lg">
@@ -313,7 +313,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                                         }
                                     }}
                                     className={`py-2 px-2 rounded-lg font-bold text-xs transition-colors shadow-md ${!isPossible ? 'bg-gray-800 text-gray-600 cursor-not-allowed opacity-50' :
-                                            isAllowed ? 'bg-green-600 text-white hover:bg-green-500' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                                        isAllowed ? 'bg-green-600 text-white hover:bg-green-500' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
                                         }`}
                                 >
                                     {c.label} {isPossible && (isAllowed ? '✔️' : '❌')}
