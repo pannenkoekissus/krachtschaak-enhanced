@@ -1122,7 +1122,10 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                     highlightedSquares={highlightedSquares}
                     arrows={[...arrows, ...(showEngineArrow ? engineArrows : [])]}
                     onBoardMouseDown={(e, r, c) => {
-                        if (e.button === 0) setHighlightedSquares([]);
+                        if (e.button === 0) {
+                            setHighlightedSquares([]);
+                            setArrows([]);
+                        }
                         if (e.button === 2) {
                             e.preventDefault();
                             setRightClickStartSquare({ row: r, col: c });
