@@ -8,6 +8,14 @@ on:
 
 jobs:
   build:
+    if: >
+     github.event_name == 'workflow_dispatch' ||
+     (
+     !contains(join(github.event.commits.*.message, ' '), 'no-app') &&
+     !contains(join(github.event.commits.*.message, ' '), 'no app') &&
+     !contains(join(github.event.commits.*.message, ' '), 'geen-app') &&
+     !contains(join(github.event.commits.*.message, ' '), 'geen app')
+     )
     runs-on: ubuntu-latest
     permissions:
       contents: write
