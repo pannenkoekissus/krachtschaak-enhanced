@@ -1089,7 +1089,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
     };
 
     return (
-        <div className="min-h-screen flex flex-col md:flex-row items-center justify-center p-2 md:p-4 gap-4 md:gap-8 bg-gray-900 text-white overflow-x-hidden">
+        <div className="min-h-screen flex flex-col md:flex-row items-center md:items-start justify-center p-2 md:p-4 gap-4 md:gap-8 bg-gray-900 text-white overflow-x-hidden">
             <div className="w-full max-w-lg md:max-w-md lg:max-w-lg xl:max-w-2xl relative flex-shrink-0">
                 <GameOverlay
                     status={status}
@@ -1416,7 +1416,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                             <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-1 mt-1">
                                 {engineResults.map((result, idx) => {
                                     const score = result.score;
-                                    const isMate = Math.abs(score) > 15000;
+                                    const isMate = Math.abs(score) > 19000;
                                     const forceWhiteScore = turn === Color.White ? score : -score;
                                     const formattedScore = isMate
                                         ? `${forceWhiteScore > 0 ? '+' : '-'}M${Math.max(1, Math.ceil((20000 - Math.abs(forceWhiteScore)) / 2))}`

@@ -2636,7 +2636,7 @@ const App: React.FC = () => {
 
 
         return (
-            <div className="min-h-screen flex flex-col md:flex-row items-center justify-center p-2 md:p-4 gap-4 md:gap-8 overflow-x-hidden">
+            <div className="min-h-screen flex flex-col md:flex-row items-center md: items-start justify-center p-2 md:p-4 gap-4 md:gap-8 overflow-x-hidden">
                 <div className="w-full max-w-lg md:max-w-md lg:max-w-lg xl:max-w-2xl flex flex-col flex-shrink-0">
                     {/* Top Player Info (Mobile) */}
                     <div className="w-full mb-2 md:hidden">

@@ -1,0 +1,302 @@
+[
+  {
+    "from": {
+      "row": 6,
+      "col": 0
+    },
+    "to": {
+      "row": 5,
+      "col": 0
+    },
+    "piece": "pawn",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "a2-a3"
+  },
+  {
+    "from": {
+      "row": 6,
+      "col": 0
+    },
+    "to": {
+      "row": 4,
+      "col": 0
+    },
+    "piece": "pawn",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "a2-a4"
+  },
+  {
+    "from": {
+      "row": 6,
+      "col": 1
+    },
+    "to": {
+      "row": 5,
+      "col": 1
+    },
+    "piece": "pawn",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "b2-b3"
+  },
+  {
+    "from": {
+      "row": 6,
+      "col": 1
+    },
+    "to": {
+      "row": 4,
+      "col": 1
+    },
+    "piece": "pawn",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "b2-b4"
+  },
+  {
+    "from": {
+      "row": 6,
+      "col": 2
+    },
+    "to": {
+      "row": 5,
+      "col": 2
+    },
+    "piece": "pawn",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "c2-c3"
+  },
+  {
+    "from": {
+      "row": 6,
+      "col": 2
+    },
+    "to": {
+      "row": 4,
+      "col": 2
+    },
+    "piece": "pawn",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "c2-c4"
+  },
+  {
+    "from": {
+      "row": 6,
+      "col": 3
+    },
+    "to": {
+      "row": 5,
+      "col": 3
+    },
+    "piece": "pawn",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "d2-d3"
+  },
+  {
+    "from": {
+      "row": 6,
+      "col": 3
+    },
+    "to": {
+      "row": 4,
+      "col": 3
+    },
+    "piece": "pawn",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "d2-d4"
+  },
+  {
+    "from": {
+      "row": 6,
+      "col": 4
+    },
+    "to": {
+      "row": 5,
+      "col": 4
+    },
+    "piece": "pawn",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "e2-e3"
+  },
+  {
+    "from": {
+      "row": 6,
+      "col": 4
+    },
+    "to": {
+      "row": 4,
+      "col": 4
+    },
+    "piece": "pawn",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "e2-e4"
+  },
+  {
+    "from": {
+      "row": 6,
+      "col": 5
+    },
+    "to": {
+      "row": 5,
+      "col": 5
+    },
+    "piece": "pawn",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "f2-f3"
+  },
+  {
+    "from": {
+      "row": 6,
+      "col": 5
+    },
+    "to": {
+      "row": 4,
+      "col": 5
+    },
+    "piece": "pawn",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "f2-f4"
+  },
+  {
+    "from": {
+      "row": 6,
+      "col": 6
+    },
+    "to": {
+      "row": 5,
+      "col": 6
+    },
+    "piece": "pawn",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "g2-g3"
+  },
+  {
+    "from": {
+      "row": 6,
+      "col": 6
+    },
+    "to": {
+      "row": 4,
+      "col": 6
+    },
+    "piece": "pawn",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "g2-g4"
+  },
+  {
+    "from": {
+      "row": 6,
+      "col": 7
+    },
+    "to": {
+      "row": 5,
+      "col": 7
+    },
+    "piece": "pawn",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "h2-h3"
+  },
+  {
+    "from": {
+      "row": 6,
+      "col": 7
+    },
+    "to": {
+      "row": 4,
+      "col": 7
+    },
+    "piece": "pawn",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "h2-h4"
+  },
+  {
+    "from": {
+      "row": 7,
+      "col": 1
+    },
+    "to": {
+      "row": 5,
+      "col": 0
+    },
+    "piece": "knight",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "Nb1-a3"
+  },
+  {
+    "from": {
+      "row": 7,
+      "col": 1
+    },
+    "to": {
+      "row": 5,
+      "col": 2
+    },
+    "piece": "knight",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "Nb1-c3"
+  },
+  {
+    "from": {
+      "row": 7,
+      "col": 6
+    },
+    "to": {
+      "row": 5,
+      "col": 5
+    },
+    "piece": "knight",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "Ng1-f3"
+  },
+  {
+    "from": {
+      "row": 7,
+      "col": 6
+    },
+    "to": {
+      "row": 5,
+      "col": 7
+    },
+    "piece": "knight",
+    "color": "white",
+    "isForcePower": false,
+    "afterPower": null,
+    "notation": "Ng1-h3"
+  }
+]
