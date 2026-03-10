@@ -23,13 +23,19 @@ const POWER_INDICES: Record<string, number> = {
 
 const NUM_ZOBRIST_KEYS = 2 * 6 * 7 * 64;
 const ZOBRIST_KEYS = new BigInt64Array(NUM_ZOBRIST_KEYS);
-const ZOBRIST_SIDE = 9876543210987654321n;
+const ZOBRIST_CASTLING = new BigInt64Array(16);
+const ZOBRIST_EP = new BigInt64Array(8);
+const ZOBRIST_SIDE = generateRandomBigInt();
 
-for (let i = 0; i < NUM_ZOBRIST_KEYS; i++) {
+function generateRandomBigInt() {
     const r1 = BigInt(Math.floor(Math.random() * 0xFFFFFFFF));
     const r2 = BigInt(Math.floor(Math.random() * 0xFFFFFFFF));
-    ZOBRIST_KEYS[i] = (r1 << 32n) | r2;
+    return (r1 << 32n) | r2;
 }
+
+for (let i = 0; i < NUM_ZOBRIST_KEYS; i++) ZOBRIST_KEYS[i] = generateRandomBigInt();
+for (let i = 0; i < 16; i++) ZOBRIST_CASTLING[i] = generateRandomBigInt();
+for (let i = 0; i < 8; i++) ZOBRIST_EP[i] = generateRandomBigInt();
 
 function getZobristKey(color: Color, type: PieceType, power: PieceType | null, squareIndex: number): bigint {
     const c = color === Color.White ? 0 : 1;
@@ -118,6 +124,30 @@ export class MutableBoard {
             }
         }
         if (this.turn === Color.Black) h ^= ZOBRIST_SIDE;
+
+        // Castling rights
+        let castlingBits = 0;
+        const wk = this.board[7][4];
+        const wrk = this.board[7][7];
+        const wrq = this.board[7][0];
+        const bk = this.board[0][4];
+        const brk = this.board[0][7];
+        const brq = this.board[0][0];
+
+        if (wk?.type === PieceType.King && wk.color === Color.White && !wk.hasMoved) {
+            if (wrk?.type === PieceType.Rook && wrk.color === Color.White && !wrk.hasMoved) castlingBits |= 1;
+            if (wrq?.type === PieceType.Rook && wrq.color === Color.White && !wrq.hasMoved) castlingBits |= 2;
+        }
+        if (bk?.type === PieceType.King && bk.color === Color.Black && !bk.hasMoved) {
+            if (brk?.type === PieceType.Rook && brk.color === Color.Black && !brk.hasMoved) castlingBits |= 4;
+            if (brq?.type === PieceType.Rook && brq.color === Color.Black && !brq.hasMoved) castlingBits |= 8;
+        }
+        h ^= ZOBRIST_CASTLING[castlingBits];
+
+        if (this.enPassantTarget) {
+            h ^= ZOBRIST_EP[this.enPassantTarget.col];
+        }
+
         return h;
     }
 
@@ -207,14 +237,12 @@ export class MutableBoard {
 
         if (move.promotion) {
             piece.type = move.promotion;
-            piece.originalType = (oldOriginalType === PieceType.King || move.promotion === PieceType.King) ? PieceType.King : move.promotion;
-            piece.isKing = piece.type === PieceType.King || piece.originalType === PieceType.King;
         }
 
-        if (move.powerConsumed || move.isForcePower) {
-            piece.power = null;
-        } else if (move.afterPower !== undefined) {
+        if (move.afterPower !== undefined) {
             piece.power = move.afterPower;
+        } else if (move.powerConsumed || move.isForcePower) {
+            piece.power = null;
         }
 
         piece.hasMoved = true;
@@ -350,7 +378,28 @@ export default class KrachtschaakAI {
         return bestResults;
     }
 
+    static extractPV(mutableBoard: MutableBoard, maxMoves: number = 20): string[] {
+        const pv: string[] = [];
+        const hashes = new Set<bigint>();
+        let movesCount = 0;
+        let boardCopy = new MutableBoard(mutableBoard.board, mutableBoard.turn, mutableBoard.enPassantTarget);
+
+        while (movesCount < maxMoves) {
+            if (hashes.has(boardCopy.hash)) break;
+            hashes.add(boardCopy.hash);
+
+            const entry = TT.get(boardCopy.hash);
+            if (!entry || !entry.bestMove) break;
+
+            pv.push(entry.bestMove.notation);
+            boardCopy.makeMove(entry.bestMove);
+            movesCount++;
+        }
+        return pv;
+    }
+
     static searchRoot(board: BoardState, turn: Color, depth: number, multiPv: number = 1): { move: Move | null, score: number, pv: string[] }[] {
+        TT.clear(); // Clear TT on fresh analysis to prevent stale evaluations from other board setups
         const mutableBoard = new MutableBoard(board, turn, null);
         const moves = KrachtschaakAI.getOrderedMoves(mutableBoard, depth, null);
         const results: { move: Move | null, score: number, pv: string[] }[] = [];
@@ -362,9 +411,13 @@ export default class KrachtschaakAI {
             const undoInfo = mutableBoard.makeMove(move);
             // We use full window for root moves in multi-pv to ensure accurate ranking
             const score = -KrachtschaakAI.alphaBeta(mutableBoard, depth - 1, -Infinity, Infinity, true, nextPv);
+
+            const pvLength = KrachtschaakAI.extractPV(mutableBoard, 20);
+            const pvPath = [move.notation, ...(pvLength.length > 0 ? pvLength : nextPv)];
+
             mutableBoard.unmakeMove(undoInfo);
 
-            results.push({ move, score, pv: [move.notation, ...nextPv] });
+            results.push({ move, score, pv: pvPath });
         }
 
         return results.sort((a, b) => b.score - a.score).slice(0, multiPv);
@@ -380,6 +433,11 @@ export default class KrachtschaakAI {
             if (ttEntry.flag === 1 && ttEntry.score > alpha) alpha = ttEntry.score;
             if (ttEntry.flag === 2 && ttEntry.score < beta) beta = ttEntry.score;
             if (alpha >= beta) return ttEntry.score;
+        }
+
+        const myKing = findKingPosition(mutableBoard.board, mutableBoard.turn);
+        if (!myKing) {
+            return -20000 + (100 - depth);
         }
 
         const inCheck = isKingInCheck(mutableBoard.board, mutableBoard.turn);
@@ -456,6 +514,9 @@ export default class KrachtschaakAI {
 
     static quiescenceSearch(mutableBoard: MutableBoard, alpha: number, beta: number): number {
         this.nodesVisited++;
+
+        const myKing = findKingPosition(mutableBoard.board, mutableBoard.turn);
+        if (!myKing) return -20000;
 
         const standPat = KrachtschaakAI.evaluate(mutableBoard);
         if (standPat >= beta) return beta;
@@ -538,11 +599,38 @@ export default class KrachtschaakAI {
                         const captured = targetPiece ? targetPiece.type : undefined;
                         const isPower = isPowerMove(board, pos, target, enPassant);
 
+                        const isEnPassantCapture = (piece.type === PieceType.Pawn || piece.power === PieceType.Pawn) && enPassant && target.row === enPassant.row && target.col === enPassant.col && !targetPiece;
+                        let actualCapturedPiece = targetPiece;
+                        if (isEnPassantCapture) {
+                            actualCapturedPiece = board[pos.row][target.col];
+                        }
+
+                        let acquiredPower: PieceType | null = null;
+                        if (actualCapturedPiece && actualCapturedPiece.originalType !== PieceType.King && actualCapturedPiece.type !== PieceType.King) {
+                            acquiredPower = actualCapturedPiece.originalType;
+                        }
+
+                        const baseAfterPower = acquiredPower ? acquiredPower : (isPower ? null : piece.power);
+
                         const promotionRank = color === Color.White ? 0 : 7;
                         const hasPawnAbility = piece.type === PieceType.Pawn || piece.power === PieceType.Pawn;
-                        const isCapturingPawnOnPromotionRank = targetPiece && targetPiece.originalType === PieceType.Pawn && target.row === promotionRank;
+                        const isCapturingPawnOnPromotionRank = actualCapturedPiece && actualCapturedPiece.originalType === PieceType.Pawn && target.row === promotionRank;
                         if ((hasPawnAbility && target.row === promotionRank) || isCapturingPawnOnPromotionRank) {
-                            const promotionTypes = [PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight, PieceType.King];
+                            const promotionTypes = [PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight];
+
+                            let promAfterPower: PieceType | null = null;
+                            if (isEnPassantCapture && actualCapturedPiece) {
+                                promAfterPower = null;
+                            } else if (actualCapturedPiece) {
+                                promAfterPower = actualCapturedPiece.originalType === PieceType.Pawn ? null : actualCapturedPiece.originalType;
+                            } else {
+                                if (piece.originalType === PieceType.Pawn && !isPower) {
+                                    promAfterPower = piece.power === PieceType.Pawn ? null : piece.power;
+                                } else {
+                                    promAfterPower = null;
+                                }
+                            }
+
                             for (const promType of promotionTypes) {
                                 const move: Move = {
                                     from: pos,
@@ -552,6 +640,7 @@ export default class KrachtschaakAI {
                                     captured,
                                     isForcePower: isPower,
                                     promotion: promType,
+                                    afterPower: promAfterPower,
                                     notation: getNotation(board, pos, target, piece, targetPiece || null, promType, isPower)
                                 };
                                 const undo = mutableBoard.makeMove(move);
@@ -568,6 +657,7 @@ export default class KrachtschaakAI {
                                 color: piece.color,
                                 captured,
                                 isForcePower: isPower,
+                                afterPower: baseAfterPower,
                                 notation: getNotation(board, pos, target, piece, targetPiece || null, null, isPower)
                             };
 

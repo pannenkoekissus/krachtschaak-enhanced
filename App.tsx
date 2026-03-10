@@ -2117,8 +2117,8 @@ const App: React.FC = () => {
         const promotedPiece: Piece = {
             ...promotingPiece,
             type: chosenPieceType,
-            originalType: (promotingPiece.originalType === PieceType.King || chosenPieceType === PieceType.King) ? PieceType.King : chosenPieceType,
-            isKing: chosenPieceType === PieceType.King || promotingPiece.isKing || promotingPiece.originalType === PieceType.King,
+            originalType: promotingPiece.originalType,
+            isKing: promotingPiece.isKing || promotingPiece.originalType === PieceType.King,
             hasMoved: true,
             power: powerAfterPromotion
         };

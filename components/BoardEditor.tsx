@@ -14,7 +14,8 @@ interface BoardEditorProps {
 const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, onStartAnalysis, onCancel }) => {
     const [board, setBoard] = useState<BoardState>(() => initialBoard || Array(8).fill(null).map(() => Array(8).fill(null)));
     const [turn, setTurn] = useState<Color>(initialTurn || Color.White);
-    const [selectedPalettePiece, setSelectedPalettePiece] = useState<{ type: PieceType, color: Color } | null>(null);
+    const [selectedPalettePiece, setSelectedPalettePiece] = useState<{ type: PieceType, color: Color } | 'eraser' | 'cursor'>('cursor');
+    const [draggedPos, setDraggedPos] = useState<Position | null>(null);
     const [selectedPower, setSelectedPower] = useState<PieceType | null>(null);
     const [selectedOriginalType, setSelectedOriginalType] = useState<PieceType | null>(null);
 
@@ -42,8 +43,11 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
     };
 
     const handleSquareClick = (row: number, col: number) => {
+        if (selectedPalettePiece === 'cursor') return;
         const newBoard = board.map(r => [...r]);
-        if (selectedPalettePiece) {
+        if (selectedPalettePiece === 'eraser') {
+            newBoard[row][col] = null;
+        } else if (selectedPalettePiece && typeof selectedPalettePiece !== 'string') {
             newBoard[row][col] = {
                 type: selectedPalettePiece.type,
                 color: selectedPalettePiece.color,
@@ -52,10 +56,67 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                 isKing: selectedPalettePiece.type === PieceType.King || (selectedOriginalType === PieceType.King),
                 hasMoved: false
             };
-        } else {
-            newBoard[row][col] = null;
         }
         setBoard(newBoard);
+    };
+
+    const handlePieceDragStart = (e: React.DragEvent, row: number, col: number) => {
+        if (selectedPalettePiece !== 'cursor') {
+            e.preventDefault();
+            return;
+        }
+        setDraggedPos({ row, col });
+    };
+
+    const handleSquareDrop = (e: React.DragEvent, toRow: number, toCol: number) => {
+        e.preventDefault();
+
+        try {
+            const dragDataStr = e.dataTransfer.getData('text/plain');
+            if (dragDataStr) {
+                const dragData = JSON.parse(dragDataStr);
+                const newBoard = board.map(r => [...r]);
+
+                if (dragData.source === 'palette') {
+                    const p = dragData.data;
+                    newBoard[toRow][toCol] = {
+                        type: p.type,
+                        color: p.color,
+                        power: selectedPower,
+                        originalType: selectedOriginalType || p.type,
+                        isKing: p.type === PieceType.King || selectedOriginalType === PieceType.King,
+                        hasMoved: false
+                    };
+                    setBoard(newBoard);
+                    return;
+                } else if (dragData.source === 'power') {
+                    const type = dragData.data;
+                    if (newBoard[toRow][toCol]) {
+                        newBoard[toRow][toCol]!.power = type;
+                        setBoard(newBoard);
+                    }
+                    return;
+                } else if (dragData.source === 'originalType') {
+                    const type = dragData.data;
+                    if (newBoard[toRow][toCol]) {
+                        newBoard[toRow][toCol]!.originalType = type;
+                        newBoard[toRow][toCol]!.isKing = type === PieceType.King || newBoard[toRow][toCol]!.type === PieceType.King;
+                        setBoard(newBoard);
+                    }
+                    return;
+                }
+            }
+        } catch (err) {
+            // Regular piece drag drops
+        }
+
+        if (selectedPalettePiece === 'cursor' && draggedPos) {
+            const newBoard = board.map(r => [...r]);
+            newBoard[toRow][toCol] = newBoard[draggedPos.row][draggedPos.col];
+            newBoard[draggedPos.row][draggedPos.col] = null;
+            setBoard(newBoard);
+            setDraggedPos(null);
+        }
     };
 
     const palettePieces: { type: PieceType, color: Color }[] = [
@@ -85,10 +146,10 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                     playerColor={Color.White}
                     gameMode="board_editor"
                     isInteractionDisabled={false}
-                    onPieceDragStart={() => { }}
-                    onPieceDragEnd={() => { }}
-                    onSquareDrop={() => { }}
-                    draggedPiece={null}
+                    onPieceDragStart={handlePieceDragStart}
+                    onPieceDragEnd={() => setDraggedPos(null)}
+                    onSquareDrop={handleSquareDrop}
+                    draggedPiece={draggedPos ? board[draggedPos.row][draggedPos.col] : null}
                     premove={null}
                     lastMove={null}
                     highlightedSquares={[]}
@@ -106,24 +167,34 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                     {palettePieces.map((p, i) => (
                         <div
                             key={i}
-                            className={`aspect-square cursor-pointer rounded-md flex items-center justify-center transition-all ${selectedPalettePiece?.type === p.type && selectedPalettePiece?.color === p.color
+                            draggable
+                            onDragStart={(e) => e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'palette', data: p }))}
+                            className={`aspect-square cursor-pointer rounded-md flex items-center justify-center transition-all ${typeof selectedPalettePiece !== 'string' && selectedPalettePiece?.type === p.type && selectedPalettePiece?.color === p.color
                                 ? 'bg-blue-600 ring-2 ring-blue-400 scale-110 shadow-lg'
                                 : 'bg-gray-600 hover:bg-gray-500'
                                 }`}
                             onClick={() => setSelectedPalettePiece(p)}
                         >
-                            <div className="w-10 h-10">
+                            <div className="w-10 h-10 pointer-events-none">
                                 <PieceComponent piece={{ ...p, power: null, originalType: p.type, isKing: p.type === PieceType.King }} />
                             </div>
                         </div>
                     ))}
                     <div
-                        className={`aspect-square cursor-pointer rounded-md flex items-center justify-center transition-all ${selectedPalettePiece === null ? 'bg-red-600 ring-2 ring-red-400 scale-110 shadow-lg' : 'bg-gray-600 hover:bg-gray-500'
+                        className={`col-span-3 aspect-square max-h-[64px] mx-auto w-full cursor-pointer rounded-md flex items-center justify-center transition-all ${selectedPalettePiece === 'cursor' ? 'bg-indigo-600 ring-2 ring-indigo-400 scale-105 shadow-lg' : 'bg-gray-600 hover:bg-gray-500'
                             }`}
-                        onClick={() => setSelectedPalettePiece(null)}
+                        onClick={() => setSelectedPalettePiece('cursor')}
+                        title="Cursor (Drag/Drop Mode)"
+                    >
+                        <span className="text-2xl">👆</span>
+                    </div>
+                    <div
+                        className={`col-span-3 aspect-square max-h-[64px] mx-auto w-full cursor-pointer rounded-md flex items-center justify-center transition-all ${selectedPalettePiece === 'eraser' ? 'bg-red-600 ring-2 ring-red-400 scale-105 shadow-lg' : 'bg-gray-600 hover:bg-gray-500'
+                            }`}
+                        onClick={() => setSelectedPalettePiece('eraser')}
                         title="Eraser"
                     >
-                        <span className="text-2xl">🗑️</span>
+                        <span className="text-xl">🗑️</span>
                     </div>
                 </div>
 
@@ -133,12 +204,14 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                         {[PieceType.Pawn, PieceType.Knight, PieceType.Bishop, PieceType.Rook, PieceType.Queen].map((type) => (
                             <div
                                 key={type}
+                                draggable
+                                onDragStart={(e) => e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'power', data: type }))}
                                 className={`aspect-square cursor-pointer rounded-md flex items-center justify-center transition-all ${selectedPower === type ? 'bg-purple-600 ring-2 ring-purple-400 scale-110 shadow-lg' : 'bg-gray-600 hover:bg-gray-500'
                                     }`}
                                 onClick={() => setSelectedPower(type === selectedPower ? null : type)}
                                 title={type}
                             >
-                                <div className="w-8 h-8 opacity-80">
+                                <div className="w-8 h-8 opacity-80 pointer-events-none">
                                     <PieceComponent piece={{ type, color: Color.White, power: null, originalType: type, isKing: false }} />
                                 </div>
                             </div>
@@ -160,12 +233,14 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                         {[PieceType.Pawn, PieceType.Knight, PieceType.Bishop, PieceType.Rook, PieceType.Queen, PieceType.King].map((type) => (
                             <div
                                 key={type}
+                                draggable
+                                onDragStart={(e) => e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'originalType', data: type }))}
                                 className={`aspect-square cursor-pointer rounded-md flex items-center justify-center transition-all ${selectedOriginalType === type ? 'bg-blue-900 ring-2 ring-blue-400 scale-110 shadow-lg' : 'bg-gray-600 hover:bg-gray-500'
                                     }`}
                                 onClick={() => setSelectedOriginalType(type === selectedOriginalType ? null : type)}
                                 title={`Original: ${type}`}
                             >
-                                <div className="w-8 h-8 opacity-60">
+                                <div className="w-8 h-8 opacity-60 pointer-events-none">
                                     <PieceComponent piece={{ type, color: Color.White, power: null, originalType: type, isKing: false }} />
                                 </div>
                             </div>
@@ -198,6 +273,53 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                         >
                             Black
                         </button>
+                    </div>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                    <label className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Castling Rights</label>
+                    <div className="grid grid-cols-2 gap-2">
+                        {[
+                            { color: Color.White, side: 'K', label: 'White O-O' },
+                            { color: Color.White, side: 'Q', label: 'White O-O-O' },
+                            { color: Color.Black, side: 'K', label: 'Black O-O' },
+                            { color: Color.Black, side: 'Q', label: 'Black O-O-O' }
+                        ].map((c, i) => {
+                            const row = c.color === Color.White ? 7 : 0;
+                            const col = c.side === 'K' ? 7 : 0;
+                            const rook = board[row][col];
+                            const king = board[row][4];
+
+                            const isPossible = king && king.type === PieceType.King && king.color === c.color &&
+                                rook && rook.type === PieceType.Rook && rook.color === c.color;
+
+                            // Castling logic expects !hasMoved.
+                            const isAllowed = isPossible && !king.hasMoved && !rook.hasMoved;
+
+                            return (
+                                <button
+                                    key={i}
+                                    disabled={!isPossible}
+                                    onClick={() => {
+                                        if (isPossible) {
+                                            const newBoard = board.map(r => [...r]);
+                                            if (isAllowed) {
+                                                newBoard[row][col]!.hasMoved = true;
+                                            } else {
+                                                newBoard[row][4]!.hasMoved = false;
+                                                newBoard[row][col]!.hasMoved = false;
+                                            }
+                                            setBoard(newBoard);
+                                        }
+                                    }}
+                                    className={`py-2 px-2 rounded-lg font-bold text-xs transition-colors shadow-md ${!isPossible ? 'bg-gray-800 text-gray-600 cursor-not-allowed opacity-50' :
+                                            isAllowed ? 'bg-green-600 text-white hover:bg-green-500' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                                        }`}
+                                >
+                                    {c.label} {isPossible && (isAllowed ? '✔️' : '❌')}
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
 

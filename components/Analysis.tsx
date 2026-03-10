@@ -343,6 +343,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
     const [highlightedSquares, setHighlightedSquares] = useState<Position[]>([]);
     const [arrows, setArrows] = useState<{ from: Position; to: Position, color?: string }[]>([]);
     const [engineArrows, setEngineArrows] = useState<{ from: Position; to: Position, color?: string }[]>([]);
+    const [showEngineArrow, setShowEngineArrow] = useState(true);
     const [rightClickStartSquare, setRightClickStartSquare] = useState<Position | null>(null);
 
     // Engine State
@@ -876,8 +877,6 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
         if (move.promotion) {
             pieceToMove.type = move.promotion;
-            pieceToMove.originalType = (pieceToMove.originalType === PieceType.King || move.promotion === PieceType.King) ? PieceType.King : move.promotion;
-            pieceToMove.isKing = move.promotion === PieceType.King || pieceToMove.isKing || pieceToMove.originalType === PieceType.King;
 
             if (isEnPassantCapture && newBoard[move.from.row][move.to.col] === actualCapturedPiece) {
                 pieceToMove.power = null;
@@ -1121,7 +1120,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                     premove={null}
                     lastMove={lastMove}
                     highlightedSquares={highlightedSquares}
-                    arrows={[...arrows, ...engineArrows]}
+                    arrows={[...arrows, ...(showEngineArrow ? engineArrows : [])]}
                     onBoardMouseDown={(e, r, c) => {
                         if (e.button === 0) setHighlightedSquares([]);
                         if (e.button === 2) {
@@ -1169,7 +1168,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                 </div>
             </div>
 
-            <div className="w-full md:w-96 bg-gray-800 p-4 rounded-xl shadow-2xl flex flex-col h-[85vh] min-h-[710px]">
+            <div className="w-full md:w-96 bg-gray-800 p-4 rounded-xl shadow-2xl flex flex-col h-fit">
                 <h2 className="text-2xl font-bold text-center text-green-400 mb-2">Analysis Board</h2>
 
                 <div className="flex justify-between items-center mb-3 bg-gray-700 p-2 rounded">
@@ -1377,19 +1376,30 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                     <div className="bg-gray-700 p-3 rounded-lg flex flex-col gap-2">
                         <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-gray-400">ANALYSIS LINES</span>
-                            <div className="flex gap-1">
-                                {[1, 2, 3, 4, 5].map(n => (
-                                    <button
-                                        key={n}
-                                        onClick={() => {
-                                            setNumLines(n);
-                                            if (engineThinking) stopWorker();
-                                        }}
-                                        className={`w-7 h-7 rounded flex items-center justify-center text-xs font-bold transition-all ${numLines === n ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-600'}`}
-                                    >
-                                        {n}
-                                    </button>
-                                ))}
+                            <div className="flex items-center gap-3">
+                                <label className="flex items-center gap-1 cursor-pointer" title="Toggle engine best move arrow">
+                                    <input
+                                        type="checkbox"
+                                        checked={showEngineArrow}
+                                        onChange={() => setShowEngineArrow(!showEngineArrow)}
+                                        className="w-3 h-3 cursor-pointer accent-blue-500"
+                                    />
+                                    <span className="text-[10px] text-gray-400 font-bold uppercase">Show Arrow</span>
+                                </label>
+                                <div className="flex gap-1">
+                                    {[1, 2, 3, 4, 5].map(n => (
+                                        <button
+                                            key={n}
+                                            onClick={() => {
+                                                setNumLines(n);
+                                                if (engineThinking) stopWorker();
+                                            }}
+                                            className={`w-7 h-7 rounded flex items-center justify-center text-xs font-bold transition-all ${numLines === n ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-600'}`}
+                                        >
+                                            {n}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                         </div>
                         <button
@@ -1404,9 +1414,10 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                                 {engineResults.map((result, idx) => {
                                     const score = result.score;
                                     const isMate = Math.abs(score) > 15000;
+                                    const forceWhiteScore = turn === Color.White ? score : -score;
                                     const formattedScore = isMate
-                                        ? `M${Math.ceil((20000 - Math.abs(score)) / 2) * (score > 0 ? 1 : -1)}`
-                                        : (score / 100).toFixed(2);
+                                        ? `${forceWhiteScore > 0 ? '+' : '-'}M${Math.max(1, Math.ceil((20000 - Math.abs(forceWhiteScore)) / 2))}`
+                                        : (forceWhiteScore / 100).toFixed(2);
 
                                     return (
                                         <div key={idx} className="p-3 bg-gray-900 rounded-lg border border-gray-700 hover:border-blue-500/50 transition-all shadow-inner group mb-2 last:mb-0 cursor-pointer" onClick={() => { if (result.move) applyEngineMove(result.move); }}>
@@ -1424,8 +1435,8 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                                                 ))}
                                                 {result.pv.length > 8 && <span className="text-[10px] text-gray-600 italic">...</span>}
                                                 <div className="flex-grow"></div>
-                                                <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ml-auto ${score >= 0 ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
-                                                    {score > 0 && !isMate ? '+' : ''}{formattedScore}
+                                                <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ml-auto ${forceWhiteScore >= 0 ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
+                                                    {forceWhiteScore > 0 && !isMate ? '+' : ''}{formattedScore}
                                                 </span>
                                             </div>
                                         </div>
