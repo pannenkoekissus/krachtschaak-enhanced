@@ -135,7 +135,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
     ];
 
     return (
-        <div className="min-h-screen flex flex-col md:flex-row items-center justify-center p-4 gap-8 bg-gray-900 text-white overflow-x-hidden">
+        <div className="min-h-screen flex flex-col md:flex-row items-center md:items-start justify-center p-4 gap-8 bg-gray-900 text-white overflow-x-hidden">
             <div className="w-full max-w-lg flex-shrink-0">
                 <Board
                     board={board}
