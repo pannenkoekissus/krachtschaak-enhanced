@@ -10,33 +10,25 @@ jobs:
   check_messages:
     runs-on: ubuntu-latest
     outputs:
-      should_run: ${{ steps.check.outputs.should_run }}
+      should_run: ${{ steps.analysis.outputs.should_run }}
     steps:
-      - name: Combine commit messages
-        id: msg
-        run: |
-          # Voeg alle commit messages samen tot één string
-          MESSAGES="${{ join(github.event.commits.*.message, ' ') }}"
-          echo "raw_messages=$MESSAGES" >> $GITHUB_OUTPUT
-
-      - name: Convert to Lowercase
-        uses: aymen3009/slugifyAction@v1.1.1
-        id: lower_msg
+      - name: Check commit messages
+        id: analysis
+        uses: actions/github-script@v7
         with:
-          string: ${{ steps.msg.outputs.raw_messages }}
-          slugify: false # We willen alleen lowercase, geen streepjes tussen woorden
-          outputCase: lower
-
-      - name: Evaluate skip conditions
-        id: check
-        run: |
-          LOWER="${{ steps.lower_msg.outputs.text }}"
-          # Als een van de verboden termen erin staat, zetten we should_run op false
-          if [[ "$LOWER" == *"no-app"* || "$LOWER" == *"no app"* || "$LOWER" == *"geen-app"* || "$LOWER" == *"geen app"* ]]; then
-            echo "should_run=false" >> $GITHUB_OUTPUT
-          else
-            echo "should_run=true" >> $GITHUB_OUTPUT
-          fi
+          script: |
+            // Haal de commit messages op (geeft een lege array bij workflow_dispatch)
+            const messages = ${{ toJson(github.event.commits.*.message) }} || [];
+            const combined = messages.join(' ').toLowerCase();
+            
+            // De woorden die we willen blokkeren
+            const forbidden = ['no-app', 'no app', 'geen-app', 'geen app'];
+            
+            // Check of een van de woorden voorkomt
+            const containsForbidden = forbidden.some(word => combined.includes(word));
+            
+            // Zet de output (we runnen alleen als het NIET verboden is)
+            core.setOutput('should_run', !containsForbidden);
           
   build:
     needs: check_messages
