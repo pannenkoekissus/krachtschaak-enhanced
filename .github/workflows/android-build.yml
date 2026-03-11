@@ -7,15 +7,42 @@ on:
       - main # Het script start nu bij elke push naar de main branch
 
 jobs:
+  check_messages:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - name: Combine commit messages
+        id: msg
+        run: |
+          # Voeg alle commit messages samen tot één string
+          MESSAGES="${{ join(github.event.commits.*.message, ' ') }}"
+          echo "raw_messages=$MESSAGES" >> $GITHUB_OUTPUT
+
+      - name: Convert to Lowercase
+        uses: aymen3009/slugifyAction@v1.1.1
+        id: lower_msg
+        with:
+          string: ${{ steps.msg.outputs.raw_messages }}
+          slugify: false # We willen alleen lowercase, geen streepjes tussen woorden
+          outputCase: lower
+
+      - name: Evaluate skip conditions
+        id: check
+        run: |
+          LOWER="${{ steps.lower_msg.outputs.text }}"
+          # Als een van de verboden termen erin staat, zetten we should_run op false
+          if [[ "$LOWER" == *"no-app"* || "$LOWER" == *"no app"* || "$LOWER" == *"geen-app"* || "$LOWER" == *"geen app"* ]]; then
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          fi
+          
   build:
+    needs: check_messages
     if: >
      github.event_name == 'workflow_dispatch' ||
-     (
-     !contains(join(github.event.commits.*.message, ' '), 'no-app') &&
-     !contains(join(github.event.commits.*.message, ' '), 'no app') &&
-     !contains(join(github.event.commits.*.message, ' '), 'geen-app') &&
-     !contains(join(github.event.commits.*.message, ' '), 'geen app')
-     )
+     needs.check_messages.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
