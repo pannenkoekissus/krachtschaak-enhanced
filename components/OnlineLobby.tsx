@@ -22,6 +22,10 @@ interface OnlineLobbyProps {
     setPremovesEnabled: (enabled: boolean) => void;
     moveConfirmationEnabled: boolean;
     setMoveConfirmationEnabled: (enabled: boolean) => void;
+    drawConfirmationEnabled: boolean;
+    setDrawConfirmationEnabled: (enabled: boolean) => void;
+    resignConfirmationEnabled: boolean;
+    setResignConfirmationEnabled: (enabled: boolean) => void;
     showPowerPieces: boolean;
     setShowPowerPieces: (enabled: boolean) => void;
     showPowerRings: boolean;
@@ -1086,22 +1090,15 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                                                 <div className="flex gap-3 mt-1 text-xs text-gray-400">
                                                     <span className="flex items-center gap-1">⏱️ {(() => {
                                                         const settings = game.timerSettings;
-                                                        if (!settings) return '⏱️ ?';
+                                                        if (!settings) return '⏱️ Unlimited';
 
-                                                        // 1. Check op Unlimited
-                                                        if (game.ratingCategory?.toLowerCase() === 'unlimited' || settings.isUnlimited) {
-                                                            return '⏱️ Unlimited';
+                                                        // 1. Check op Daily (Dagen)
+                                                        if ('daysPerMove' in settings) {
+                                                            return `⏱️ ${settings.daysPerMove} days`;
                                                         }
 
-                                                        // 2. Check op Daily (Dagen)
-                                                        // We kijken of 'daysPerMove' bestaat (of hoe dat veld in jouw types heet)
-                                                        if (game.ratingCategory?.toLowerCase() === 'daily') {
-                                                            const days = settings.daysPerMove || settings.initialTime; // Pas aan naar jouw veldnaam
-                                                            return `⏱️ ${days} days`;
-                                                        }
-
-                                                        // 3. Standaard minuten (Bullet/Blitz/Rapid)
-                                                        const mins = settings.initialTime / 60 || settings.minutes;
+                                                        // 2. Standaard minuten (Bullet/Blitz/Rapid)
+                                                        const mins = settings.initialTime / 60;
                                                         const inc = settings.increment ?? 0;
                                                         return `⏱️ ${mins}m + ${inc}s`;
                                                     })()}</span>

@@ -161,7 +161,7 @@ const App: React.FC = () => {
     const [gameShowOriginalType, setGameShowOriginalType] = useState<boolean | undefined>(undefined);
 
     // Lifted Lobby State
-    const [lobbyView, setLobbyView] = useState<'games' | 'players' | 'current_games' | 'finished_games' | 'challenges'>('games');
+    const [lobbyView, setLobbyView] = useState<'games' | 'players' | 'current_games' | 'finished_games' | 'live' | 'challenges'>('games');
 
     // Auth State
     const [currentUser, setCurrentUser] = useState<any>(null);

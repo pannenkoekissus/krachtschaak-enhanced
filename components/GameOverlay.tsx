@@ -3,7 +3,7 @@ import React from 'react';
 import { GameStatus, PieceType, PromotionData, Position, Color, GameMode, PlayerInfo, GameState } from '../types';
 import Piece from './Piece';
 
-interface GameOverlayProps {
+export interface GameOverlayProps {
     status: GameStatus;
     winner: string | null;
     onRestart: () => void;
@@ -12,19 +12,19 @@ interface GameOverlayProps {
     onResolveAmbiguousEnPassant: (choice: 'move' | 'capture') => void;
     gameMode: GameMode;
     isMyTurnForAction: boolean;
-    // Rating props
-    ratingChange: { white: number, black: number } | null;
-    initialRatings: { white: number, black: number } | null;
-    players: { [uid: string]: PlayerInfo };
-    playerColors: { white: string | null; black: string | null; };
-    isRated: boolean;
-    // Rematch props
-    rematchOffer: Color | null;
-    myOnlineColor: Color | null;
-    onOfferRematch: () => void;
-    onAcceptRematch: () => void;
-    onDeclineRematch: () => void;
-    nextGameId: string | null;
+    // Rating props (optional — not needed in analysis/local modes)
+    ratingChange?: { white: number, black: number } | null;
+    initialRatings?: { white: number, black: number } | null;
+    players?: { [uid: string]: PlayerInfo };
+    playerColors?: { white: string | null; black: string | null; };
+    isRated?: boolean;
+    // Rematch props (optional — not needed in analysis/local modes)
+    rematchOffer?: Color | null;
+    myOnlineColor?: Color | null;
+    onOfferRematch?: () => void;
+    onAcceptRematch?: () => void;
+    onDeclineRematch?: () => void;
+    nextGameId?: string | null;
     onCancelRematch?: () => void;
     onAnalyse?: (game: GameState) => void;
     onReview?: (game: GameState) => void;

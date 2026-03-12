@@ -149,7 +149,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                     onPieceDragStart={handlePieceDragStart}
                     onPieceDragEnd={() => setDraggedPos(null)}
                     onSquareDrop={handleSquareDrop}
-                    draggedPiece={draggedPos ? board[draggedPos.row][draggedPos.col] : null}
+                    draggedPiece={draggedPos}
                     premove={null}
                     lastMove={null}
                     highlightedSquares={[]}
