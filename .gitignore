@@ -17,6 +17,7 @@ android
 capacitor*
 
 # Editor directories and files
+.agent/*
 tmpclaude*
 .vscode/*
 !.vscode/extensions.json
