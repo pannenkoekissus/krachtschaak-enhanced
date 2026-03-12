@@ -745,6 +745,11 @@ const App: React.FC = () => {
 
         async function processRatings(finalState: GameState) {
             if (finalState.isRated && finalState.playerColors.white && finalState.playerColors.black) {
+                // Auto-abort: skip rating if either player hasn't moved (less than 2 moves total)
+                if ((!finalState.moveHistory || finalState.moveHistory.length < 2)) {
+                    console.log("Game auto-aborted or ended before both players moved. Skipping rating processing.");
+                    return;
+                }
                 const whiteUid = finalState.playerColors.white;
                 const blackUid = finalState.playerColors.black;
                 const category = finalState.ratingCategory;
@@ -1032,6 +1037,21 @@ const App: React.FC = () => {
                 }
 
                 setDisplayedTime(prev => prev ? { ...prev, [turn]: Math.max(0, newTime) } : null);
+
+                // Auto-Abort Logic: If it's a realtime game and 30s pass without a move at the start
+                const isRealtime = timerSettings && 'initialTime' in timerSettings;
+                const moveCount = gameStateRef.current?.moveHistory?.length || 0;
+                if (isRealtime && moveCount < 2 && elapsedSeconds >= 30) {
+                    if (gameMode !== 'online_playing' || turn === myOnlineColor || statusRef.current === 'playing') {
+                        if (timerRef.current) clearInterval(timerRef.current);
+                        const winnerColor = turn.toLowerCase() === Color.White.toLowerCase() ? Color.Black : Color.White;
+                        if (gameStateRef.current) {
+                            handleGameOver(gameStateRef.current, 'timeout', winnerColor.charAt(0).toUpperCase() + winnerColor.slice(1));
+                        }
+                    }
+                    return;
+                }
+
                 if (newTime <= 0) {
                     // Check timeout even if opponent is disconnected
                     if (gameMode !== 'online_playing' || turn === myOnlineColor || statusRef.current === 'playing') {
@@ -2613,26 +2633,38 @@ const App: React.FC = () => {
         const isTopPlayerTurn = turn === (isFlipped ? Color.White : Color.Black);
         const isBottomPlayerTurn = turn === (isFlipped ? Color.Black : Color.White);
 
-        const PlayerInfoPanel = ({ name, rating, isDisconnected, isOpponent, countdown, time, isTurn, captured }) => (
-            <div className="bg-gray-700 p-2 md:p-3 rounded-lg w-full">
-                <h3 className="text-md md:text-lg font-bold truncate" title={name}>
-                    {name} {gameMode === 'online_playing' && `(${rating ?? '...'})`}
-                    {isDisconnected && (
-                        <span className="text-yellow-300 ml-2 text-sm font-normal">
-                            (Disconnected {isOpponent && countdown !== null && ` - ${countdown}s`})
-                        </span>
-                    )}
-                </h3>
-                <div className={`text-xl font-bold text-center p-1 md:p-2 rounded-md ${isTurn ? 'bg-gray-900 text-white' : 'bg-transparent'}`}>
-                    <span className="font-mono tracking-wider">{isDailyGame ? formatDailyTime(moveDeadline) : formatTime(time)}</span>
+        const PlayerInfoPanel = ({ name, rating, isDisconnected, isOpponent, countdown, time, isTurn, captured }) => {
+            const moveCount = moveHistory.length;
+            const elapsed = (isTurn && turnStartTime && !isDailyGame) ? Math.max(0, Date.now() + serverOffset - turnStartTime) / 1000 : 0;
+            const showAbortTimer = !isDailyGame && moveCount < 2 && elapsed >= 15 && status === 'playing';
+            const abortSecondsRemaining = Math.max(0, Math.ceil(30 - elapsed));
+
+            return (
+                <div className="bg-gray-700 p-2 md:p-3 rounded-lg w-full">
+                    <h3 className="text-md md:text-lg font-bold truncate" title={name}>
+                        {name} {gameMode === 'online_playing' && `(${rating ?? '...'})`}
+                        {isDisconnected && (
+                            <span className="text-yellow-300 ml-2 text-sm font-normal">
+                                (Disconnected {isOpponent && countdown !== null && ` - ${countdown}s`})
+                            </span>
+                        )}
+                    </h3>
+                    <div className={`relative text-xl font-bold text-center p-1 md:p-2 rounded-md ${isTurn ? 'bg-gray-900 text-white' : 'bg-transparent'}`}>
+                        <span className="font-mono tracking-wider">{isDailyGame ? formatDailyTime(moveDeadline) : formatTime(time)}</span>
+                        {showAbortTimer && isTurn && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-red-900/80 rounded-md animate-pulse">
+                                <span className="text-xs md:text-sm text-white uppercase tracking-tighter">Abort in: {abortSecondsRemaining}s</span>
+                            </div>
+                        )}
+                    </div>
+                    {/* Captured pieces only shown on desktop */}
+                    <div className="hidden md:block">
+                        <h3 className="text-md md:text-lg font-bold border-b border-t my-1 md:my-2 border-gray-600 py-1">Captured</h3>
+                        <div className="flex flex-wrap gap-1 min-h-[32px] md:min-h-[40px]">{captured.map((p, i) => p && <div key={i} className="w-6 h-6 md:w-8 md:h-8"><PieceComponent piece={p} /></div>)}</div>
+                    </div>
                 </div>
-                {/* Captured pieces only shown on desktop */}
-                <div className="hidden md:block">
-                    <h3 className="text-md md:text-lg font-bold border-b border-t my-1 md:my-2 border-gray-600 py-1">Captured</h3>
-                    <div className="flex flex-wrap gap-1 min-h-[32px] md:min-h-[40px]">{captured.map((p, i) => p && <div key={i} className="w-6 h-6 md:w-8 md:h-8"><PieceComponent piece={p} /></div>)}</div>
-                </div>
-            </div>
-        );
+            );
+        };
 
 
         return (
@@ -2728,7 +2760,9 @@ const App: React.FC = () => {
                                                 <button onClick={handleOfferDraw} className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors">Offer Draw</button>
                                             )}
                                             {/* Ensure resign button is visible even when draw is offered */}
-                                            <button onClick={handleResign} className={`w-full px-4 py-3 bg-orange-600 hover:bg-orange-700 rounded-lg font-semibold transition-colors ${drawOffer ? 'col-span-2' : ''}`}>Resign</button>
+                                            <button onClick={handleResign} className={`w-full px-4 py-3 bg-orange-600 hover:bg-orange-700 rounded-lg font-semibold transition-colors ${drawOffer ? 'col-span-2' : ''}`}>
+                                                {moveHistory.length < 2 ? 'Abort' : 'Resign'}
+                                            </button>
                                         </div>
                                     </div>
                                 )}
@@ -2897,8 +2931,10 @@ const App: React.FC = () => {
                                         )}
                                     </div>
                                 )}
-                                {(gameMode === 'local' || gameMode === 'analysis') && (<button onClick={handleUndo} disabled={history.length <= 1} className="w-full mt-4 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-semibold transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed text-sm">Undo Move</button>)}
-                                {status === 'playing' && (<button onClick={handleResign} className="w-full mt-4 px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg font-semibold transition-colors text-sm">Resign</button>)}
+                                {gameMode === 'local' && (<button onClick={handleUndo} disabled={history.length <= 1} className="w-full mt-4 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-semibold transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed text-sm">Undo Move</button>)}
+                                {status === 'playing' && (<button onClick={handleResign} className="w-full mt-4 px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg font-semibold transition-colors text-sm">
+                                    {moveHistory.length < 2 ? 'Abort' : 'Resign'}
+                                </button>)}
                                 <button onClick={handleBackToMenu} className="w-full mt-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-semibold transition-colors text-sm">
                                     {gameMode === 'online_playing' ? 'Back to Lobby' : 'Back to Menu'}
                                 </button>
@@ -3309,13 +3345,15 @@ const App: React.FC = () => {
                         showConfirmation === 'draw' ? 'Offer Draw?' :
                             showConfirmation === 'move' ? 'Confirm Move' :
                                 showConfirmation === 'premove' ? 'Confirm Premove' :
-                                    'Resign Game?'
+                                    (moveHistory.length < 2 ? 'Abort Game?' : 'Resign Game?')
                     }
                     message={
                         showConfirmation === 'draw' ? "Are you sure you want to offer a draw to your opponent?" :
                             showConfirmation === 'move' ? `Are you sure you want to submit this move${moveNotation ? ': ' + moveNotation : ''}? (Correspondence Game)` :
                                 showConfirmation === 'premove' ? `Are you sure you want to premove${moveNotation ? ': ' + moveNotation : ''}?` :
-                                    "Are you sure you want to resign? This action cannot be undone."
+                                    (moveHistory.length < 2
+                                        ? "Are you sure you want to abort? No rating will be lost."
+                                        : "Are you sure you want to resign? This action cannot be undone.")
                     }
                     onConfirm={showConfirmation === 'draw' ? confirmOfferDraw : (showConfirmation === 'move' || showConfirmation === 'premove') ? confirmMove : confirmResign}
                     onCancel={() => {
@@ -3330,7 +3368,7 @@ const App: React.FC = () => {
                         setShowConfirmation(null);
                         setPendingMove(null);
                     }}
-                    confirmText={showConfirmation === 'draw' ? 'Offer Draw' : (showConfirmation === 'move' || showConfirmation === 'premove') ? 'Submit' : 'Resign'}
+                    confirmText={showConfirmation === 'draw' ? 'Offer Draw' : (showConfirmation === 'move' || showConfirmation === 'premove') ? 'Submit' : (moveHistory.length < 2 ? 'Abort' : 'Resign')}
                     cancelText="Cancel"
                 />
             )}

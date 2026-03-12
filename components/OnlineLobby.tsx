@@ -120,9 +120,13 @@ const PlayerGameHistoryModal: React.FC<{
     userId: string;
     onClose: () => void;
     onReview: (game: GameState) => void;
-}> = ({ userId, onClose, onReview }) => {
+    onAnalyse: (game: GameState) => void;
+}> = ({ userId, onClose, onReview, onAnalyse }) => {
     const [games, setGames] = useState<{ id: string, data: GameState }[]>([]);
     const [loading, setLoading] = useState(true);
+    const [historyFilters, setHistoryFilters] = useState<Record<string, boolean>>({
+        hyperbullet: true, bullet: true, blitz: true, rapid: true, daily: true, unlimited: true
+    });
 
     useEffect(() => {
         const fetchGames = async () => {
@@ -159,25 +163,59 @@ const PlayerGameHistoryModal: React.FC<{
         fetchGames();
     }, [userId]);
 
+    const toggleFilter = (cat: string) => {
+        setHistoryFilters(prev => ({ ...prev, [cat]: !prev[cat] }));
+    };
+
+    const filteredGames = useMemo(() => {
+        return games.filter(game => {
+            const cat = (game.data.ratingCategory || 'blitz').toLowerCase();
+            return historyFilters[cat] !== false;
+        }).sort((a, b) => {
+            const aIsRealtime = a.data.timerSettings && 'initialTime' in a.data.timerSettings;
+            const bIsRealtime = b.data.timerSettings && 'initialTime' in b.data.timerSettings;
+            if (aIsRealtime && !bIsRealtime) return -1;
+            if (!aIsRealtime && bIsRealtime) return 1;
+            return (b.data.completedAt || 0) - (a.data.completedAt || 0);
+        });
+    }, [games, historyFilters]);
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4">
             <div className="bg-gray-800 p-6 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] border border-gray-700">
-                <div className="flex justify-between items-center mb-6">
+                <div className="flex justify-between items-center mb-4">
                     <h3 className="text-2xl font-bold text-blue-400">Match History</h3>
                     <button onClick={onClose} className="text-3xl text-gray-400 hover:text-white transition-colors">&times;</button>
+                </div>
+
+                {/* History Filter Buttons */}
+                <div className="flex flex-wrap gap-2 justify-center bg-gray-900/50 p-3 rounded-lg border border-gray-700 mb-4">
+                    <span className="text-xs text-gray-400 w-full text-center mb-1 font-medium italic">Filter by time control:</span>
+                    {['hyperbullet', 'bullet', 'blitz', 'rapid', 'daily', 'unlimited'].map((cat) => (
+                        <button
+                            key={cat}
+                            onClick={() => toggleFilter(cat)}
+                            className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all duration-200 ${historyFilters[cat]
+                                ? 'bg-indigo-600 text-white border border-indigo-400'
+                                : 'bg-gray-800 text-gray-500 border border-gray-700 hover:border-gray-500'
+                                }`}
+                        >
+                            {cat.toUpperCase()}
+                        </button>
+                    ))}
                 </div>
 
                 {loading ? (
                     <div className="flex-grow flex items-center justify-center py-12">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400"></div>
                     </div>
-                ) : games.length === 0 ? (
+                ) : filteredGames.length === 0 ? (
                     <div className="flex-grow flex items-center justify-center py-12 text-gray-500 italic">
-                        No finished games found for this player.
+                        No games found with these filters.
                     </div>
                 ) : (
                     <div className="overflow-y-auto pr-2 space-y-3">
-                        {games.map(game => {
+                        {filteredGames.map(game => {
                             const whitePlayer = game.data.players && game.data.playerColors?.white ? game.data.players[game.data.playerColors.white] : null;
                             const blackPlayer = game.data.players && game.data.playerColors?.black ? game.data.players[game.data.playerColors.black] : null;
 
@@ -193,16 +231,27 @@ const PlayerGameHistoryModal: React.FC<{
                                             {game.data.ratingCategory || 'Casual'} • {game.data.isRated ? 'Rated' : 'Unrated'} • {game.data.completedAt ? new Date(game.data.completedAt).toLocaleDateString() : 'Unknown Date'}
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-2">
                                         <span className="text-lg font-bold text-yellow-500">
                                             {game.data.winner ? (game.data.winner === 'White' ? '1-0' : '0-1') : '½-½'}
                                         </span>
-                                        <button
-                                            onClick={() => onReview(game.data)}
-                                            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-bold transition-colors"
-                                        >
-                                            Review
-                                        </button>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => onReview(game.data)}
+                                                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-bold transition-colors"
+                                            >
+                                                Review
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    onAnalyse(game.data);
+                                                    onClose();
+                                                }}
+                                                className="px-4 py-1.5 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-bold transition-colors"
+                                            >
+                                                Analyse
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -417,7 +466,13 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                         }
                     });
                 }
-                setOpenGames(gamesList.sort((a, b) => (b.creatorRatings[b.ratingCategory] ?? 1200) - (a.creatorRatings[a.ratingCategory] ?? 1200)));
+                setOpenGames(gamesList.sort((a, b) => {
+                    const aIsRealtime = a.timerSettings && 'initialTime' in a.timerSettings;
+                    const bIsRealtime = b.timerSettings && 'initialTime' in b.timerSettings;
+                    if (aIsRealtime && !bIsRealtime) return -1;
+                    if (!aIsRealtime && bIsRealtime) return 1;
+                    return (b.creatorRatings[b.ratingCategory] ?? 1200) - (a.creatorRatings[a.ratingCategory] ?? 1200);
+                }));
             }
 
             if (currentLobbyTab === 'live') {
@@ -447,7 +502,13 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                         }
                     });
                 }
-                setLiveGames(liveList);
+                setLiveGames(liveList.sort((a, b) => {
+                    const aIsRealtime = a.timerSettings && 'initialTime' in a.timerSettings;
+                    const bIsRealtime = b.timerSettings && 'initialTime' in b.timerSettings;
+                    if (aIsRealtime && !bIsRealtime) return -1;
+                    if (!aIsRealtime && bIsRealtime) return 1;
+                    return 0;
+                }));
             }
             setIsLobbyLoading(false);
         };
@@ -539,7 +600,21 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
             }
         });
 
-        finishedGames.sort((a, b) => (b.data.completedAt || 0) - (a.data.completedAt || 0));
+        finishedGames.sort((a, b) => {
+            const aIsRealtime = a.data.timerSettings && 'initialTime' in a.data.timerSettings;
+            const bIsRealtime = b.data.timerSettings && 'initialTime' in b.data.timerSettings;
+            if (aIsRealtime && !bIsRealtime) return -1;
+            if (!aIsRealtime && bIsRealtime) return 1;
+            return (b.data.completedAt || 0) - (a.data.completedAt || 0);
+        });
+
+        currentGames.sort((a, b) => {
+            const aIsRealtime = a.timerSettings && 'initialTime' in a.timerSettings;
+            const bIsRealtime = b.timerSettings && 'initialTime' in b.timerSettings;
+            if (aIsRealtime && !bIsRealtime) return -1;
+            if (!aIsRealtime && bIsRealtime) return 1;
+            return 0;
+        });
 
         setMyCurrentGames(currentGames);
         setMyFinishedGames(finishedGames);
@@ -895,11 +970,24 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
 
     const filteredLiveGames = useMemo(() => {
         return liveGames.filter(game => {
-            const cat = game.ratingCategory.toLowerCase();
-            // Als de categorie in onze filters staat, check of hij op 'true' staat
+            const cat = (game.ratingCategory || 'blitz').toLowerCase();
             return filters[cat] !== false;
         });
     }, [liveGames, filters]);
+
+    const filteredMyCurrentGames = useMemo(() => {
+        return myCurrentGames.filter(game => {
+            const cat = (game.ratingCategory || 'blitz').toLowerCase();
+            return filters[cat] !== false;
+        });
+    }, [myCurrentGames, filters]);
+
+    const filteredMyFinishedGames = useMemo(() => {
+        return myFinishedGames.filter(game => {
+            const cat = (game.data.ratingCategory || 'blitz').toLowerCase();
+            return filters[cat] !== false;
+        });
+    }, [myFinishedGames, filters]);
 
     const filteredUsers = useMemo(() => {
         if (!searchText) return allUsers.filter(u => u.uid !== userUid);
@@ -973,29 +1061,6 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                     <MenuButton view="live" label="Live Games" count={liveGames.length} />
                 </div>
 
-                {currentLobbyTab === 'live' && (
-                    <div className="w-full max-w-3xl p-4 border border-gray-600 rounded-lg flex flex-col">
-                        <h3 className="text-xl font-semibold text-center mb-4">Live Spectator Arena</h3>
-                        {liveGames.length === 0 ? <p className="text-gray-400 text-center">No games currently in progress.</p> : null}
-                        <div className="flex-grow overflow-y-auto max-h-96 space-y-2 pr-2">
-                            {liveGames.map(game => (
-                                <div key={game.gameId} className="bg-gray-700 p-3 rounded-lg flex justify-between items-center">
-                                    <div>
-                                        {/* We hebben de spelersnamen in creatorName gestopt in de stap hierboven */}
-                                        <p className="font-semibold truncate text-yellow-100">{game.creatorName}</p>
-                                        <p className="text-sm text-gray-400">{renderTimerSetting(game.timerSettings)}, {game.isRated ? 'Rated' : 'Unrated'}</p>
-                                    </div>
-                                    <button
-                                        onClick={() => onSpectate(game.gameId)}
-                                        className="px-4 py-1 bg-teal-600 hover:bg-teal-700 rounded font-semibold transition-colors flex items-center gap-2"
-                                    >
-                                        <span>👁️</span> Watch
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
 
                 {currentLobbyTab === 'challenges' && (
                     <div className="w-full max-w-3xl flex flex-col gap-6">
@@ -1005,7 +1070,13 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                                 <p className="text-gray-400 text-center">No incoming challenges.</p>
                             ) : (
                                 <div className="space-y-3">
-                                    {incomingChallenges.map(c => (
+                                    {[...incomingChallenges].sort((a, b) => {
+                                        const aIsRealtime = a.timerSettings && 'initialTime' in a.timerSettings;
+                                        const bIsRealtime = b.timerSettings && 'initialTime' in b.timerSettings;
+                                        if (aIsRealtime && !bIsRealtime) return -1;
+                                        if (!aIsRealtime && bIsRealtime) return 1;
+                                        return b.timestamp - a.timestamp;
+                                    }).map(c => (
                                         <div key={c.id} className="bg-indigo-900 border border-indigo-500 p-4 rounded-lg shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
                                             <div>
                                                 <p className="font-bold text-white text-lg">{c.fromName} ({c.fromRating})</p>
@@ -1031,7 +1102,13 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                                 <p className="text-gray-400 text-center">No active sent challenges.</p>
                             ) : (
                                 <div className="space-y-3">
-                                    {sentChallenges.map(c => (
+                                    {[...sentChallenges].sort((a, b) => {
+                                        const aIsRealtime = a.timerSettings && 'initialTime' in a.timerSettings;
+                                        const bIsRealtime = b.timerSettings && 'initialTime' in b.timerSettings;
+                                        if (aIsRealtime && !bIsRealtime) return -1;
+                                        if (!aIsRealtime && bIsRealtime) return 1;
+                                        return b.timestamp - a.timestamp;
+                                    }).map(c => (
                                         <div key={c.id} className="bg-gray-700 p-3 rounded-lg flex justify-between items-center">
                                             <div>
                                                 <p className="font-semibold text-gray-300">To: <span className="text-white">{c.targetName}</span></p>
@@ -1121,10 +1198,28 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                 )}
 
                 {currentLobbyTab === 'current_games' && (
-                    <div className="w-full max-w-3xl p-4 border border-gray-600 rounded-lg flex flex-col">
-                        <h3 className="text-xl font-semibold text-center mb-4">My Active Games</h3>
-                        {myCurrentGames.length === 0 ? <p className="text-gray-400 text-center">No active games.</p> : null}
-                        <div className="flex-grow overflow-y-auto max-h-96 space-y-2 pr-2">{myCurrentGames.map(game => (
+                    <div className="w-full max-w-3xl p-4 border border-gray-600 rounded-lg flex flex-col gap-4">
+                        <h3 className="text-xl font-semibold text-center mb-0">My Active Games</h3>
+
+                        {/* Filter Buttons */}
+                        <div className="flex flex-wrap gap-2 justify-center bg-gray-800/50 p-3 rounded-lg border border-gray-700">
+                            <span className="text-sm text-gray-400 w-full text-center mb-1 font-medium">Filter by time control:</span>
+                            {['hyperbullet', 'bullet', 'blitz', 'rapid', 'daily', 'unlimited'].map((cat) => (
+                                <button
+                                    key={cat}
+                                    onClick={() => toggleFilter(cat)}
+                                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all duration-200 ${filters[cat]
+                                        ? 'bg-teal-600 text-white shadow-[0_0_10px_rgba(20,184,166,0.4)] border border-teal-400'
+                                        : 'bg-gray-800 text-gray-500 border border-gray-700 hover:border-gray-500'
+                                        }`}
+                                >
+                                    {cat.toUpperCase()}
+                                </button>
+                            ))}
+                        </div>
+
+                        {filteredMyCurrentGames.length === 0 ? <p className="text-gray-400 text-center py-4">No active games found with these filters.</p> : null}
+                        <div className="flex-grow overflow-y-auto max-h-96 space-y-2 pr-2">{filteredMyCurrentGames.map(game => (
                             <div key={game.gameId} className={`p-3 rounded-lg flex justify-between items-center ${game.status === 'playing' && game.isMyTurn ? 'bg-green-800' : 'bg-gray-700'}`}>
                                 {game.status === 'waiting' ? (
                                     <>
@@ -1134,8 +1229,10 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                                             </p>
                                             <p className="text-sm text-gray-300">{renderTimerSetting(game.timerSettings)} ({game.ratingCategory}, {game.isRated ? 'Rated' : 'Unrated'})</p>
                                         </div>
-                                        <p className="font-bold text-gray-400 flex items-center gap-2"><div className="w-2 h-2 bg-yellow-500 rounded-full animate-ping"></div> Waiting...</p>
-                                        <button onClick={() => handleCancelGame(game)} className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded font-semibold transition-colors shadow-sm">Cancel</button>
+                                        <div className="flex flex-col items-center gap-1">
+                                            <p className="font-bold text-gray-400 flex items-center gap-2 text-xs"><div className="w-2 h-2 bg-yellow-500 rounded-full animate-ping"></div> Waiting...</p>
+                                            <button onClick={() => handleCancelGame(game)} className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-xs font-semibold transition-colors shadow-sm">Cancel</button>
+                                        </div>
                                     </>
                                 ) : (
                                     <>
@@ -1143,11 +1240,13 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                                             <p className="font-semibold truncate">vs {game.opponent?.displayName} ({game.opponent?.ratings?.[game.ratingCategory] ?? '...'})</p>
                                             <p className="text-sm text-gray-300">{renderTimerSetting(game.timerSettings)} ({game.ratingCategory}, {game.isRated ? 'Rated' : 'Unrated'})</p>
                                         </div>
-                                        <div className="text-right">
-                                            <p className={`font-bold ${game.isMyTurn ? 'text-yellow-300 animate-pulse' : 'text-gray-400'}`}>{game.isMyTurn ? "Your Turn" : "Opponent's Turn"}</p>
-                                            <p className="font-mono text-sm">{getDisplayTime(game)}</p>
+                                        <div className="text-right flex items-center gap-4">
+                                            <div>
+                                                <p className={`font-bold text-xs ${game.isMyTurn ? 'text-yellow-300 animate-pulse' : 'text-gray-400'}`}>{game.isMyTurn ? "Your Turn" : "Opponent's Turn"}</p>
+                                                <p className="font-mono text-xs">{getDisplayTime(game)}</p>
+                                            </div>
+                                            <button onClick={() => onGameStart(game.gameId, game.myColor)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded font-semibold transition-colors shadow-sm">Play</button>
                                         </div>
-                                        <button onClick={() => onGameStart(game.gameId, game.myColor)} className="px-4 py-2 ml-4 bg-blue-600 hover:bg-blue-700 rounded font-semibold transition-colors shadow-sm">Play</button>
                                     </>
                                 )}
                             </div>))}
@@ -1155,10 +1254,28 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                     </div>
                 )}
                 {currentLobbyTab === 'finished_games' && (
-                    <div className="w-full max-w-3xl p-4 border border-gray-600 rounded-lg flex flex-col">
-                        <h3 className="text-xl font-semibold text-center mb-4">Game History</h3>
-                        {myFinishedGames.length === 0 ? <p className="text-gray-400 text-center">No completed games.</p> : null}
-                        <div className="flex-grow overflow-y-auto max-h-96 space-y-2 pr-2">{myFinishedGames.map(({ id, data }) => {
+                    <div className="w-full max-w-3xl p-4 border border-gray-600 rounded-lg flex flex-col gap-4">
+                        <h3 className="text-xl font-semibold text-center mb-0">Game History</h3>
+                        
+                        {/* History Filter Buttons */}
+                        <div className="flex flex-wrap gap-2 justify-center bg-gray-800/50 p-3 rounded-lg border border-gray-700">
+                            <span className="text-sm text-gray-400 w-full text-center mb-1 font-medium">Filter by time control:</span>
+                            {['hyperbullet', 'bullet', 'blitz', 'rapid', 'daily', 'unlimited'].map((cat) => (
+                                <button
+                                    key={cat}
+                                    onClick={() => toggleFilter(cat)}
+                                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all duration-200 ${filters[cat]
+                                        ? 'bg-teal-600 text-white shadow-[0_0_10px_rgba(20,184,166,0.4)] border border-teal-400'
+                                        : 'bg-gray-800 text-gray-500 border border-gray-700 hover:border-gray-500'
+                                        }`}
+                                >
+                                    {cat.toUpperCase()}
+                                </button>
+                            ))}
+                        </div>
+
+                        {filteredMyFinishedGames.length === 0 ? <p className="text-gray-400 text-center py-4">No completed games found with these filters.</p> : null}
+                        <div className="flex-grow overflow-y-auto max-h-96 space-y-2 pr-2">{filteredMyFinishedGames.map(({ id, data }) => {
                             const myColor = data.playerColors.white === userUid ? Color.White : Color.Black;
                             const opponentColor = myColor === Color.White ? Color.Black : Color.White;
                             const opponentUid = data.playerColors[opponentColor];
@@ -1264,7 +1381,14 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                 <button onClick={onBack} className="mt-8 px-6 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-semibold transition-colors">Back to Menu</button>
             </div>
             {viewingPlayerRatings && <PlayerRatingsModal user={viewingPlayerRatings} onClose={() => setViewingPlayerRatings(null)} onViewHistory={(uid) => setViewingPlayerHistoryUid(uid)} />}
-            {viewingPlayerHistoryUid && <PlayerGameHistoryModal userId={viewingPlayerHistoryUid} onClose={() => setViewingPlayerHistoryUid(null)} onReview={onReview} />}
+            {viewingPlayerHistoryUid && (
+                <PlayerGameHistoryModal
+                    userId={viewingPlayerHistoryUid}
+                    onClose={() => setViewingPlayerHistoryUid(null)}
+                    onReview={onReview}
+                    onAnalyse={onAnalyse}
+                />
+            )}
             {challengeTarget && (
                 <ChallengeConfigModal
                     opponent={challengeTarget}

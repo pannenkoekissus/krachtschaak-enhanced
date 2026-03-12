@@ -75,7 +75,7 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
 
                 await auth.signOut();
 
-                setMessage("Account created! Please check your email for a verification link, then you can sign in.");
+                setMessage("Account created! Please check your inbox and spam folder for a verification link, then you can sign in.");
                 setAuthView('signIn');
 
             } else { // 'signIn'
@@ -99,7 +99,7 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
                     // Credentials were correct, but email is not verified.
                     await userCredential.user.sendEmailVerification();
                     await auth.signOut(); // Immediately sign them out.
-                    setError("Your email is not verified. A new verification link has been sent. Please verify your account and then sign in.");
+                    setError("Your email is not verified. A new verification link has been sent. Please verify your account and then sign in. Tip: check your spam folder.");
                 } else {
                     // Credentials correct and email is verified. Successful login.
                     const ratingSnapshot = await db.ref(`userRatings/${userCredential.user.uid}`).once('value');
@@ -111,7 +111,7 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
             if (authView === 'signIn') {
                 switch (err.code) {
                     case 'auth/too-many-requests':
-                        setError("Please refresh the page, wait a bit and try again. You likely need to verify your email");
+                        setError("Please refresh the page, wait a bit and try again. You likely need to verify your email. Tip: check your spam folder.");
                         break;
                     case 'auth/invalid-credential':
                     case 'auth/user-not-found':
@@ -148,7 +148,7 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
 
         try {
             await auth.sendPasswordResetEmail(email);
-            setMessage("Password reset link sent to your email. Please check your inbox (and spam folder).");
+            setMessage("Password reset link sent to your email. Please check your inbox and spam folder.");
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -289,7 +289,34 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
             </div>
             <div className="mb-6">
                 <label className="block mb-1 text-md font-medium text-gray-300">Password</label>
-                <input type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} className="w-full p-2 bg-gray-700 text-white rounded-lg border-2 border-gray-600 focus:outline-none focus:border-green-500" />
+                <div className="relative">
+                    <input
+                        type={isPasswordVisible ? 'text' : 'password'}
+                        value={password}
+                        onChange={e => { setPassword(e.target.value); clearState(); }}
+                        required
+                        minLength={6}
+                        className="w-full p-2 pr-10 bg-gray-700 text-white rounded-lg border-2 border-gray-600 focus:outline-none focus:border-green-500"
+                    />
+                    <button
+                        type="button"
+                        onClick={() => setIsPasswordVisible(!isPasswordVisible)}
+                        className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-white"
+                        aria-label={isPasswordVisible ? "Hide password" : "Show password"}
+                    >
+                        {isPasswordVisible ? (
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.02 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                            </svg>
+                        ) : (
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
+                                <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.742L2.303 3.546A10.048 10.048 0 00.458 10c1.274 4.057 5.02 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
+                            </svg>
+                        )}
+                    </button>
+                </div>
             </div>
             <button type="submit" disabled={isLoading} className="w-full py-3 bg-purple-600 hover:bg-purple-700 rounded-lg text-lg font-semibold transition-colors disabled:bg-gray-500">
                 {isLoading ? 'Creating Account...' : 'Sign Up'}
