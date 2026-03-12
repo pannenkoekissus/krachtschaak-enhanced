@@ -223,7 +223,7 @@ const GameReview: React.FC<GameReviewProps> = ({ game, onBack, onAnalyze }) => {
     return (
         <div className="min-h-screen flex flex-col md:flex-row items-center md:items-start justify-center p-4 gap-8">
             <div className="w-full max-w-lg md:max-w-md lg:max-w-lg xl:max-w-2xl relative flex flex-col gap-4">
-                <div className="bg-gray-800 p-2 h-24 flex rounded justify-center gap-4">
+                <div className="bg-gray-800 p-2 h-24 md:h-auto flex rounded justify-center gap-4">
                     <button onClick={() => changeIndex(-1)} disabled={currentMoveIndex === -1} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50">&lt;&lt;</button>
                     <button onClick={() => handleStep(-1)} disabled={currentMoveIndex === -1} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50">&lt;</button>
                     <span className="py-2 font-mono w-100 text-center text-lg font-bold">
