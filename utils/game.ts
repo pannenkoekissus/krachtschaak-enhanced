@@ -355,14 +355,18 @@ export const isAmbiguousMove = (board: BoardState, from: Position, to: Position,
 };
 
 export const findKingPosition = (board: BoardState, color: Color): Position | null => {
+    // Priority 1: Piece with isKing = true
     for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
-            const piece = board[r][c];
-            if (piece && piece.color === color) {
-                if (piece.isKing || piece.originalType === PieceType.King || piece.type === PieceType.King) {
-                    return { row: r, col: c };
-                }
-            }
+            const p = board[r][c];
+            if (p && p.color === color && p.isKing) return { row: r, col: c };
+        }
+    }
+    // Priority 2: Piece with originalType = King (fallback)
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const p = board[r][c];
+            if (p && p.color === color && p.originalType === PieceType.King) return { row: r, col: c };
         }
     }
     return null;

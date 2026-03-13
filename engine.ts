@@ -21,7 +21,7 @@ const POWER_INDICES: Record<string, number> = {
     [PieceType.King]: 6
 };
 
-const NUM_ZOBRIST_KEYS = 2 * 6 * 7 * 64;
+const NUM_ZOBRIST_KEYS = 2 * 6 * 7 * 6 * 64; // color * type * power * originalType * squares
 const ZOBRIST_KEYS = new BigInt64Array(NUM_ZOBRIST_KEYS);
 const ZOBRIST_CASTLING = new BigInt64Array(16);
 const ZOBRIST_EP = new BigInt64Array(8);
@@ -37,11 +37,13 @@ for (let i = 0; i < NUM_ZOBRIST_KEYS; i++) ZOBRIST_KEYS[i] = generateRandomBigIn
 for (let i = 0; i < 16; i++) ZOBRIST_CASTLING[i] = generateRandomBigInt();
 for (let i = 0; i < 8; i++) ZOBRIST_EP[i] = generateRandomBigInt();
 
-function getZobristKey(color: Color, type: PieceType, power: PieceType | null, squareIndex: number): bigint {
+function getZobristKey(color: Color, type: PieceType, power: PieceType | null, originalType: PieceType, squareIndex: number): bigint {
     const c = color === Color.White ? 0 : 1;
     const t = PIECE_INDICES[type];
     const p = power ? POWER_INDICES[power] : 0;
-    const index = (((c * 6 + t) * 7) + p) * 64 + squareIndex;
+    const o = PIECE_INDICES[originalType];
+    // Index: (((c * 6 + t) * 7) + p) * 6 + o) * 64 + squareIndex
+    const index = (((((c * 6 + t) * 7) + p) * 6) + o) * 64 + squareIndex;
     return ZOBRIST_KEYS[index];
 }
 
@@ -140,7 +142,7 @@ export class MutableBoard {
             for (let c = 0; c < 8; c++) {
                 const p = this.board[r][c];
                 if (p) {
-                    h ^= getZobristKey(p.color, p.type, p.power, r * 8 + c);
+                    h ^= getZobristKey(p.color, p.type, p.power, p.originalType, r * 8 + c);
                 }
             }
         }
@@ -204,7 +206,7 @@ export class MutableBoard {
         const oldCastlingBits = this.getCastlingBits();
 
         // 1. Remove piece from source
-        this.hash ^= getZobristKey(piece.color, piece.type, piece.power, fromRow * 8 + fromCol);
+        this.hash ^= getZobristKey(piece.color, piece.type, piece.power, piece.originalType, fromRow * 8 + fromCol);
         this.board[fromRow][fromCol] = null;
 
         // 2. Handle Capture
@@ -213,7 +215,7 @@ export class MutableBoard {
 
         if (targetSquare) {
             // Capture: Remove target from hash and score
-            this.hash ^= getZobristKey(targetSquare.color, targetSquare.type, targetSquare.power, toRow * 8 + toCol);
+            this.hash ^= getZobristKey(targetSquare.color, targetSquare.type, targetSquare.power, targetSquare.originalType, toRow * 8 + toCol);
             const val = getPieceValue(targetSquare.type, targetSquare.power);
             this.currentScore -= (targetSquare.color === Color.White ? val : -val);
         } else if (move.piece === PieceType.Pawn && move.to.col !== move.from.col && !targetSquare) {
@@ -222,7 +224,7 @@ export class MutableBoard {
             const epC = toCol;
             actualCaptured = this.board[epR][epC];
             if (actualCaptured) {
-                this.hash ^= getZobristKey(actualCaptured.color, actualCaptured.type, actualCaptured.power, epR * 8 + epC);
+                this.hash ^= getZobristKey(actualCaptured.color, actualCaptured.type, actualCaptured.power, actualCaptured.originalType, epR * 8 + epC);
                 this.board[epR][epC] = null;
                 epCapturedPos = { row: epR, col: epC };
 
@@ -260,25 +262,27 @@ export class MutableBoard {
 
         // 4. Place at dest
         this.board[toRow][toCol] = newPiece;
-        this.hash ^= getZobristKey(newPiece.color, newPiece.type, newPiece.power, toRow * 8 + toCol);
+        this.hash ^= getZobristKey(newPiece.color, newPiece.type, newPiece.power, newPiece.originalType, toRow * 8 + toCol);
 
         // 5. Castling (Move Rook)
         let rookMove = null;
-        if (move.piece === PieceType.King && Math.abs(fromCol - toCol) === 2) {
+        const isBackRank = fromRow === 0 || fromRow === 7;
+        if (move.piece === PieceType.King && Math.abs(fromCol - toCol) === 2 && isBackRank) {
             const isKingside = toCol > fromCol;
             const rFromCol = isKingside ? 7 : 0;
             const rToCol = isKingside ? 5 : 3;
             const rook = this.board[fromRow][rFromCol];
-            if (rook) {
-                this.hash ^= getZobristKey(rook.color, rook.type, rook.power, fromRow * 8 + rFromCol);
+            if (rook && rook.type === PieceType.Rook && rook.color === piece.color) {
+                const oldRookHasMoved = rook.hasMoved;
+                this.hash ^= getZobristKey(rook.color, rook.type, rook.power, rook.originalType, fromRow * 8 + rFromCol);
                 this.board[fromRow][rFromCol] = null;
 
                 const newRook: Piece = { ...rook, hasMoved: true };
 
                 this.board[fromRow][rToCol] = newRook;
-                this.hash ^= getZobristKey(newRook.color, newRook.type, newRook.power, fromRow * 8 + rToCol);
+                this.hash ^= getZobristKey(newRook.color, newRook.type, newRook.power, newRook.originalType, fromRow * 8 + rToCol);
 
-                rookMove = { from: { r: fromRow, c: rFromCol }, to: { r: fromRow, c: rToCol }, piece: newRook };
+                rookMove = { from: { r: fromRow, c: rFromCol }, to: { r: fromRow, c: rToCol }, piece: newRook, oldHasMoved: oldRookHasMoved };
             }
         }
 
@@ -352,7 +356,7 @@ export class MutableBoard {
             if (rook) {
                 this.board[rookMove.from.r][rookMove.from.c] = rook;
                 this.board[rookMove.to.r][rookMove.to.c] = null;
-                rook.hasMoved = false;
+                rook.hasMoved = rookMove.oldHasMoved;
             }
         }
     }
@@ -384,6 +388,7 @@ export default class KrachtschaakAI {
         let bestResults: any[] = [];
 
         TT.clear(); // Always clear TT at the start of a new analysis
+        KILLER_MOVES.clear();
         this.nodesVisited = 0;
         const startTime = Date.now();
 
@@ -623,106 +628,56 @@ export default class KrachtschaakAI {
         const board = mutableBoard.board;
         const color = mutableBoard.turn;
         const legalMoves: Move[] = [];
-        const enPassant = mutableBoard.enPassantTarget;
+        const ep = mutableBoard.enPassantTarget;
 
         for (let r = 0; r < 8; r++) {
             for (let c = 0; c < 8; c++) {
-                const piece = board[r][c];
-                if (piece && piece.color === color) {
-                    const pos = { row: r, col: c };
+                const p = board[r][c];
+                if (!p || p.color !== color) continue;
 
-                    var targets = getMovesForPieceType(board, pos, piece.type, enPassant, false);
+                const pos = { row: r, col: c };
+                // getValidMoves with allowSelfCheck = true (pseudo-legal)
+                const targets = getValidMoves(board, pos, ep, true);
 
-                    if (piece.power) {
-                        const powerTargets = getMovesForPieceType(board, pos, piece.power, enPassant, false);
-                        targets.push(...powerTargets);
+                for (const target of targets) {
+                    const targetPiece = board[target.row][target.col];
+                    if (targetPiece && targetPiece.color === color) continue;
+
+                    const isPower = isPowerMove(board, pos, target, ep);
+                    const captured = targetPiece ? targetPiece.type : undefined;
+
+                    // Power acquisition: gains originalType of captured piece (except King)
+                    let capForPower = targetPiece;
+                    if (!targetPiece && (p.type === PieceType.Pawn || p.power === PieceType.Pawn) && ep && target.row === ep.row && target.col === ep.col) {
+                        capForPower = board[pos.row][target.col];
                     }
-                    targets = getValidMoves(mutableBoard.board, pos, null, false);
-                    const uniqueTargets = new Set();
-                    const distinctTargets = [];
-                    for (const t of targets) {
-                        const k = `${t.row}, ${t.col}`;
-                        if (!uniqueTargets.has(k)) {
-                            uniqueTargets.add(k);
-                            distinctTargets.push(t);
-                        }
-                    }
 
-                    for (const target of distinctTargets) {
-                        const targetPiece = board[target.row][target.col];
-                        if (targetPiece && targetPiece.color === color) continue;
+                    const acqPower = (capForPower && capForPower.originalType !== PieceType.King) ? capForPower.originalType : null;
+                    const finalAfterPower = acqPower !== null ? acqPower : (isPower ? null : p.power);
 
-                        const captured = targetPiece ? targetPiece.type : undefined;
-                        const isPower = isPowerMove(board, pos, target, enPassant);
+                    const promRank = color === Color.White ? 0 : 7;
+                    const isProm = (p.type === PieceType.Pawn || p.power === PieceType.Pawn) && target.row === promRank;
 
-                        const isEnPassantCapture = (piece.type === PieceType.Pawn || piece.power === PieceType.Pawn) && enPassant && target.row === enPassant.row && target.col === enPassant.col && !targetPiece;
-                        let actualCapturedPiece = targetPiece;
-                        if (isEnPassantCapture) {
-                            actualCapturedPiece = board[pos.row][target.col];
-                        }
-
-                        let acquiredPower: PieceType | null = null;
-                        if (actualCapturedPiece && actualCapturedPiece.originalType !== PieceType.King && actualCapturedPiece.type !== PieceType.King) {
-                            acquiredPower = actualCapturedPiece.originalType;
-                        }
-
-                        const baseAfterPower = acquiredPower ? acquiredPower : (isPower ? null : piece.power);
-
-                        const promotionRank = color === Color.White ? 0 : 7;
-                        const hasPawnAbility = piece.type === PieceType.Pawn || piece.power === PieceType.Pawn;
-                        const isCapturingPawnOnPromotionRank = actualCapturedPiece && actualCapturedPiece.originalType === PieceType.Pawn && target.row === promotionRank;
-                        if ((hasPawnAbility && target.row === promotionRank) || isCapturingPawnOnPromotionRank) {
-                            const promotionTypes = [PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight];
-
-                            let promAfterPower: PieceType | null = null;
-                            if (isEnPassantCapture && actualCapturedPiece) {
-                                promAfterPower = null;
-                            } else if (actualCapturedPiece) {
-                                promAfterPower = actualCapturedPiece.originalType === PieceType.Pawn ? null : actualCapturedPiece.originalType;
-                            } else {
-                                if (piece.originalType === PieceType.Pawn && !isPower) {
-                                    promAfterPower = piece.power === PieceType.Pawn ? null : piece.power;
-                                } else {
-                                    promAfterPower = null;
-                                }
-                            }
-
-                            for (const promType of promotionTypes) {
-                                const move: Move = {
-                                    from: pos,
-                                    to: target,
-                                    piece: piece.type,
-                                    color: piece.color,
-                                    captured,
-                                    isForcePower: isPower,
-                                    promotion: promType,
-                                    afterPower: promAfterPower,
-                                    notation: getNotation(board, pos, target, piece, targetPiece || null, promType, isPower)
-                                };
-                                const undo = mutableBoard.makeMove(move);
-                                if (!isKingInCheck(mutableBoard.board, color)) {
-                                    legalMoves.push(move);
-                                }
-                                mutableBoard.unmakeMove(undo);
-                            }
-                        } else {
-                            const move: Move = {
-                                from: pos,
-                                to: target,
-                                piece: piece.type,
-                                color: piece.color,
-                                captured,
-                                isForcePower: isPower,
-                                afterPower: baseAfterPower,
-                                notation: getNotation(board, pos, target, piece, targetPiece || null, null, isPower)
+                    if (isProm) {
+                        for (const promType of [PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight]) {
+                            const m: Move = {
+                                from: pos, to: target, piece: p.type, color: p.color,
+                                captured, isForcePower: isPower, promotion: promType, afterPower: finalAfterPower,
+                                notation: getNotation(board, pos, target, p, targetPiece, promType, isPower)
                             };
-
-                            const undo = mutableBoard.makeMove(move);
-                            if (!isKingInCheck(mutableBoard.board, color)) {
-                                legalMoves.push(move);
-                            }
+                            const undo = mutableBoard.makeMove(m);
+                            if (!isKingInCheck(mutableBoard.board, color)) legalMoves.push(m);
                             mutableBoard.unmakeMove(undo);
                         }
+                    } else {
+                        const m: Move = {
+                            from: pos, to: target, piece: p.type, color: p.color,
+                            captured, isForcePower: isPower, afterPower: finalAfterPower,
+                            notation: getNotation(board, pos, target, p, targetPiece, null, isPower)
+                        };
+                        const undo = mutableBoard.makeMove(m);
+                        if (!isKingInCheck(mutableBoard.board, color)) legalMoves.push(m);
+                        mutableBoard.unmakeMove(undo);
                     }
                 }
             }
