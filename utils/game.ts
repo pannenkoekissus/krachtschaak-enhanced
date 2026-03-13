@@ -162,11 +162,17 @@ export const isSquareAttacked = (board: BoardState, position: Position, attacker
         for (let c = 0; c < 8; c++) {
             const piece = board[r][c];
             if (piece && piece.color === attackerColor) {
-                const potentialAttacks = getMovesForPieceType(board, { row: r, col: c }, piece.type, null, true)
-                    .concat(piece.power ? getMovesForPieceType(board, { row: r, col: c }, piece.power, null, true) : []);
-
-                if (potentialAttacks.some(m => m.row === position.row && m.col === position.col)) {
-                    return true;
+                // Primary type attack
+                const moves = getMovesForPieceType(board, { row: r, col: c }, piece.type, null, true);
+                for (const move of moves) {
+                    if (move.row === position.row && move.col === position.col) return true;
+                }
+                // Power attack
+                if (piece.power) {
+                    const powerMoves = getMovesForPieceType(board, { row: r, col: c }, piece.power, null, true);
+                    for (const move of powerMoves) {
+                        if (move.row === position.row && move.col === position.col) return true;
+                    }
                 }
             }
         }
@@ -352,8 +358,10 @@ export const findKingPosition = (board: BoardState, color: Color): Position | nu
     for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
             const piece = board[r][c];
-            if (piece && piece.color === color && (piece.isKing || piece.originalType === PieceType.King)) {
-                return { row: r, col: c };
+            if (piece && piece.color === color) {
+                if (piece.isKing || piece.originalType === PieceType.King || piece.type === PieceType.King) {
+                    return { row: r, col: c };
+                }
             }
         }
     }

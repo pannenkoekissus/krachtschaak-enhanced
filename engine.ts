@@ -430,6 +430,8 @@ export default class KrachtschaakAI {
         const moves = KrachtschaakAI.getOrderedMoves(mutableBoard, depth, null);
         const results: { move: Move | null, score: number, pv: string[] }[] = [];
 
+        if (moves.length === 0) return [];
+
         for (const move of moves) {
             if (this.shouldStop) break;
 
@@ -483,13 +485,14 @@ export default class KrachtschaakAI {
             if (alpha >= beta) return score;
         }
 
-        const myKing = findKingPosition(mutableBoard.board, mutableBoard.turn);
-        if (!myKing) {
+        const kingPos = findKingPosition(mutableBoard.board, mutableBoard.turn);
+        if (!kingPos) {
+            // Missing king is a terminal loss
             return -20000 + ply;
         }
 
         // Null Move Pruning
-        if (allowNull && !inCheck && effectiveDepth >= 3 && Math.abs(beta) < 10000) {
+        if (allowNull && !inCheck && effectiveDepth >= 3 && Math.abs(beta) < 15000) {
             const staticEval = KrachtschaakAI.evaluate(mutableBoard);
             if (staticEval >= beta) {
                 const nextBoard = mutableBoard.clone();
@@ -509,7 +512,9 @@ export default class KrachtschaakAI {
             if (inCheck) {
                 return -20000 + ply;
             }
-            return 0; // Stalemate
+            // For Krachtschaak, stalemate with King on board usually means draw.
+            // But if the king is missing, it's already handled above.
+            return 0;
         }
 
         let bestScore = -Infinity;
@@ -626,13 +631,13 @@ export default class KrachtschaakAI {
                 if (piece && piece.color === color) {
                     const pos = { row: r, col: c };
 
-                    const targets = getMovesForPieceType(board, pos, piece.type, enPassant, false);
+                    var targets = getMovesForPieceType(board, pos, piece.type, enPassant, false);
 
                     if (piece.power) {
                         const powerTargets = getMovesForPieceType(board, pos, piece.power, enPassant, false);
                         targets.push(...powerTargets);
                     }
-
+                    targets = getValidMoves(mutableBoard.board, pos, null, false);
                     const uniqueTargets = new Set();
                     const distinctTargets = [];
                     for (const t of targets) {
