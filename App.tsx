@@ -748,9 +748,8 @@ const App: React.FC = () => {
                 // Auto-abort: skip rating if either player hasn't moved (less than 2 moves total)
                 if ((!finalState.moveHistory || finalState.moveHistory.length < 2)) {
                     console.log("Game auto-aborted or ended before both players moved. Skipping rating processing.");
-                    return;
-                }
-                const whiteUid = finalState.playerColors.white;
+                } else {
+                    const whiteUid = finalState.playerColors.white;
                 const blackUid = finalState.playerColors.black;
                 const category = finalState.ratingCategory;
 
@@ -795,6 +794,7 @@ const App: React.FC = () => {
                     updates[`games/${gameId}/ratingChange`] = calculatedRatingChange;
                     updates[`games/${gameId}/initialRatings`] = { white: whiteRating, black: blackRating }; // Ensure initial is set correctly if missing
                     gameRef.root.update(updates);
+                }
                 }
             }
 
