@@ -954,7 +954,10 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         const promotionRank = turn === Color.White ? 0 : 7;
         const hasPawnAbility = pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn;
         const isMovingToPromotionRank = to.row === promotionRank;
-        const isCapturingPawnOnPromotionRank = actualCapturedPiece && actualCapturedPiece?.originalType === PieceType.Pawn && isMovingToPromotionRank;
+        const isCapturingPawnOnPromotionRank = actualCapturedPiece && 
+            actualCapturedPiece.originalType === PieceType.Pawn && 
+            isMovingToPromotionRank && 
+            pieceToMove.originalType !== PieceType.Pawn;
 
         // Update power AFTER saving Pawn ability for promotion check
         let powerAfterMove = pieceToMove.power;

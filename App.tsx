@@ -771,51 +771,51 @@ const App: React.FC = () => {
                     console.log("Game auto-aborted or ended before both players moved. Skipping rating processing.");
                 } else {
                     const whiteUid = finalState.playerColors.white;
-                const blackUid = finalState.playerColors.black;
-                const category = finalState.ratingCategory;
+                    const blackUid = finalState.playerColors.black;
+                    const category = finalState.ratingCategory;
 
-                let whiteRating = 1200;
-                let blackRating = 1200;
+                    let whiteRating = 1200;
+                    let blackRating = 1200;
 
-                try {
-                    const whiteRatingSnap = await db.ref(`userRatings/${whiteUid}/ratings/${category}`).once('value');
-                    const blackRatingSnap = await db.ref(`userRatings/${blackUid}/ratings/${category}`).once('value');
+                    try {
+                        const whiteRatingSnap = await db.ref(`userRatings/${whiteUid}/ratings/${category}`).once('value');
+                        const blackRatingSnap = await db.ref(`userRatings/${blackUid}/ratings/${category}`).once('value');
 
-                    if (whiteRatingSnap.exists()) whiteRating = whiteRatingSnap.val();
-                    if (blackRatingSnap.exists()) blackRating = blackRatingSnap.val();
+                        if (whiteRatingSnap.exists()) whiteRating = whiteRatingSnap.val();
+                        if (blackRatingSnap.exists()) blackRating = blackRatingSnap.val();
 
-                } catch (e) {
-                    console.error("Error fetching final ratings", e);
-                    if (finalState.initialRatings) {
-                        whiteRating = finalState.initialRatings.white;
-                        blackRating = finalState.initialRatings.black;
+                    } catch (e) {
+                        console.error("Error fetching final ratings", e);
+                        if (finalState.initialRatings) {
+                            whiteRating = finalState.initialRatings.white;
+                            blackRating = finalState.initialRatings.black;
+                        }
                     }
-                }
 
-                let whiteScore = 0.5;
-                if (newWinner === 'White' || newWinner === 'white') whiteScore = 1;
-                if (newWinner === 'Black' || newWinner === 'black') whiteScore = 0;
-                const blackScore = 1 - whiteScore;
+                    let whiteScore = 0.5;
+                    if (newWinner === 'White' || newWinner === 'white') whiteScore = 1;
+                    if (newWinner === 'Black' || newWinner === 'black') whiteScore = 0;
+                    const blackScore = 1 - whiteScore;
 
-                const newWhiteRating = calculateElo(whiteRating, blackRating, whiteScore);
-                const newBlackRating = calculateElo(blackRating, whiteRating, blackScore);
+                    const newWhiteRating = calculateElo(whiteRating, blackRating, whiteScore);
+                    const newBlackRating = calculateElo(blackRating, whiteRating, blackScore);
 
-                const calculatedRatingChange = {
-                    white: newWhiteRating - whiteRating,
-                    black: newBlackRating - blackRating
-                };
+                    const calculatedRatingChange = {
+                        white: newWhiteRating - whiteRating,
+                        black: newBlackRating - blackRating
+                    };
 
-                // Update Ratings
-                const updates: any = {};
-                updates[`userRatings/${whiteUid}/ratings/${category}`] = newWhiteRating;
-                updates[`userRatings/${blackUid}/ratings/${category}`] = newBlackRating;
+                    // Update Ratings
+                    const updates: any = {};
+                    updates[`userRatings/${whiteUid}/ratings/${category}`] = newWhiteRating;
+                    updates[`userRatings/${blackUid}/ratings/${category}`] = newBlackRating;
 
-                // Update the game record with the change
-                if (gameRef) {
-                    updates[`games/${gameId}/ratingChange`] = calculatedRatingChange;
-                    updates[`games/${gameId}/initialRatings`] = { white: whiteRating, black: blackRating }; // Ensure initial is set correctly if missing
-                    gameRef.root.update(updates);
-                }
+                    // Update the game record with the change
+                    if (gameRef) {
+                        updates[`games/${gameId}/ratingChange`] = calculatedRatingChange;
+                        updates[`games/${gameId}/initialRatings`] = { white: whiteRating, black: blackRating }; // Ensure initial is set correctly if missing
+                        gameRef.root.update(updates);
+                    }
                 }
             }
 
@@ -1843,7 +1843,10 @@ const App: React.FC = () => {
         const promotionRank = turn === Color.White ? 0 : 7;
         const isMovingToPromotionRank = to.row === promotionRank;
         const hasPawnAbility = pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn;
-        const isCapturingPawnOnPromotionRank = wasCapture && actualCapturedPiece?.originalType === PieceType.Pawn && isMovingToPromotionRank;
+        const isCapturingPawnOnPromotionRank = wasCapture &&
+            actualCapturedPiece?.originalType === PieceType.Pawn &&
+            isMovingToPromotionRank &&
+            pieceToMove.originalType !== PieceType.Pawn;
 
         if ((isMovingToPromotionRank && hasPawnAbility) || isCapturingPawnOnPromotionRank) {
             let powerAfterPromotion: PieceType | null = null;
