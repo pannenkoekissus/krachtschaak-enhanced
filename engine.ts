@@ -662,7 +662,7 @@ export default class KrachtschaakAI {
 
                     const promRank = color === Color.White ? 0 : 7;
                     const isProm = ((p.type === PieceType.Pawn || p.power === PieceType.Pawn) && target.row === promRank) ||
-                        (capForPower && (capForPower.type === PieceType.Pawn || capForPower.power === PieceType.Pawn) && target.row === promRank && p.originalType !== PieceType.Pawn);
+                        (capForPower && capForPower.originalType === PieceType.Pawn && target.row === promRank && p.originalType !== PieceType.Pawn);
 
                     if (isProm) {
                         for (const promType of [PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight]) {
