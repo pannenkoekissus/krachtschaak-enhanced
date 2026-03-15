@@ -78,10 +78,15 @@ const COMBINATION_BONUSES: Record<PieceType, Partial<Record<PieceType, number>>>
     }
 };
 
-function getPieceValue(type: PieceType, power: PieceType | null): number {
-    let score = PIECE_VALUES[type];
-    if (power) {
-        score += COMBINATION_BONUSES[type]?.[power] || 0;
+function getPieceValue(piece: Piece): number {
+    const isKing = piece.isKing || piece.originalType === PieceType.King;
+    const baseType = isKing ? PieceType.King : piece.type;
+    let score = PIECE_VALUES[baseType];
+    if (piece.originalType === PieceType.King && piece.type !== PieceType.King) {
+        score += PIECE_VALUES[piece.type];
+    }
+    if (piece.power) {
+        score += COMBINATION_BONUSES[baseType]?.[piece.power] || 0;
     }
     return score;
 }
@@ -163,7 +168,7 @@ export class MutableBoard {
             for (let c = 0; c < 8; c++) {
                 const piece = this.board[r][c];
                 if (piece) {
-                    const val = getPieceValue(piece.type, piece.power);
+                    const val = getPieceValue(piece);
                     totalScore += (piece.color === Color.White ? val : -val);
                 }
             }
@@ -216,7 +221,7 @@ export class MutableBoard {
         if (targetSquare) {
             // Capture: Remove target from hash and score
             this.hash ^= getZobristKey(targetSquare.color, targetSquare.type, targetSquare.power, targetSquare.originalType, toRow * 8 + toCol);
-            const val = getPieceValue(targetSquare.type, targetSquare.power);
+            const val = getPieceValue(targetSquare);
             this.currentScore -= (targetSquare.color === Color.White ? val : -val);
         } else if (move.piece === PieceType.Pawn && move.to.col !== move.from.col && !targetSquare) {
             // En Passant
@@ -228,7 +233,7 @@ export class MutableBoard {
                 this.board[epR][epC] = null;
                 epCapturedPos = { row: epR, col: epC };
 
-                const val = getPieceValue(actualCaptured.type, actualCaptured.power);
+                const val = getPieceValue(actualCaptured);
                 this.currentScore -= (actualCaptured.color === Color.White ? val : -val);
             }
         }
@@ -240,7 +245,7 @@ export class MutableBoard {
         const oldHasMoved = piece.hasMoved;
 
         // Remove old piece value from score
-        const oldPieceVal = getPieceValue(oldType, oldPower);
+        const oldPieceVal = getPieceValue(piece);
         this.currentScore -= (piece.color === Color.White ? oldPieceVal : -oldPieceVal);
 
         // CREATE NEW PIECE OBJECT INSTEAD OF MODIFYING
@@ -257,7 +262,7 @@ export class MutableBoard {
         }
 
         // Add new piece value to score
-        const newPieceVal = getPieceValue(newPiece.type, newPiece.power);
+        const newPieceVal = getPieceValue(newPiece);
         this.currentScore += (piece.color === Color.White ? newPieceVal : -newPieceVal);
 
         // 4. Place at dest
@@ -644,7 +649,7 @@ export default class KrachtschaakAI {
                     if (targetPiece && targetPiece.color === color) continue;
 
                     const isPower = isPowerMove(board, pos, target, ep);
-                    const captured = targetPiece ? targetPiece.type : undefined;
+                    const captured = targetPiece ? (targetPiece.isKing || targetPiece.originalType === PieceType.King ? PieceType.King : targetPiece.type) : undefined;
 
                     // Power acquisition: gains originalType of captured piece (except King)
                     let capForPower = targetPiece;
