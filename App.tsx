@@ -533,13 +533,34 @@ const App: React.FC = () => {
 
     const updateGameInDb = useCallback((newState: GameState) => {
         if (gameMode === 'online_playing' && gameRef) {
-            try {
-                // IMPORTANT: Remove undefined fields for Firebase compatibility
-                const cleanState = JSON.parse(JSON.stringify(newState));
-                gameRef.set(cleanState);
-            } catch (e) {
-                console.error("Error updating game in DB:", e);
-            }
+            gameRef.transaction((currentData: GameState | null) => {
+                if (!currentData) return JSON.parse(JSON.stringify(newState));
+
+                // SECURITY: Prevent overwriting a finished game with a "playing" state
+                const isNewStateEnding = newState.status !== 'playing' && newState.status !== 'promotion';
+                const isCurrentStateOver = currentData.status !== 'playing' && currentData.status !== 'promotion';
+
+                if (!isNewStateEnding && isCurrentStateOver) {
+                    console.log("Transaction aborted: Game is already over.");
+                    return; // Abort
+                }
+
+                // SECURITY: Prevent overwriting moves with an older history
+                const currentMoveCount = currentData.moveHistory?.length || 0;
+                const newMoveCount = newState.moveHistory?.length || 0;
+                if (newMoveCount < currentMoveCount) {
+                    console.log("Transaction aborted: Server has more moves.");
+                    return; // Abort
+                }
+
+                return JSON.parse(JSON.stringify(newState));
+            }, (error, committed) => {
+                if (error) {
+                    console.error("updateGameInDb Transaction Failed:", error);
+                } else if (!committed) {
+                    console.log("updateGameInDb Transaction Aborted (State mismatch or game over).");
+                }
+            });
         }
     }, [gameMode, gameRef]);
 
