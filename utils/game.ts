@@ -527,7 +527,6 @@ export const applyMoveToBoard = (board: BoardState, move: Move): BoardState => {
     piece.hasMoved = true;
     if (move.promotion) {
         piece.type = move.promotion;
-        piece.originalType = move.promotion; // In this game variant, promotion changes identity
     }
 
     // Handle Capture Logic for Board Update (removing captured piece)

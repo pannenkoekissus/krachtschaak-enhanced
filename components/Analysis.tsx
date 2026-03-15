@@ -1054,7 +1054,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         const promotedPiece: Piece = {
             ...promotingPiece,
             type: type,
-            originalType: (promotingPiece.originalType === PieceType.King || type === PieceType.King) ? PieceType.King : type,
+            originalType: promotingPiece.originalType,
             isKing: type === PieceType.King || promotingPiece.isKing || promotingPiece.originalType === PieceType.King,
             hasMoved: true,
             power: powerAfterPromotion
