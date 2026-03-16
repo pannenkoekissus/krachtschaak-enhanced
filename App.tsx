@@ -2439,7 +2439,7 @@ const App: React.FC = () => {
     // Right-click and drawing handlers
     const handleBoardMouseDown = (e: React.MouseEvent, row: number, col: number) => {
         if (e.button === 0) { // Left-click
-            // clearHighlightsAndArrows() is now handled within selectPiece to prevent flickering
+            clearHighlightsAndArrows();
         } else if (e.button === 2) { // Right-click
             e.preventDefault();
             setRightClickStartSquare({ row, col });
@@ -2487,8 +2487,12 @@ const App: React.FC = () => {
             return;
         }
 
-        // Synchronous selection update is handled by Board.tsx mousedown for new selections.
-        // We no longer skip it here if already selected, as Board.tsx handles stable selection.
+        // Synchronous selection update to prevent flicker on drag start
+        if (!selectedPiece || selectedPiece.row !== row || selectedPiece.col !== col) {
+            const moves = getValidMoves(board, { row, col }, enPassantTarget, true, !isMyTurn);
+            setSelectedPiece({ row, col });
+            setValidMoves(moves);
+        }
 
         if (isMyTurn || premovesEnabled) {
             e.dataTransfer.setData('text/plain', JSON.stringify({ row, col }));

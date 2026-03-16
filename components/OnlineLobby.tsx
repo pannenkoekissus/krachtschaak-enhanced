@@ -994,6 +994,13 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
         return allUsers.filter(u => u.uid !== userUid && u.displayName.toLowerCase().includes(searchText.toLowerCase()));
     }, [allUsers, searchText, userUid]);
 
+    const filteredOpenGames = useMemo(() => {
+        return openGames.filter(game => {
+            const cat = (game.ratingCategory || 'blitz').toLowerCase();
+            return filters[cat] !== false;
+        });
+    }, [openGames, filters]);
+
     const getGameResult = (game: GameState): { text: string, color: string } => {
         const myColorName = game.playerColors.white === userUid ? "White" : "Black";
 
@@ -1347,13 +1354,55 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
 
                             <button onClick={handleCreateGame} disabled={isActionInProgress} className="w-full mt-2 px-6 py-3 bg-green-600 hover:bg-green-700 rounded-lg text-xl font-semibold transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed">{isCreatingGame ? 'Creating...' : 'Create Game'}</button>
                         </div>
-                        <div className="p-4 border border-gray-600 rounded-lg flex flex-col"><h3 className="text-xl font-semibold text-center mb-4">Join a Game</h3>
-                            {isLobbyLoading ? <p className="text-gray-400 text-center">Loading games...</p> : !openGames.length ? <p className="text-gray-400 text-center">No open games available.</p> : null}
-                            <div className="flex-grow overflow-y-auto max-h-64 space-y-2 pr-2">{openGames.map(game => (
-                                <div key={game.gameId} className="bg-gray-700 p-3 rounded-lg flex justify-between items-center">
-                                    <div><p className="font-semibold truncate">{game.creatorName} ({game.creatorRatings?.[game.ratingCategory] ?? '...'})</p><p className="text-sm text-gray-400">{renderTimerSetting(game.timerSettings)}, {game.isRated ? 'Rated' : 'Unrated'}</p>{renderVisualSettings(game.showPowerPieces, game.showPowerRings, game.showOriginalType) && (<p className="text-xs text-gray-500 mt-0.5">{renderVisualSettings(game.showPowerPieces, game.showPowerRings, game.showOriginalType)}</p>)}</div>
-                                    <button onClick={() => handleJoinGame(game)} disabled={isActionInProgress} className="px-4 py-1 bg-blue-600 hover:bg-blue-700 rounded font-semibold transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed">{isJoiningGame === game.gameId ? 'Joining...' : 'Join'}</button>
-                                </div>))}
+                        <div className="p-4 border border-gray-600 rounded-lg flex flex-col min-h-[500px]">
+                            <h3 className="text-xl font-semibold text-center mb-4">Join a Game</h3>
+                            
+                            {/* Filter Buttons */}
+                            <div className="flex flex-wrap gap-2 justify-center bg-gray-800/50 p-3 rounded-lg border border-gray-700 mb-4">
+                                <span className="text-sm text-gray-400 w-full text-center mb-1 font-medium italic">Filter open games:</span>
+                                {['hyperbullet', 'bullet', 'blitz', 'rapid', 'daily', 'unlimited'].map((cat) => (
+                                    <button
+                                        key={cat}
+                                        onClick={() => toggleFilter(cat)}
+                                        className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all duration-200 ${filters[cat]
+                                            ? 'bg-teal-600 text-white shadow-[0_0_10px_rgba(20,184,166,0.2)] border border-teal-400'
+                                            : 'bg-gray-800 text-gray-500 border border-gray-700 hover:border-gray-500'
+                                            }`}
+                                    >
+                                        {cat.toUpperCase()}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {isLobbyLoading ? (
+                                <p className="text-gray-400 text-center py-4 italic">Loading games...</p>
+                            ) : filteredOpenGames.length === 0 ? (
+                                <p className="text-gray-400 text-center py-4 italic">No open {openGames.length > 0 ? 'matching ' : ''}games available.</p>
+                            ) : null}
+                            
+                            <div className="flex-grow overflow-y-auto max-h-[600px] space-y-2 pr-2 custom-scrollbar">
+                                {filteredOpenGames.map(game => (
+                                    <div key={game.gameId} className="bg-gray-700 hover:bg-gray-650 p-3 rounded-lg flex justify-between items-center border border-transparent hover:border-gray-500 transition-all shadow-sm">
+                                        <div>
+                                            <p className="font-semibold truncate text-gray-100">{game.creatorName} ({game.creatorRatings?.[game.ratingCategory] ?? '...'})</p>
+                                            <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                                                <span className="text-sm text-gray-300">{renderTimerSetting(game.timerSettings)}</span>
+                                                <span className="text-xs px-1.5 py-0.5 bg-gray-800 rounded text-gray-400 uppercase font-bold">{game.ratingCategory}</span>
+                                                {game.isRated && <span className="text-[10px] text-teal-400 font-bold tracking-tight">RATED</span>}
+                                            </div>
+                                            {renderVisualSettings(game.showPowerPieces, game.showPowerRings, game.showOriginalType) && (
+                                                <p className="text-[10px] text-gray-500 mt-1 italic leading-tight">{renderVisualSettings(game.showPowerPieces, game.showPowerRings, game.showOriginalType)}</p>
+                                            )}
+                                        </div>
+                                        <button 
+                                            onClick={() => handleJoinGame(game)} 
+                                            disabled={isActionInProgress} 
+                                            className="ml-4 px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold transition-all shadow-md active:scale-95 disabled:bg-gray-600 disabled:cursor-not-allowed text-sm"
+                                        >
+                                            {isJoiningGame === game.gameId ? 'Joining...' : 'Join'}
+                                        </button>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     </div>

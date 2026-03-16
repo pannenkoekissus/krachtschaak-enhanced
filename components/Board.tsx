@@ -135,18 +135,7 @@ const Board: React.FC<BoardProps> = ({
                 interactionRef.current = null;
                 return;
             }
-            
-            // If interactionRef is null, the interaction was already handled or cancelled (e.g. by a drag start)
-            if (!interactionRef.current) return;
-
-            // Only perform the toggle-off (deselect) if it was already selected at the start
-            // and we are ending the interaction on the same square (no drag happened).
-            if (interactionRef.current.row === row && interactionRef.current.col === col) {
-                if (interactionRef.current.selectedAtStart) {
-                    onSquareClick(row, col);
-                }
-            }
-            interactionRef.current = null;
+            onSquareClick(row, col);
         };
 
         const handleLocalMouseDown = (e: React.MouseEvent) => {
@@ -157,20 +146,7 @@ const Board: React.FC<BoardProps> = ({
                 return;
             }
 
-            const isAlreadySelected = selectedPiece && selectedPiece.row === row && selectedPiece.col === col;
-            
-            // Record interaction info immediately for desktop consistent with mobile logic
-            interactionRef.current = { row, col, selectedAtStart: !!isAlreadySelected };
-
-            // IMPORTANT: Call parent mousedown to clear right-click highlights/arrows
             onBoardMouseDown(e, row, col);
-
-            // Only trigger selection on mousedown if it's NOT already selected.
-            // This prevents deselecting (toggling off) when starting a drag for an already selected piece.
-            // Toggle-off/Deselection is handled by the onClick handler (handleControlledClick) if no drag happened.
-            if (!isAlreadySelected) {
-                onSquareClick(row, col);
-            }
         };
 
         return (
