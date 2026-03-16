@@ -1845,8 +1845,7 @@ const App: React.FC = () => {
         const hasPawnAbility = pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn;
         const isCapturingPawnOnPromotionRank = wasCapture &&
             actualCapturedPiece?.originalType === PieceType.Pawn &&
-            isMovingToPromotionRank &&
-            pieceToMove.originalType !== PieceType.Pawn;
+            isMovingToPromotionRank;
 
         if ((isMovingToPromotionRank && hasPawnAbility) || isCapturingPawnOnPromotionRank) {
             let powerAfterPromotion: PieceType | null = null;

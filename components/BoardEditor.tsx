@@ -18,6 +18,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
     const [draggedPos, setDraggedPos] = useState<Position | null>(null);
     const [selectedPower, setSelectedPower] = useState<PieceType | null>(null);
     const [selectedOriginalType, setSelectedOriginalType] = useState<PieceType | null>(null);
+    const [touchPaletteDragging, setTouchPaletteDragging] = useState<{ source: 'palette' | 'power' | 'originalType', data: any, x: number, y: number } | null>(null);
 
     const clearBoard = () => {
         setBoard(Array(8).fill(null).map(() => Array(8).fill(null)));
@@ -134,8 +135,82 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
         { type: PieceType.King, color: Color.Black },
     ];
 
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (!touchPaletteDragging) return;
+        const touch = e.touches[0];
+        setTouchPaletteDragging(prev => prev ? { ...prev, x: touch.clientX, y: touch.clientY } : null);
+        if (e.cancelable) e.preventDefault();
+    };
+
+    const handleTouchEnd = (e: React.TouchEvent) => {
+        if (!touchPaletteDragging) return;
+
+        const touch = e.changedTouches[0];
+        const element = document.elementFromPoint(touch.clientX, touch.clientY);
+        const square = element?.closest('.chess-square');
+
+        if (square) {
+            const rowStr = square.getAttribute('data-row');
+            const colStr = square.getAttribute('data-col');
+            if (rowStr !== null && colStr !== null) {
+                const row = parseInt(rowStr);
+                const col = parseInt(colStr);
+                const newBoard = board.map(r => [...r]);
+
+                if (touchPaletteDragging.source === 'palette') {
+                    const p = touchPaletteDragging.data;
+                    newBoard[row][col] = {
+                        type: p.type,
+                        color: p.color,
+                        power: selectedPower,
+                        originalType: selectedOriginalType || p.type,
+                        isKing: p.type === PieceType.King || selectedOriginalType === PieceType.King,
+                        hasMoved: false
+                    };
+                } else if (touchPaletteDragging.source === 'power') {
+                    if (newBoard[row][col]) {
+                        newBoard[row][col]!.power = touchPaletteDragging.data;
+                    }
+                } else if (touchPaletteDragging.source === 'originalType') {
+                    if (newBoard[row][col]) {
+                        newBoard[row][col]!.originalType = touchPaletteDragging.data;
+                        newBoard[row][col]!.isKing = touchPaletteDragging.data === PieceType.King || newBoard[row][col]!.type === PieceType.King;
+                    }
+                }
+                setBoard(newBoard);
+            }
+        }
+
+        setTouchPaletteDragging(null);
+    };
+
     return (
-        <div className="min-h-screen flex flex-col md:flex-row items-center justify-center p-4 gap-8 bg-gray-900 text-white overflow-x-hidden">
+        <div 
+            className="min-h-screen flex flex-col md:flex-row items-center justify-center p-4 gap-8 bg-gray-900 text-white overflow-x-hidden touch-none"
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+        >
+            {touchPaletteDragging && (
+                <div 
+                    className="fixed pointer-events-none z-[200] opacity-80"
+                    style={{ 
+                        left: touchPaletteDragging.x, 
+                        top: touchPaletteDragging.y, 
+                        width: '48px', 
+                        height: '48px', 
+                        transform: 'translate(-50%, -50%)' 
+                    }}
+                >
+                    {touchPaletteDragging.source === 'palette' && (
+                        <PieceComponent piece={{ ...touchPaletteDragging.data, power: null, originalType: touchPaletteDragging.data.type, isKing: touchPaletteDragging.data.type === PieceType.King }} />
+                    )}
+                    {(touchPaletteDragging.source === 'power' || touchPaletteDragging.source === 'originalType') && (
+                        <div className="w-full h-full bg-gray-800 rounded-full border border-white flex items-center justify-center overflow-hidden">
+                             <PieceComponent piece={{ type: touchPaletteDragging.data, color: Color.White, power: null, originalType: touchPaletteDragging.data, isKing: false }} />
+                        </div>
+                    )}
+                </div>
+            )}
             <div className="w-full max-w-lg flex-shrink-0">
                 <Board
                     board={board}
@@ -174,6 +249,10 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                                 : 'bg-gray-600 hover:bg-gray-500'
                                 }`}
                             onClick={() => setSelectedPalettePiece(p)}
+                            onTouchStart={(e) => {
+                                const touch = e.touches[0];
+                                setTouchPaletteDragging({ source: 'palette', data: p, x: touch.clientX, y: touch.clientY });
+                            }}
                         >
                             <div className="w-10 h-10 pointer-events-none">
                                 <PieceComponent piece={{ ...p, power: null, originalType: p.type, isKing: p.type === PieceType.King }} />
@@ -209,6 +288,10 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                                 className={`aspect-square cursor-pointer rounded-md flex items-center justify-center transition-all ${selectedPower === type ? 'bg-purple-600 ring-2 ring-purple-400 scale-110 shadow-lg' : 'bg-gray-600 hover:bg-gray-500'
                                     }`}
                                 onClick={() => setSelectedPower(type === selectedPower ? null : type)}
+                                onTouchStart={(e) => {
+                                    const touch = e.touches[0];
+                                    setTouchPaletteDragging({ source: 'power', data: type, x: touch.clientX, y: touch.clientY });
+                                }}
                                 title={type}
                             >
                                 <div className="w-8 h-8 opacity-80 pointer-events-none">
@@ -238,6 +321,10 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                                 className={`aspect-square cursor-pointer rounded-md flex items-center justify-center transition-all ${selectedOriginalType === type ? 'bg-blue-900 ring-2 ring-blue-400 scale-110 shadow-lg' : 'bg-gray-600 hover:bg-gray-500'
                                     }`}
                                 onClick={() => setSelectedOriginalType(type === selectedOriginalType ? null : type)}
+                                onTouchStart={(e) => {
+                                    const touch = e.touches[0];
+                                    setTouchPaletteDragging({ source: 'originalType', data: type, x: touch.clientX, y: touch.clientY });
+                                }}
                                 title={`Original: ${type}`}
                             >
                                 <div className="w-8 h-8 opacity-60 pointer-events-none">

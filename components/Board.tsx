@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState, useRef } from 'react';
 import { BoardState, Position, Color, GameMode } from '../types';
 import Piece from './Piece';
 
@@ -35,6 +35,9 @@ const Board: React.FC<BoardProps> = ({
     lastMove, highlightedSquares, arrows, onBoardMouseDown, onBoardMouseUp, onBoardContextMenu,
     showPowerPieces = true, showPowerRings = true, showOriginalType = true
 }) => {
+    const [touchDragging, setTouchDragging] = useState<{ from: Position; x: number; y: number; piece: any } | null>(null);
+    const boardRef = useRef<HTMLDivElement>(null);
+
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault(); // This is necessary to allow dropping
     };
@@ -79,15 +82,39 @@ const Board: React.FC<BoardProps> = ({
         const cursorClass = isInteractionDisabled ? 'cursor-not-allowed' : 'cursor-pointer';
         const isBeingDragged = draggedPiece && draggedPiece.row === row && draggedPiece.col === col;
 
+        const handleTouchStart = (e: React.TouchEvent) => {
+            if (isInteractionDisabled) return;
+            const piece = board[row][col];
+            if (!piece) return;
+
+            // Only allow dragging own pieces
+            const color = gameMode === 'online_playing' && playerColor ? playerColor : turn;
+            if (piece.color !== color) return;
+
+            const touch = e.touches[0];
+            setTouchDragging({
+                from: { row, col },
+                x: touch.clientX,
+                y: touch.clientY,
+                piece: piece
+            });
+
+            // Trigger select logic
+            onSquareClick(row, col);
+        };
+
         return (
             <div
                 key={`${row}-${col}`}
-                className={`${bgColor} ${cursorClass} w-full h-full flex items-center justify-center relative`}
+                data-row={row}
+                data-col={col}
+                className={`${bgColor} ${cursorClass} w-full h-full flex items-center justify-center relative chess-square`}
                 onClick={() => onSquareClick(row, col)}
                 onDrop={(e) => onSquareDrop(e, row, col)}
                 onDragOver={handleDragOver}
                 onMouseDown={(e) => onBoardMouseDown(e, row, col)}
                 onMouseUp={(e) => onBoardMouseUp(e, row, col)}
+                onTouchStart={handleTouchStart}
             >
                 {overlays}
                 {piece &&
@@ -104,6 +131,35 @@ const Board: React.FC<BoardProps> = ({
         );
     };
 
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (!touchDragging) return;
+        const touch = e.touches[0];
+        setTouchDragging(prev => prev ? { ...prev, x: touch.clientX, y: touch.clientY } : null);
+        if (e.cancelable) e.preventDefault();
+    };
+
+    const handleTouchEnd = (e: React.TouchEvent) => {
+        if (!touchDragging) return;
+
+        const touch = e.changedTouches[0];
+        const element = document.elementFromPoint(touch.clientX, touch.clientY);
+        const square = element?.closest('.chess-square');
+
+        if (square) {
+            const rowStr = square.getAttribute('data-row');
+            const colStr = square.getAttribute('data-col');
+            if (rowStr !== null && colStr !== null) {
+                const row = parseInt(rowStr);
+                const col = parseInt(colStr);
+                if (row !== touchDragging.from.row || col !== touchDragging.from.col) {
+                    onSquareClick(row, col);
+                }
+            }
+        }
+
+        setTouchDragging(null);
+    };
+
     const getSquareCenter = useCallback((row: number, col: number) => {
         if (isFlipped) {
             row = 7 - row;
@@ -116,9 +172,32 @@ const Board: React.FC<BoardProps> = ({
 
     return (
         <div
-            className={`grid grid-cols-8 grid-rows-8 aspect-square border-4 border-gray-600 shadow-2xl relative ${isFlipped ? 'rotate-180' : ''}`}
+            ref={boardRef}
+            className={`grid grid-cols-8 grid-rows-8 aspect-square border-4 border-gray-600 shadow-2xl relative ${isFlipped ? 'rotate-180' : ''} touch-none`}
             onContextMenu={onBoardContextMenu}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
         >
+            {touchDragging && (
+                <div
+                    className={`fixed pointer-events-none z-[100] ${isFlipped ? 'rotate-180' : ''}`}
+                    style={{
+                        left: touchDragging.x,
+                        top: touchDragging.y,
+                        width: boardRef.current ? boardRef.current.clientWidth / 8 : '64px',
+                        height: boardRef.current ? boardRef.current.clientWidth / 8 : '64px',
+                        transform: 'translate(-50%, -50%)',
+                        opacity: 0.8
+                    }}
+                >
+                    <Piece
+                        piece={touchDragging.piece}
+                        showPowerPieces={showPowerPieces}
+                        showPowerRings={showPowerRings}
+                        showOriginalType={showOriginalType}
+                    />
+                </div>
+            )}
             {board && Array.isArray(board) && board.map((row, rowIndex) =>
                 Array.isArray(row) && row.map((_, colIndex) => (
                     <div key={`${rowIndex}-${colIndex}`} className={`${isFlipped ? 'rotate-180' : ''}`}>
