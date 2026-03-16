@@ -85,26 +85,24 @@ const Board: React.FC<BoardProps> = ({
         const handleTouchStart = (e: React.TouchEvent) => {
             if (isInteractionDisabled) return;
 
-            // Trigger select logic immediately to show valid moves and support tap-tap
-            onSquareClick(row, col);
-            
-            // Prevent ghost clicks and scrolling (already blocked by touch-none but extra safe)
-            if (e.cancelable) e.preventDefault();
-
-            const piece = board[row][col];
-            if (!piece) return;
-
-            // Only allow dragging own pieces for the visual ghost
-            const color = gameMode === 'online_playing' && playerColor ? playerColor : turn;
-            if (piece.color !== color) return;
-
             const touch = e.touches[0];
+            const piece = board[row][col];
+            const color = gameMode === 'online_playing' && playerColor ? playerColor : turn;
+
             setTouchDragging({
                 from: { row, col },
                 x: touch.clientX,
                 y: touch.clientY,
                 piece: piece
             });
+
+            // If selecting your own piece, do it on start for instant feedback
+            if (piece && piece.color === color) {
+                onSquareClick(row, col);
+            }
+            
+            // Prevent ghost clicks and scrolling
+            if (e.cancelable) e.preventDefault();
         };
 
         return (
@@ -153,10 +151,21 @@ const Board: React.FC<BoardProps> = ({
             const rowStr = square.getAttribute('data-row');
             const colStr = square.getAttribute('data-col');
             if (rowStr !== null && colStr !== null) {
-                const row = parseInt(rowStr);
-                const col = parseInt(colStr);
-                if (row !== touchDragging.from.row || col !== touchDragging.from.col) {
-                    onSquareClick(row, col);
+                const tr = parseInt(rowStr);
+                const tc = parseInt(colStr);
+                
+                const piece = touchDragging.piece;
+                const color = gameMode === 'online_playing' && playerColor ? playerColor : turn;
+
+                // Move if we dragged to a different square
+                if (tr !== touchDragging.from.row || tc !== touchDragging.from.col) {
+                    onSquareClick(tr, tc);
+                } else {
+                    // Tap on the same square.
+                    // If it was an empty square or enemy piece, we haven't clicked it yet (see handleTouchStart)
+                    if (!piece || piece.color !== color) {
+                        onSquareClick(tr, tc);
+                    }
                 }
             }
         }
