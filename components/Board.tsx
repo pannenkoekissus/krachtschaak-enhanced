@@ -37,6 +37,7 @@ const Board: React.FC<BoardProps> = ({
 }) => {
     const [touchDragging, setTouchDragging] = useState<{ from: Position; x: number; y: number; piece: any } | null>(null);
     const touchTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const lastTouchActionRef = useRef<number>(0);
     const boardRef = useRef<HTMLDivElement>(null);
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -86,13 +87,19 @@ const Board: React.FC<BoardProps> = ({
         const handleTouchStart = (e: React.TouchEvent) => {
             if (isInteractionDisabled) return;
 
+            // Mark the touch time to block the ghost click
+            lastTouchActionRef.current = Date.now();
+
+            // Prevent the browser from firing a redundant 'click' event later.
+            if (e.cancelable) e.preventDefault();
+
             const touch = e.touches[0];
             const piece = board[row][col];
 
             // Immediate selection for tap-tap
             onSquareClick(row, col);
 
-            // Start a timer to enable the "visual drag" ghost
+            // Start a timer to enable the "visual drag" ghost for long presses
             if (piece) {
                 if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
                 touchTimerRef.current = setTimeout(() => {
@@ -106,13 +113,18 @@ const Board: React.FC<BoardProps> = ({
             }
         };
 
+        const handleControlledClick = () => {
+            if (Date.now() - lastTouchActionRef.current < 400) return;
+            onSquareClick(row, col);
+        };
+
         return (
             <div
                 key={`${row}-${col}`}
                 data-row={row}
                 data-col={col}
                 className={`${bgColor} ${cursorClass} w-full h-full flex items-center justify-center relative chess-square`}
-                onClick={() => onSquareClick(row, col)}
+                onClick={handleControlledClick}
                 onDrop={(e) => onSquareDrop(e, row, col)}
                 onDragOver={handleDragOver}
                 onMouseDown={(e) => onBoardMouseDown(e, row, col)}
@@ -142,6 +154,8 @@ const Board: React.FC<BoardProps> = ({
     };
 
     const handleTouchEnd = (e: React.TouchEvent) => {
+        lastTouchActionRef.current = Date.now();
+        
         if (touchTimerRef.current) {
             clearTimeout(touchTimerRef.current);
             touchTimerRef.current = null;

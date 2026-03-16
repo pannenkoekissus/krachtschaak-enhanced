@@ -44,7 +44,25 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
     };
 
     const handleSquareClick = (row: number, col: number) => {
-        if (selectedPalettePiece === 'cursor') return;
+        if (selectedPalettePiece === 'cursor') {
+            // Support tap-tap moving pieces in the editor
+            if (!draggedPos) {
+                if (board[row][col]) {
+                    setDraggedPos({ row, col });
+                }
+            } else {
+                if (draggedPos.row === row && draggedPos.col === col) {
+                    setDraggedPos(null);
+                } else {
+                    const newBoard = board.map(r => [...r]);
+                    newBoard[row][col] = newBoard[draggedPos.row][draggedPos.col];
+                    newBoard[draggedPos.row][draggedPos.col] = null;
+                    setBoard(newBoard);
+                    setDraggedPos(null);
+                }
+            }
+            return;
+        }
         const newBoard = board.map(r => [...r]);
         if (selectedPalettePiece === 'eraser') {
             newBoard[row][col] = null;
@@ -214,7 +232,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
             <div className="w-full max-w-lg flex-shrink-0">
                 <Board
                     board={board}
-                    selectedPiece={null}
+                    selectedPiece={draggedPos}
                     validMoves={[]}
                     onSquareClick={handleSquareClick}
                     turn={turn}
