@@ -35,9 +35,12 @@ const Board: React.FC<BoardProps> = ({
     lastMove, highlightedSquares, arrows, onBoardMouseDown, onBoardMouseUp, onBoardContextMenu,
     showPowerPieces = true, showPowerRings = true, showOriginalType = true
 }) => {
-    const [touchDragging, setTouchDragging] = useState<{ from: Position; x: number; y: number; piece: any } | null>(null);
+    const [touchDragging, setTouchDragging] = useState<{ from: Position; x: number; y: number; piece: any; selectedAtStart: boolean; isVisualDrag: boolean } | null>(null);
     const touchTimerRef = useRef<NodeJS.Timeout | null>(null);
     const lastTouchActionRef = useRef<number>(0);
+    // Use a ref for immediate access to interaction data to avoid closure/state race conditions on fast taps
+    const interactionRef = useRef<{ row: number; col: number; selectedAtStart: boolean } | null>(null);
+    const isDraggingRef = useRef<boolean>(false);
     const boardRef = useRef<HTMLDivElement>(null);
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -82,40 +85,92 @@ const Board: React.FC<BoardProps> = ({
         }
 
         const cursorClass = isInteractionDisabled ? 'cursor-not-allowed' : 'cursor-pointer';
-        const isBeingDragged = draggedPiece && draggedPiece.row === row && draggedPiece.col === col;
+        const isTouchBeingDragged = touchDragging && touchDragging.isVisualDrag && touchDragging.from.row === row && touchDragging.from.col === col;
+        const isBeingDragged = (draggedPiece && draggedPiece.row === row && draggedPiece.col === col) || isTouchBeingDragged;
 
         const handleTouchStart = (e: React.TouchEvent) => {
             if (isInteractionDisabled) return;
 
             // Mark the touch time to block the ghost click
             lastTouchActionRef.current = Date.now();
-
+            
             // Prevent the browser from firing a redundant 'click' event later.
             if (e.cancelable) e.preventDefault();
 
             const touch = e.touches[0];
             const piece = board[row][col];
+            const isAlreadySelected = selectedPiece && selectedPiece.row === row && selectedPiece.col === col;
 
-            // Immediate selection for tap-tap
-            onSquareClick(row, col);
+            // Store interaction info immediately in the Ref for robust logic handling
+            interactionRef.current = { row, col, selectedAtStart: !!isAlreadySelected };
+
+            // Also update state for the visual drag-ghost (which will appear after a delay)
+            setTouchDragging({
+                from: { row, col },
+                x: touch.clientX,
+                y: touch.clientY,
+                piece: piece,
+                selectedAtStart: !!isAlreadySelected,
+                isVisualDrag: false
+            });
+
+            // Immediate selection for NEW pieces (tap-tap logic).
+            // For already selected pieces, we wait for touchEnd to perform the toggle/deselect.
+            if (!isAlreadySelected) {
+                onSquareClick(row, col);
+            }
 
             // Start a timer to enable the "visual drag" ghost for long presses
             if (piece) {
                 if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
                 touchTimerRef.current = setTimeout(() => {
-                    setTouchDragging({
-                        from: { row, col },
-                        x: touch.clientX,
-                        y: touch.clientY,
-                        piece: piece
-                    });
+                    setTouchDragging(prev => prev ? { ...prev, isVisualDrag: true } : null);
                 }, 150); // 150ms hold to start dragging
             }
         };
 
         const handleControlledClick = () => {
-            if (Date.now() - lastTouchActionRef.current < 400) return;
-            onSquareClick(row, col);
+            // Ghost click protection: ignore mouse clicks that follow touch events
+            if (Date.now() - lastTouchActionRef.current < 400) {
+                interactionRef.current = null;
+                return;
+            }
+            
+            // If interactionRef is null, the interaction was already handled or cancelled (e.g. by a drag start)
+            if (!interactionRef.current) return;
+
+            // Only perform the toggle-off (deselect) if it was already selected at the start
+            // and we are ending the interaction on the same square (no drag happened).
+            if (interactionRef.current.row === row && interactionRef.current.col === col) {
+                if (interactionRef.current.selectedAtStart) {
+                    onSquareClick(row, col);
+                }
+            }
+            interactionRef.current = null;
+        };
+
+        const handleLocalMouseDown = (e: React.MouseEvent) => {
+            if (isInteractionDisabled) return;
+
+            if (e.button !== 0) {
+                onBoardMouseDown(e, row, col);
+                return;
+            }
+
+            const isAlreadySelected = selectedPiece && selectedPiece.row === row && selectedPiece.col === col;
+            
+            // Record interaction info immediately for desktop consistent with mobile logic
+            interactionRef.current = { row, col, selectedAtStart: !!isAlreadySelected };
+
+            // IMPORTANT: Call parent mousedown to clear right-click highlights/arrows
+            onBoardMouseDown(e, row, col);
+
+            // Only trigger selection on mousedown if it's NOT already selected.
+            // This prevents deselecting (toggling off) when starting a drag for an already selected piece.
+            // Toggle-off/Deselection is handled by the onClick handler (handleControlledClick) if no drag happened.
+            if (!isAlreadySelected) {
+                onSquareClick(row, col);
+            }
         };
 
         return (
@@ -123,26 +178,33 @@ const Board: React.FC<BoardProps> = ({
                 key={`${row}-${col}`}
                 data-row={row}
                 data-col={col}
-                className={`${bgColor} ${cursorClass} w-full h-full flex items-center justify-center relative chess-square`}
+                className={`${bgColor} ${isInteractionDisabled ? 'cursor-not-allowed' : 'cursor-pointer'} w-full h-full flex items-center justify-center relative chess-square`}
                 onClick={handleControlledClick}
-                onDrop={(e) => onSquareDrop(e, row, col)}
+                onDrop={(e) => {
+                    interactionRef.current = null;
+                    onSquareDrop(e, row, col);
+                }}
                 onDragOver={handleDragOver}
-                onMouseDown={(e) => onBoardMouseDown(e, row, col)}
+                onMouseDown={handleLocalMouseDown}
                 onMouseUp={(e) => onBoardMouseUp(e, row, col)}
                 onTouchStart={handleTouchStart}
-            >
-                {overlays}
+        >
+            {overlays}
                 {piece &&
                     <Piece
                         piece={piece}
-                        onDragStart={(e) => !isInteractionDisabled && onPieceDragStart(e, row, col)}
+                        onDragStart={(e) => {
+                            if (isInteractionDisabled) return;
+                            interactionRef.current = null; // Drag started, prevent subsequent 'click' from toggling selection
+                            onPieceDragStart(e, row, col);
+                        }}
                         onDragEnd={onPieceDragEnd}
                         isBeingDragged={isBeingDragged}
                         showPowerPieces={showPowerPieces}
                         showPowerRings={showPowerRings}
                         showOriginalType={showOriginalType}
                     />}
-            </div>
+        </div>
         );
     };
 
@@ -174,9 +236,18 @@ const Board: React.FC<BoardProps> = ({
                 const tr = parseInt(rowStr);
                 const tc = parseInt(colStr);
                 
-                // Only trigger second click if we actually dragged to a different square
-                if (tr !== touchDragging.from.row || tc !== touchDragging.from.col) {
+                // If it was a drag to a different square, trigger the move/selection
+                if (tr !== interactionRef.current?.row || tc !== interactionRef.current?.col) {
                     onSquareClick(tr, tc);
+                    interactionRef.current = null;
+                } else {
+                    // Released on the same square.
+                    // If it was already selected at start, we need to call onSquareClick now
+                    // to perform the deselect (which we skipped in touchStart).
+                    if (interactionRef.current?.selectedAtStart) {
+                        onSquareClick(tr, tc);
+                    }
+                    interactionRef.current = null;
                 }
             }
         }
@@ -204,7 +275,7 @@ const Board: React.FC<BoardProps> = ({
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
         >
-            {touchDragging && (
+            {touchDragging && touchDragging.isVisualDrag && touchDragging.piece && (
                 <div
                     className={`fixed pointer-events-none z-[100] ${isFlipped ? 'rotate-180' : ''}`}
                     style={{

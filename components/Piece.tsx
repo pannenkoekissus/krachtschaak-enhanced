@@ -60,6 +60,8 @@ const Piece: React.FC<PieceComponentProps> = ({
     showPowerRings = true,
     showOriginalType = true
 }) => {
+    if (!piece || !piece.type) return null;
+
     const hasEffectivePower = (piece: PieceProps): boolean => {
         if (!piece.power) return false;
 

@@ -203,20 +203,20 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
     };
 
     return (
-        <div 
+        <div
             className="min-h-screen flex flex-col md:flex-row items-center justify-center p-4 gap-8 bg-gray-900 text-white overflow-x-hidden touch-none"
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
         >
             {touchPaletteDragging && (
-                <div 
+                <div
                     className="fixed pointer-events-none z-[200] opacity-80"
-                    style={{ 
-                        left: touchPaletteDragging.x, 
-                        top: touchPaletteDragging.y, 
-                        width: '48px', 
-                        height: '48px', 
-                        transform: 'translate(-50%, -50%)' 
+                    style={{
+                        left: touchPaletteDragging.x,
+                        top: touchPaletteDragging.y,
+                        width: '48px',
+                        height: '48px',
+                        transform: 'translate(-50%, -50%)'
                     }}
                 >
                     {touchPaletteDragging.source === 'palette' && (
@@ -224,7 +224,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                     )}
                     {(touchPaletteDragging.source === 'power' || touchPaletteDragging.source === 'originalType') && (
                         <div className="w-full h-full bg-gray-800 rounded-full border border-white flex items-center justify-center overflow-hidden">
-                             <PieceComponent piece={{ type: touchPaletteDragging.data, color: Color.White, power: null, originalType: touchPaletteDragging.data, isKing: false }} />
+                            <PieceComponent piece={{ type: touchPaletteDragging.data, color: Color.White, power: null, originalType: touchPaletteDragging.data, isKing: false }} />
                         </div>
                     )}
                 </div>

@@ -1992,41 +1992,54 @@ const App: React.FC = () => {
 
         if ((status !== 'playing' && gameMode !== 'analysis') || localPromotionState || localAmbiguousEnPassantState) return;
 
+        const selectPiece = (pos: Position | null) => {
+            setSelectedPiece(pos);
+            clearHighlightsAndArrows();
+            if (!pos) {
+                setValidMoves([]);
+            } else {
+                const color = gameMode === 'online_playing' && myOnlineColor ? myOnlineColor : turn;
+                const p = board[pos.row][pos.col];
+                if (p && p.color === color) {
+                    const moves = getValidMoves(board, pos, enPassantTarget, true, !isMyTurn);
+                    setValidMoves(moves);
+                } else {
+                    setValidMoves([]);
+                }
+            }
+        };
+
         // Premove Logic
         if (!isMyTurn && premovesEnabled) {
             const targetSquare = { row, col };
 
             if (selectedPiece) {
-                // If the selected piece is clicked again, deselect it and cancel the premove.
                 if (selectedPiece.row === row && selectedPiece.col === col) {
-                    setSelectedPiece(null);
+                    selectPiece(null);
                     if (gameRef && myOnlineColor && premoves?.[myOnlineColor]) {
                         gameRef.child('premoves').child(myOnlineColor).remove(() => { });
                     }
                     return;
                 }
 
-                // Check if the target is a valid premove target for the selected piece
                 if (validMoves.some(move => move.row === targetSquare.row && move.col === targetSquare.col)) {
                     movePiece(selectedPiece, targetSquare, { isPremove: true, forcePower: isForcePowerMode });
-                    setSelectedPiece(null);
+                    selectPiece(null);
                 } else {
                     const pieceOnTarget = board[row][col];
-                    // If another of my pieces is clicked, change selection.
                     if (pieceOnTarget && pieceOnTarget.color === myOnlineColor) {
-                        setSelectedPiece(targetSquare);
+                        selectPiece(targetSquare);
                         if (gameRef && myOnlineColor && premoves?.[myOnlineColor]) {
                             gameRef.child('premoves').child(myOnlineColor).remove(() => { });
                         }
                     } else {
-                        setSelectedPiece(null); // Deselect if an invalid square is clicked
+                        selectPiece(null);
                     }
                 }
             } else {
-                // If no piece is selected, select the piece at the target square if it's mine.
                 const pieceOnTarget = board[row][col];
                 if (pieceOnTarget && pieceOnTarget.color === myOnlineColor) {
-                    setSelectedPiece(targetSquare);
+                    selectPiece(targetSquare);
                 }
             }
             return;
@@ -2037,7 +2050,7 @@ const App: React.FC = () => {
             const targetSquare = { row, col };
             if (selectedPiece) {
                 if (selectedPiece.row === row && selectedPiece.col === col) {
-                    setSelectedPiece(null);
+                    selectPiece(null);
                     return;
                 }
                 if (validMoves.some(move => move.row === targetSquare.row && move.col === targetSquare.col)) {
@@ -2045,19 +2058,21 @@ const App: React.FC = () => {
                 } else {
                     const pieceOnTarget = board[row][col];
                     if (pieceOnTarget && pieceOnTarget.color === turn) {
-                        setSelectedPiece(targetSquare);
+                        selectPiece(targetSquare);
                     } else {
-                        setSelectedPiece(null);
+                        selectPiece(null);
                     }
                 }
             } else {
                 const pieceOnTarget = board[row][col];
                 if (pieceOnTarget && pieceOnTarget.color === turn) {
-                    setSelectedPiece(targetSquare);
+                    selectPiece(targetSquare);
+                } else {
+                    selectPiece(null);
                 }
             }
         }
-    }, [gameMode, myOnlineColor, turn, status, premovesEnabled, selectedPiece, board, validMoves, movePiece, gameRef, isForcePowerMode, premoves, localPromotionState, localAmbiguousEnPassantState, moveConfirmationEnabled, timerSettings]);
+    }, [gameMode, myOnlineColor, turn, status, premovesEnabled, selectedPiece, board, validMoves, movePiece, gameRef, isForcePowerMode, premoves, localPromotionState, localAmbiguousEnPassantState, moveConfirmationEnabled, timerSettings, enPassantTarget]);
 
     const confirmMove = () => {
         if (pendingCommitState) {
@@ -2424,7 +2439,7 @@ const App: React.FC = () => {
     // Right-click and drawing handlers
     const handleBoardMouseDown = (e: React.MouseEvent, row: number, col: number) => {
         if (e.button === 0) { // Left-click
-            clearHighlightsAndArrows();
+            // clearHighlightsAndArrows() is now handled within selectPiece to prevent flickering
         } else if (e.button === 2) { // Right-click
             e.preventDefault();
             setRightClickStartSquare({ row, col });
@@ -2463,22 +2478,23 @@ const App: React.FC = () => {
 
     // Drag and Drop handlers
     const handleDragStart = (e: React.DragEvent, row: number, col: number) => {
-        clearHighlightsAndArrows();
-        const isMyTurn = gameMode !== 'online_playing' || turn === myOnlineColor;
         const piece = board[row][col];
         const color = gameMode === 'online_playing' && myOnlineColor ? myOnlineColor : turn;
+        const isMyTurn = gameMode !== 'online_playing' || turn === myOnlineColor;
 
         if (!piece || piece.color !== color || status !== 'playing' || localPromotionState || localAmbiguousEnPassantState) {
             e.preventDefault();
             return;
         }
 
+        // Synchronous selection update is handled by Board.tsx mousedown for new selections.
+        // We no longer skip it here if already selected, as Board.tsx handles stable selection.
+
         if (isMyTurn || premovesEnabled) {
             e.dataTransfer.setData('text/plain', JSON.stringify({ row, col }));
             e.dataTransfer.effectAllowed = 'move';
 
             setTimeout(() => {
-                setSelectedPiece({ row, col });
                 setDraggedPiece({ row, col });
             }, 0);
         } else {
