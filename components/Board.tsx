@@ -36,6 +36,7 @@ const Board: React.FC<BoardProps> = ({
     showPowerPieces = true, showPowerRings = true, showOriginalType = true
 }) => {
     const [touchDragging, setTouchDragging] = useState<{ from: Position; x: number; y: number; piece: any } | null>(null);
+    const touchTimerRef = useRef<NodeJS.Timeout | null>(null);
     const boardRef = useRef<HTMLDivElement>(null);
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -87,22 +88,22 @@ const Board: React.FC<BoardProps> = ({
 
             const touch = e.touches[0];
             const piece = board[row][col];
-            const color = gameMode === 'online_playing' && playerColor ? playerColor : turn;
 
-            setTouchDragging({
-                from: { row, col },
-                x: touch.clientX,
-                y: touch.clientY,
-                piece: piece
-            });
+            // Immediate selection for tap-tap
+            onSquareClick(row, col);
 
-            // If selecting your own piece, do it on start for instant feedback
-            if (piece && piece.color === color) {
-                onSquareClick(row, col);
+            // Start a timer to enable the "visual drag" ghost
+            if (piece) {
+                if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+                touchTimerRef.current = setTimeout(() => {
+                    setTouchDragging({
+                        from: { row, col },
+                        x: touch.clientX,
+                        y: touch.clientY,
+                        piece: piece
+                    });
+                }, 150); // 150ms hold to start dragging
             }
-            
-            // Prevent ghost clicks and scrolling
-            if (e.cancelable) e.preventDefault();
         };
 
         return (
@@ -141,6 +142,11 @@ const Board: React.FC<BoardProps> = ({
     };
 
     const handleTouchEnd = (e: React.TouchEvent) => {
+        if (touchTimerRef.current) {
+            clearTimeout(touchTimerRef.current);
+            touchTimerRef.current = null;
+        }
+
         if (!touchDragging) return;
 
         const touch = e.changedTouches[0];
@@ -154,18 +160,9 @@ const Board: React.FC<BoardProps> = ({
                 const tr = parseInt(rowStr);
                 const tc = parseInt(colStr);
                 
-                const piece = touchDragging.piece;
-                const color = gameMode === 'online_playing' && playerColor ? playerColor : turn;
-
-                // Move if we dragged to a different square
+                // Only trigger second click if we actually dragged to a different square
                 if (tr !== touchDragging.from.row || tc !== touchDragging.from.col) {
                     onSquareClick(tr, tc);
-                } else {
-                    // Tap on the same square.
-                    // If it was an empty square or enemy piece, we haven't clicked it yet (see handleTouchStart)
-                    if (!piece || piece.color !== color) {
-                        onSquareClick(tr, tc);
-                    }
                 }
             }
         }
