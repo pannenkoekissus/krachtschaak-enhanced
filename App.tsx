@@ -2852,7 +2852,7 @@ const App: React.FC = () => {
 
                         {activeTab === 'chat' && (
                             <div className="flex flex-col h-64">
-                                <div ref={chatContainerRef} className="flex-grow overflow-y-auto mb-2 space-y-2 p-2 bg-gray-900 rounded">
+                                <div ref={chatContainerRef} className="flex-grow min-h-0 overflow-y-auto mb-2 space-y-2 p-2 bg-gray-900 rounded">
                                     {chatMessages.length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
                                     {chatMessages.map((msg, i) => {
                                         const isMe = currentUser && msg.uid === currentUser.uid;
@@ -2864,7 +2864,7 @@ const App: React.FC = () => {
                                         );
                                     })}
                                 </div>
-                                <form onSubmit={handleSendChat} className="flex gap-2 mt-auto">
+                                <form onSubmit={handleSendChat} className="flex gap-2 mt-auto flex-shrink-0">
                                     <input
                                         type="text"
                                         value={chatInput}
@@ -2986,8 +2986,8 @@ const App: React.FC = () => {
                     )}
 
                     {activeTab === 'chat' && (
-                        <div className="flex-grow flex flex-col h-full">
-                            <div ref={chatContainerRef} className="flex-grow overflow-y-auto mb-2 space-y-2 p-2 bg-gray-900 rounded border border-gray-700">
+                        <div className="flex-grow flex flex-col min-h-0">
+                            <div ref={chatContainerRef} className="flex-grow min-h-0 overflow-y-auto mb-2 space-y-2 p-2 bg-gray-900 rounded border border-gray-700">
                                 {chatMessages.length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
                                 {chatMessages.map((msg, i) => {
                                     const isMe = currentUser && msg.uid === currentUser.uid;
@@ -2999,7 +2999,7 @@ const App: React.FC = () => {
                                     );
                                 })}
                             </div>
-                            <form onSubmit={handleSendChat} className="flex gap-2 mt-auto">
+                            <form onSubmit={handleSendChat} className="flex gap-2 mt-auto flex-shrink-0">
                                 <input
                                     type="text"
                                     value={chatInput}
