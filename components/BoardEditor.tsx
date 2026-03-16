@@ -137,9 +137,9 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
 
     const handleTouchMove = (e: React.TouchEvent) => {
         if (!touchPaletteDragging) return;
+        if (e.cancelable) e.preventDefault(); // Crucial for non-passive listeners
         const touch = e.touches[0];
         setTouchPaletteDragging(prev => prev ? { ...prev, x: touch.clientX, y: touch.clientY } : null);
-        if (e.cancelable) e.preventDefault();
     };
 
     const handleTouchEnd = (e: React.TouchEvent) => {
@@ -235,7 +235,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                 />
             </div>
 
-            <div className="w-full md:w-80 bg-gray-800 p-6 rounded-xl shadow-2xl flex flex-col gap-6 max-h-[90vh] overflow-y-auto custom-scrollbar flex-shrink-0">
+            <div className={`w-full md:w-80 bg-gray-800 p-6 rounded-xl shadow-2xl flex flex-col gap-6 max-h-[90vh] overflow-y-auto custom-scrollbar flex-shrink-0 ${touchPaletteDragging ? 'touch-none' : ''}`}>
                 <h2 className="text-3xl font-bold text-center text-green-400">Board Editor</h2>
 
                 <div className="grid grid-cols-6 gap-2 bg-gray-700 p-4 rounded-lg">
@@ -244,7 +244,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                             key={i}
                             draggable
                             onDragStart={(e) => e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'palette', data: p }))}
-                            className={`aspect-square cursor-pointer rounded-md flex items-center justify-center transition-all ${typeof selectedPalettePiece !== 'string' && selectedPalettePiece?.type === p.type && selectedPalettePiece?.color === p.color
+                            className={`aspect-square cursor-pointer rounded-md flex items-center justify-center transition-all touch-none ${typeof selectedPalettePiece !== 'string' && selectedPalettePiece?.type === p.type && selectedPalettePiece?.color === p.color
                                 ? 'bg-blue-600 ring-2 ring-blue-400 scale-110 shadow-lg'
                                 : 'bg-gray-600 hover:bg-gray-500'
                                 }`}
@@ -260,17 +260,25 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                         </div>
                     ))}
                     <div
-                        className={`col-span-3 aspect-square max-h-[64px] mx-auto w-full cursor-pointer rounded-md flex items-center justify-center transition-all ${selectedPalettePiece === 'cursor' ? 'bg-indigo-600 ring-2 ring-indigo-400 scale-105 shadow-lg' : 'bg-gray-600 hover:bg-gray-500'
+                        className={`col-span-3 aspect-square max-h-[64px] mx-auto w-full cursor-pointer rounded-md flex items-center justify-center transition-all touch-none ${selectedPalettePiece === 'cursor' ? 'bg-indigo-600 ring-2 ring-indigo-400 scale-105 shadow-lg' : 'bg-gray-600 hover:bg-gray-500'
                             }`}
                         onClick={() => setSelectedPalettePiece('cursor')}
+                        onTouchStart={(e) => {
+                            setSelectedPalettePiece('cursor');
+                            if (e.cancelable) e.preventDefault();
+                        }}
                         title="Cursor (Drag/Drop Mode)"
                     >
                         <span className="text-2xl">👆</span>
                     </div>
                     <div
-                        className={`col-span-3 aspect-square max-h-[64px] mx-auto w-full cursor-pointer rounded-md flex items-center justify-center transition-all ${selectedPalettePiece === 'eraser' ? 'bg-red-600 ring-2 ring-red-400 scale-105 shadow-lg' : 'bg-gray-600 hover:bg-gray-500'
+                        className={`col-span-3 aspect-square max-h-[64px] mx-auto w-full cursor-pointer rounded-md flex items-center justify-center transition-all touch-none ${selectedPalettePiece === 'eraser' ? 'bg-red-600 ring-2 ring-red-400 scale-105 shadow-lg' : 'bg-gray-600 hover:bg-gray-500'
                             }`}
                         onClick={() => setSelectedPalettePiece('eraser')}
+                        onTouchStart={(e) => {
+                            setSelectedPalettePiece('eraser');
+                            if (e.cancelable) e.preventDefault();
+                        }}
                         title="Eraser"
                     >
                         <span className="text-xl">🗑️</span>
@@ -285,7 +293,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                                 key={type}
                                 draggable
                                 onDragStart={(e) => e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'power', data: type }))}
-                                className={`aspect-square cursor-pointer rounded-md flex items-center justify-center transition-all ${selectedPower === type ? 'bg-purple-600 ring-2 ring-purple-400 scale-110 shadow-lg' : 'bg-gray-600 hover:bg-gray-500'
+                                className={`aspect-square cursor-pointer rounded-md flex items-center justify-center transition-all touch-none ${selectedPower === type ? 'bg-purple-600 ring-2 ring-purple-400 scale-110 shadow-lg' : 'bg-gray-600 hover:bg-gray-500'
                                     }`}
                                 onClick={() => setSelectedPower(type === selectedPower ? null : type)}
                                 onTouchStart={(e) => {
@@ -318,7 +326,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                                 key={type}
                                 draggable
                                 onDragStart={(e) => e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'originalType', data: type }))}
-                                className={`aspect-square cursor-pointer rounded-md flex items-center justify-center transition-all ${selectedOriginalType === type ? 'bg-blue-900 ring-2 ring-blue-400 scale-110 shadow-lg' : 'bg-gray-600 hover:bg-gray-500'
+                                className={`aspect-square cursor-pointer rounded-md flex items-center justify-center transition-all touch-none ${selectedOriginalType === type ? 'bg-blue-900 ring-2 ring-blue-400 scale-110 shadow-lg' : 'bg-gray-600 hover:bg-gray-500'
                                     }`}
                                 onClick={() => setSelectedOriginalType(type === selectedOriginalType ? null : type)}
                                 onTouchStart={(e) => {

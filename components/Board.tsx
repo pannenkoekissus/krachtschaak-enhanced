@@ -84,10 +84,17 @@ const Board: React.FC<BoardProps> = ({
 
         const handleTouchStart = (e: React.TouchEvent) => {
             if (isInteractionDisabled) return;
+
+            // Trigger select logic immediately to show valid moves and support tap-tap
+            onSquareClick(row, col);
+            
+            // Prevent ghost clicks and scrolling (already blocked by touch-none but extra safe)
+            if (e.cancelable) e.preventDefault();
+
             const piece = board[row][col];
             if (!piece) return;
 
-            // Only allow dragging own pieces
+            // Only allow dragging own pieces for the visual ghost
             const color = gameMode === 'online_playing' && playerColor ? playerColor : turn;
             if (piece.color !== color) return;
 
@@ -98,9 +105,6 @@ const Board: React.FC<BoardProps> = ({
                 y: touch.clientY,
                 piece: piece
             });
-
-            // Trigger select logic
-            onSquareClick(row, col);
         };
 
         return (
