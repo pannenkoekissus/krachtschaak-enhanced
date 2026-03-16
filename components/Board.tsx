@@ -167,6 +167,8 @@ const Board: React.FC<BoardProps> = ({
             }
         }
 
+        // Prevent the browser from firing a 'click' event after a completed drag/long-press
+        if (e.cancelable) e.preventDefault();
         setTouchDragging(null);
     };
 
