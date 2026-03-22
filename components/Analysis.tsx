@@ -345,6 +345,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
     const [engineArrows, setEngineArrows] = useState<{ from: Position; to: Position, color?: string }[]>([]);
     const [showEngineArrow, setShowEngineArrow] = useState(true);
     const [rightClickStartSquare, setRightClickStartSquare] = useState<Position | null>(null);
+    const [contextMenu, setContextMenu] = useState<{ x: number, y: number, nodeId: string | null }>({ x: 0, y: 0, nodeId: null });
 
     // Engine State
     const [engineThinking, setEngineThinking] = useState(false);
@@ -447,6 +448,56 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
             if (workerRef.current) workerRef.current.terminate();
         };
     }, []);
+
+    useEffect(() => {
+        const handleClick = () => {
+            if (contextMenu.nodeId) {
+                setContextMenu({ x: 0, y: 0, nodeId: null });
+            }
+        };
+        window.addEventListener('click', handleClick);
+        return () => window.removeEventListener('click', handleClick);
+    }, [contextMenu.nodeId]);
+
+    const deleteFromHere = (nodeId: string) => {
+        if (nodeId === 'root') return;
+        const nodeToDelete = nodes[nodeId];
+        if (!nodeToDelete) return;
+
+        const parentId = nodeToDelete.parentId;
+        if (!parentId) return;
+
+        const nodesToRemove: string[] = [];
+        const collect = (id: string) => {
+            nodesToRemove.push(id);
+            const n = nodes[id];
+            if (n && n.children) {
+                n.children.forEach(cid => collect(cid));
+            }
+        };
+        collect(nodeId);
+
+        if (nodesToRemove.includes(currentNodeId)) {
+            goToNode(parentId, false);
+        }
+
+        setNodes(prev => {
+            const next = { ...prev };
+            const parent = next[parentId];
+            if (!parent) return prev;
+
+            next[parentId] = {
+                ...parent,
+                children: parent.children.filter(id => id !== nodeId)
+            };
+
+            nodesToRemove.forEach(id => delete next[id]);
+            return next;
+        });
+
+        setContextMenu({ x: 0, y: 0, nodeId: null });
+        if (nodes[nodes[nodeId].parentId].parentId === null) setLastMove(null);
+    };
 
     const updateValidMoves = useCallback(() => {
         if (selectedPiece && status !== 'promotion' && status !== 'ambiguous_en_passant') {
@@ -1257,6 +1308,11 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                                                 isFutureMove ? 'text-gray-400 bg-gray-800/40 hover:text-white' :
                                                     'text-gray-300 hover:text-white hover:bg-gray-700/50'}`}
                                         onClick={() => goToNode(n.id, false)}
+                                        onContextMenu={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setContextMenu({ x: e.clientX, y: e.clientY, nodeId: n.id });
+                                        }}
                                     >
                                         <span>{n.notation}</span>
 
@@ -1568,6 +1624,29 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                             </button>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Move List Context Menu */}
+            {contextMenu.nodeId && (
+                <div
+                    className="fixed bg-gray-800 border border-gray-700 rounded shadow-2xl py-1 z-[999] min-w-[160px] overflow-hidden"
+                    style={{ left: contextMenu.x, top: contextMenu.y }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <button
+                        className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-900/40 hover:text-red-300 transition-colors flex items-center gap-2 group"
+                        onClick={() => deleteFromHere(contextMenu.nodeId!)}
+                    >
+                        <span className="opacity-70 group-hover:opacity-100 transition-opacity">🗑️</span>
+                        <span className="font-medium">Delete from here</span>
+                    </button>
+                    <button
+                        className="w-full text-left px-4 py-2 text-[10px] text-gray-500 hover:bg-gray-700 hover:text-gray-300 transition-colors"
+                        onClick={() => setContextMenu({ x: 0, y: 0, nodeId: null })}
+                    >
+                        Cancel
+                    </button>
                 </div>
             )}
         </div>
