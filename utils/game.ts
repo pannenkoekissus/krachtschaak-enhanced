@@ -189,7 +189,8 @@ const getKingPremoveMoves = (board: BoardState, pos: Position): Position[] => {
     // For premoves, we only check if the pieces involved (king and rook) have not moved
     // and if the squares between them are empty. We do not check for checks or attacks on
     // traversed squares, as the board state will likely change before the move is executed.
-    if (!piece.hasMoved) {
+    const correctRank = piece.color === Color.White ? 7 : 0;
+    if (!piece.hasMoved && pos.row === correctRank && pos.col === 4) {
         const rank = pos.row;
 
         // Kingside castling premove
@@ -212,7 +213,8 @@ const getKingMoves = (board: BoardState, pos: Position): Position[] => {
     const moves = getStepMoves(board, pos, [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1], [1, -1], [1, 1]]);
 
     // Castling logic needs to check for checks on traversed squares
-    if (!piece.hasMoved && !isKingInCheck(board, piece.color)) {
+    const correctRank = piece.color === Color.White ? 7 : 0;
+    if (!piece.hasMoved && pos.row === correctRank && pos.col === 4 && !isKingInCheck(board, piece.color)) {
         const opponentColor = piece.color === Color.White ? Color.Black : Color.White;
         const rank = pos.row;
 
