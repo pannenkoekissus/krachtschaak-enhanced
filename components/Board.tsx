@@ -27,13 +27,15 @@ interface BoardProps {
     showPowerPieces?: boolean;
     showPowerRings?: boolean;
     showOriginalType?: boolean;
+    allowTouchDragging?: boolean;
 }
 
 const Board: React.FC<BoardProps> = ({
     board, selectedPiece, validMoves, onSquareClick, turn, playerColor, gameMode, isInteractionDisabled,
     onPieceDragStart, onPieceDragEnd, onSquareDrop, draggedPiece, premove,
     lastMove, highlightedSquares, arrows, onBoardMouseDown, onBoardMouseUp, onBoardContextMenu,
-    showPowerPieces = true, showPowerRings = true, showOriginalType = true
+    showPowerPieces = true, showPowerRings = true, showOriginalType = true,
+    allowTouchDragging = true
 }) => {
     const [touchDragging, setTouchDragging] = useState<{ from: Position; x: number; y: number; piece: any; selectedAtStart: boolean; isVisualDrag: boolean } | null>(null);
     const touchTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -49,6 +51,12 @@ const Board: React.FC<BoardProps> = ({
 
     // In local mode, flip for black's turn. In online mode, flip if player is black.
     const isFlipped = (gameMode === 'online_playing' ? playerColor === Color.Black : turn === Color.Black) && (gameMode !== 'online_spectating');
+
+    React.useEffect(() => {
+        return () => {
+            if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+        };
+    }, []);
 
     const renderSquare = (row: number, col: number) => {
         const piece = board[row][col];
@@ -105,14 +113,16 @@ const Board: React.FC<BoardProps> = ({
             interactionRef.current = { row, col, selectedAtStart: !!isAlreadySelected };
 
             // Also update state for the visual drag-ghost (which will appear after a delay)
-            setTouchDragging({
-                from: { row, col },
-                x: touch.clientX,
-                y: touch.clientY,
-                piece: piece,
-                selectedAtStart: !!isAlreadySelected,
-                isVisualDrag: false
-            });
+            if (allowTouchDragging) {
+                setTouchDragging({
+                    from: { row, col },
+                    x: touch.clientX,
+                    y: touch.clientY,
+                    piece: piece,
+                    selectedAtStart: !!isAlreadySelected,
+                    isVisualDrag: false
+                });
+            }
 
             // Immediate selection for NEW pieces (tap-tap logic).
             // For already selected pieces, we wait for touchEnd to perform the toggle/deselect.
@@ -121,7 +131,7 @@ const Board: React.FC<BoardProps> = ({
             }
 
             // Start a timer to enable the "visual drag" ghost for long presses
-            if (piece) {
+            if (piece && allowTouchDragging) {
                 if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
                 touchTimerRef.current = setTimeout(() => {
                     setTouchDragging(prev => prev ? { ...prev, isVisualDrag: true } : null);

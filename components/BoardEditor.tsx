@@ -66,6 +66,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
         const newBoard = board.map(r => [...r]);
         if (selectedPalettePiece === 'eraser') {
             newBoard[row][col] = null;
+            setDraggedPos(null);
         } else if (selectedPalettePiece && typeof selectedPalettePiece !== 'string') {
             newBoard[row][col] = {
                 type: selectedPalettePiece.type,
@@ -75,6 +76,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                 isKing: selectedPalettePiece.type === PieceType.King || (selectedOriginalType === PieceType.King),
                 hasMoved: false
             };
+            setDraggedPos(null);
         }
         setBoard(newBoard);
     };
@@ -250,6 +252,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                     onBoardMouseDown={() => { }}
                     onBoardMouseUp={() => { }}
                     onBoardContextMenu={(e) => e.preventDefault()}
+                    allowTouchDragging={selectedPalettePiece === 'cursor'}
                 />
             </div>
 
