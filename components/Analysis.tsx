@@ -398,6 +398,8 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
     const moveListRef = useRef<HTMLDivElement>(null);
     const currentMoveRef = useRef<HTMLDivElement>(null);
+    const longTouchTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const isLongPressActive = useRef(false);
 
     const handleGetEngineMove = () => {
         if (engineThinking) {
@@ -496,7 +498,36 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         });
 
         setContextMenu({ x: 0, y: 0, nodeId: null });
-        if (nodes[nodes[nodeId].parentId].parentId === null) setLastMove(null);
+        if (nodes[nodes[nodeId].parentId!]?.parentId === null) setLastMove(null);
+    };
+
+    const handleMoveTouchStart = (e: React.TouchEvent, nodeId: string) => {
+        isLongPressActive.current = false;
+        if (longTouchTimerRef.current) clearTimeout(longTouchTimerRef.current);
+
+        const targetNodeId = nodeId;
+        const touch = e.touches[0];
+        const clientX = touch.clientX;
+        const clientY = touch.clientY;
+
+        longTouchTimerRef.current = setTimeout(() => {
+            isLongPressActive.current = true;
+            setContextMenu({ x: clientX, y: clientY, nodeId: targetNodeId });
+            if (window.navigator.vibrate) {
+                try { window.navigator.vibrate(25); } catch (e) { }
+            }
+        }, 300); // 600ms hold for context menu on mobile
+    };
+
+    const handleMoveTouchEnd = () => {
+        if (longTouchTimerRef.current) {
+            clearTimeout(longTouchTimerRef.current);
+            longTouchTimerRef.current = null;
+        }
+    };
+
+    const handleMoveTouchMove = () => {
+        handleMoveTouchEnd();
     };
 
     const updateValidMoves = useCallback(() => {
@@ -1307,7 +1338,17 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                                             ${isSelected ? 'bg-green-600 text-white font-bold shadow-md ring-1 ring-green-400 z-10 scale-105' :
                                                 isFutureMove ? 'text-gray-400 bg-gray-800/40 hover:text-white' :
                                                     'text-gray-300 hover:text-white hover:bg-gray-700/50'}`}
-                                        onClick={() => goToNode(n.id, false)}
+                                        onClick={(e) => {
+                                            if (isLongPressActive.current) {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                return;
+                                            }
+                                            goToNode(n.id, false);
+                                        }}
+                                        onTouchStart={(e) => handleMoveTouchStart(e, n.id)}
+                                        onTouchEnd={handleMoveTouchEnd}
+                                        onTouchMove={handleMoveTouchMove}
                                         onContextMenu={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
