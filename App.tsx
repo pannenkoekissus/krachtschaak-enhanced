@@ -896,8 +896,9 @@ const App: React.FC = () => {
         const nextTurn = turn === Color.White ? Color.Black : Color.White;
         const newHalfmoveClock = resetClock ? 0 : halfmoveClock + 1;
         const key = generateBoardKey(currentBoard, nextTurn, nextEnPassantTarget);
-        const newCount = (positionHistory[key] || 0) + 1;
-        const newPositionHistory = { ...positionHistory, [key]: newCount };
+        const isIrreversible = !!capturedPiece || movingPiece?.type === PieceType.Pawn;
+        const newCount = isIrreversible ? 1 : (positionHistory[key] || 0) + 1;
+        const newPositionHistory = isIrreversible ? { [key]: 1 } : { ...positionHistory, [key]: newCount };
         let newStatus: GameStatus = 'playing';
         let newWinner: string | null = null;
 
