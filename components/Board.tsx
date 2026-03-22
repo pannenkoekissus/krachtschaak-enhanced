@@ -244,16 +244,10 @@ const Board: React.FC<BoardProps> = ({
     }, [isFlipped]);
 
     return (
-        <div
-            ref={boardRef}
-            className={`grid grid-cols-8 grid-rows-8 aspect-square border-4 border-gray-600 shadow-2xl relative ${isFlipped ? 'rotate-180' : ''} touch-none`}
-            onContextMenu={onBoardContextMenu}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-        >
+        <>
             {touchDragging && touchDragging.isVisualDrag && touchDragging.piece && (
                 <div
-                    className={`fixed pointer-events-none z-[100] ${isFlipped ? 'rotate-180' : ''}`}
+                    className="fixed pointer-events-none z-[100]"
                     style={{
                         left: touchDragging.x,
                         top: touchDragging.y,
@@ -271,6 +265,13 @@ const Board: React.FC<BoardProps> = ({
                     />
                 </div>
             )}
+            <div
+                ref={boardRef}
+                className={`grid grid-cols-8 grid-rows-8 aspect-square border-4 border-gray-600 shadow-2xl relative ${isFlipped ? 'rotate-180' : ''} touch-none`}
+                onContextMenu={onBoardContextMenu}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+            >
             {board && Array.isArray(board) && board.map((row, rowIndex) =>
                 Array.isArray(row) && row.map((_, colIndex) => (
                     <div key={`${rowIndex}-${colIndex}`} className={`${isFlipped ? 'rotate-180' : ''}`}>
@@ -356,6 +357,7 @@ const Board: React.FC<BoardProps> = ({
                 })}
             </svg>
         </div>
+        </>
     );
 };
 
