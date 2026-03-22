@@ -516,7 +516,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
             if (window.navigator.vibrate) {
                 try { window.navigator.vibrate(25); } catch (e) { }
             }
-        }, 300); // 600ms hold for context menu on mobile
+        }, 300); // 300ms hold for context menu on mobile
     };
 
     const handleMoveTouchEnd = () => {

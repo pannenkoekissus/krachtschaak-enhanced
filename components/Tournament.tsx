@@ -27,7 +27,7 @@ interface TournamentProps {
 }
 
 type TournamentView = 'list' | 'create' | 'lobby' | 'in_progress' | 'finished';
-type ListTab = 'active' | 'history' | 'public_history';
+type ListTab = 'my_active' | 'active' | 'history' | 'public_history';
 
 const Tournament: React.FC<TournamentProps> = ({
     userId, displayName, onBack, onGameStart, getInitialGameState, myRatings,
@@ -537,12 +537,18 @@ const Tournament: React.FC<TournamentProps> = ({
 
                     {/* Join by code */}
                     <div className="mb-6 p-4 bg-gray-800 rounded-xl border border-gray-700">
-                        <div className="flex gap-2 mb-6 border-b border-gray-700 pb-2">
+                        <div className="flex gap-0.5 mb-6 border-b border-gray-700 pb-0 overflow-x-auto whitespace-nowrap custom-scrollbar">
                             <button
                                 onClick={() => setListTab('active')}
                                 className={`px-4 py-2 font-bold transition-colors ${listTab === 'active' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-gray-400 hover:text-white'}`}
                             >
-                                Active
+                                Public
+                            </button>
+                            <button
+                                onClick={() => setListTab('my_active')}
+                                className={`px-4 py-2 font-bold transition-colors ${listTab === 'my_active' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-gray-400 hover:text-white'}`}
+                            >
+                                Joined
                             </button>
                             <button
                                 onClick={() => setListTab('history')}
@@ -583,12 +589,31 @@ const Tournament: React.FC<TournamentProps> = ({
                         <div className="space-y-3">
                             {loading ? (
                                 <div className="text-center py-8 text-gray-500">Loading...</div>
-                            ) : (listTab === 'active' ? tournaments : listTab === 'history' ? history : publicHistory).length === 0 ? (
-                                <div className="text-center py-8 text-gray-500 italic">
-                                    No {listTab.replace('_', ' ')} tournaments found.
-                                </div>
-                            ) : (
-                                (listTab === 'active' ? tournaments : listTab === 'history' ? history : publicHistory).map(t => {
+                            ) : (() => {
+                                let list = [];
+                                if (listTab === 'my_active') {
+                                    list = tournaments.filter(t => {
+                                        const isHost = t.hostUid === userId;
+                                        const isPlayer = t.players && Object.values(t.players).some((p: any) => p.uid === userId);
+                                        return isHost || isPlayer;
+                                    });
+                                } else if (listTab === 'active') {
+                                    list = tournaments.filter(t => !t.isPrivate);
+                                } else if (listTab === 'history') {
+                                    list = history;
+                                } else {
+                                    list = publicHistory;
+                                }
+
+                                if (list.length === 0) {
+                                    return (
+                                        <div className="text-center py-8 text-gray-500 italic">
+                                            No {listTab === 'my_active' ? 'joined' : listTab.replace('_', ' ')} tournaments found.
+                                        </div>
+                                    );
+                                }
+
+                                return list.map(t => {
                                     const timeLabel = !t.timerSettings ? 'Unlimited' :
                                         'daysPerMove' in t.timerSettings ? `${t.timerSettings.daysPerMove}d / move` :
                                             `${t.timerSettings.initialTime / 60}m + ${t.timerSettings.increment}s`;
@@ -637,7 +662,7 @@ const Tournament: React.FC<TournamentProps> = ({
                                         </div>
                                     );
                                 })
-                            )}
+                            })()}
                         </div>
                     </div>
 

@@ -196,12 +196,16 @@ export const getTournament = async (tournamentId: string): Promise<TournamentDat
     return snap.val();
 };
 
-// List active tournaments
 export const listActiveTournaments = async (userId?: string): Promise<TournamentData[]> => {
     const snap = await db.ref('tournaments').orderByChild('status').once('value');
     const data = snap.val() || {};
-    // Return tournaments that are NOT finished, AND (not private OR hosted by me)
-    return Object.values(data).filter((t: any) => t.status !== 'finished' && (!t.isPrivate || t.hostUid === userId)) as TournamentData[];
+    return Object.values(data).filter((t: any) => {
+        if (t.status === 'finished') return false;
+        if (!t.isPrivate) return true;
+        if (t.hostUid === userId) return true;
+        // Also include if I am a player in it
+        return t.players && Object.values(t.players).some((p: any) => p.uid === userId);
+    }) as TournamentData[];
 };
 
 // List tournament history for a user (finished tournaments they participated in or hosted)
