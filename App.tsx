@@ -14,7 +14,7 @@ import AnalysisManager from './components/AnalysisManager';
 import Tournament from './components/Tournament';
 import ConfirmationModal from './components/ConfirmationModal';
 import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, GameMode, TimerSettings, PlayerInfo, SentChallenge, Move, ChatMessage, LobbyGame, IncomingChallenge } from './types';
-import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, sanitizePiece } from './utils/game';
+import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, sanitizePiece, isInsufficientMaterial } from './utils/game';
 import { getRatingCategory, RatingCategory, RATING_CATEGORIES } from './utils/ratings';
 import { getSharedFolders, getPublicFolders } from './utils/analysisFirebase';
 import { updatePairing, updatePlayerScore, recalculateTiebreaks } from './utils/tournamentFirebase';
@@ -916,6 +916,8 @@ const App: React.FC = () => {
             newStatus = 'draw_fiftyMove';
         } else if (newCount >= 3) {
             newStatus = 'draw_threefold';
+        } else if (isInsufficientMaterial(currentBoard)) {
+            newStatus = 'draw_insufficient';
         } else {
             const capturedKing = newCaptured.white.some(p => p.isKing || p.originalType === PieceType.King || p.type === PieceType.King || p.power === PieceType.King) ||
                 newCaptured.black.some(p => p.isKing || p.originalType === PieceType.King || p.type === PieceType.King || p.power === PieceType.King);
@@ -2233,6 +2235,7 @@ const App: React.FC = () => {
         setSelectedPiece(null);
         setValidMoves([]);
         setHistory(newHistory);
+        setDraggedPiece(null);
     };
 
     const handleLogout = async () => {

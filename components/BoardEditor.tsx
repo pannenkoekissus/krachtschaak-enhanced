@@ -134,8 +134,18 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
         }
 
         if (selectedPalettePiece === 'cursor' && draggedPos) {
+            e.stopPropagation();
             const newBoard = board.map(r => [...r]);
             newBoard[toRow][toCol] = newBoard[draggedPos.row][draggedPos.col];
+            newBoard[draggedPos.row][draggedPos.col] = null;
+            setBoard(newBoard);
+            setDraggedPos(null);
+        }
+    };
+
+    const handleGlobalDrop = (e: React.DragEvent) => {
+        if (selectedPalettePiece === 'cursor' && draggedPos) {
+            const newBoard = board.map(r => [...r]);
             newBoard[draggedPos.row][draggedPos.col] = null;
             setBoard(newBoard);
             setDraggedPos(null);
@@ -211,6 +221,8 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
             className="min-h-screen flex flex-col md:flex-row items-center justify-center p-4 gap-8 bg-gray-900 text-white overflow-x-hidden touch-none"
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={handleGlobalDrop}
         >
             {touchPaletteDragging && (
                 <div

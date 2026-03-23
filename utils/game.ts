@@ -418,6 +418,65 @@ export const canCaptureKing = (board: BoardState, attackerColor: Color): boolean
     return false;
 };
 
+export const isInsufficientMaterial = (board: BoardState): boolean => {
+    const pieces: Piece[] = [];
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            if (board[r][c]) {
+                pieces.push({ ...board[r][c]!, pos: { r, c } } as any);
+            }
+        }
+    }
+
+    const whitePieces = pieces.filter(p => p.color === Color.White);
+    const blackPieces = pieces.filter(p => p.color === Color.Black);
+
+    const whiteKing = whitePieces.find(p => p.isKing);
+    const blackKing = blackPieces.find(p => p.isKing);
+    if (!whiteKing || !blackKing) return false;
+
+    const isSufficient = (sidePieces: Piece[]) => {
+        const nonKingPieces = sidePieces.filter(p => !p.isKing);
+        
+        // 1. Any Pawn is sufficient (can promote)
+        if (nonKingPieces.some(p => p.type === PieceType.Pawn)) return true;
+        
+        // 2. Any Queen or Rook that is NOT the king is sufficient
+        if (nonKingPieces.some(p => p.type === PieceType.Queen || p.type === PieceType.Rook)) return true;
+        
+        // 3. Two or more minor pieces (not the king) are sufficient
+        // (Even if they are same color bishops, in some variants, but we'll stick to 2+ minors)
+        const minorCount = nonKingPieces.filter(p => p.type === PieceType.Bishop || p.type === PieceType.Knight).length;
+        if (minorCount >= 2) return true;
+
+        // 4. Any piece with a power that isn't just King power?
+        // User said: "king with any power vs a king is also a draw"
+        // This implies power on the King doesn't count.
+        // What about power on a minor piece?
+        // If I have a Bishop(Queen power) vs King. That is definitely sufficient.
+        if (nonKingPieces.some(p => p.power && p.power !== PieceType.King)) return true;
+
+        return false;
+    };
+
+    if (isSufficient(whitePieces) || isSufficient(blackPieces)) return false;
+
+    // Both sides are insufficient based on above rules.
+    // Now check the specific "same color bishops" rule for the 1 vs 1 case.
+    if (whitePieces.length === 2 && blackPieces.length === 2) {
+        const wMinor = whitePieces.find(p => !p.isKing)!;
+        const bMinor = blackPieces.find(p => !p.isKing)!;
+        if (wMinor.type === PieceType.Bishop && bMinor.type === PieceType.Bishop) {
+            const wPos = (wMinor as any).pos;
+            const bPos = (bMinor as any).pos;
+            if ((wPos.r + wPos.c) % 2 === (bPos.r + bPos.c) % 2) return true;
+            return false; // Opposite color bishops might be sufficient? (Hard to mate, but possible in theory)
+        }
+    }
+
+    return true;
+};
+
 export const generateBoardKey = (board: BoardState, turn: Color, enPassantTarget: Position | null): string => {
     let key = '';
     const pieceToChar = (p: Piece) => {

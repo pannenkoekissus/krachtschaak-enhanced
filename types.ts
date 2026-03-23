@@ -61,6 +61,7 @@ export type GameStatus =
   | 'promotion'
   | 'draw_threefold'
   | 'draw_fiftyMove'
+  | 'draw_insufficient'
   | 'draw_agreement'
   | 'timeout'
   | 'ambiguous_en_passant'

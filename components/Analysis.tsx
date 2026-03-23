@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, Move } from '../types';
-import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, boardToFen, fenToBoard, generatePGN } from '../utils/game';
+import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, boardToFen, fenToBoard, generatePGN, isInsufficientMaterial } from '../utils/game';
 import { playMoveSound, playCaptureSound, playWinSound, playDrawSound, playLossSound } from '../utils/sounds';
 import { saveAnalysis, loadAnalysis, generateId, AnalysisFolder, SavedAnalysis } from '../utils/analysisFirebase';
 import { getAllFolders } from '../utils/analysisFirebase';
@@ -580,6 +580,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
     }, [updateValidMoves, currentNodeId]);
 
     const handleUndo = useCallback(() => {
+        setDraggedPiece(null);
         const currentNode = nodes[currentNodeId];
         if (currentNode.parentId) {
             goToNode(currentNode.parentId, false); // No sound for undo
@@ -892,6 +893,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
 
     const goToNode = (nodeId: string, playSound = true) => {
+        setDraggedPiece(null);
         if (nodes[nodeId]) {
             // Mark path from root as last visited
             setNodes(prev => {
@@ -1071,26 +1073,33 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         const isIrreversible = !!capturedPiece || movingPiece.type === PieceType.Pawn;
         const newCount = isIrreversible ? 1 : (positionHistory[key] || 0) + 1;
         const newPositionHistory = isIrreversible ? { [key]: 1 } : { ...positionHistory, [key]: newCount };
-
         let newStatus: GameStatus = 'playing';
         let newWinner: string | null = null;
 
-        const capturedKing = newCaptured.white.some(p => p.isKing || p.originalType === PieceType.King || p.type === PieceType.King || p.power === PieceType.King) ||
-            newCaptured.black.some(p => p.isKing || p.originalType === PieceType.King || p.type === PieceType.King || p.power === PieceType.King);
-        if (capturedKing) {
-            newStatus = 'kingCaptured';
-            newWinner = turn === Color.White ? 'White' : 'Black';
+        if (newHalfmoveClock >= 100) {
+            newStatus = 'draw_fiftyMove';
+        } else if (newCount >= 3) {
+            newStatus = 'draw_threefold';
+        } else if (isInsufficientMaterial(currentBoard)) {
+            newStatus = 'draw_insufficient';
         } else {
-            const hasStandardLegalMoves = hasLegalMoves(currentBoard, nextTurn, nextEnPassantTarget);
-            const canPlayerCaptureKing = canCaptureKing(currentBoard, nextTurn);
+            const capturedKing = newCaptured.white.some(p => p.isKing || p.originalType === PieceType.King || p.type === PieceType.King || p.power === PieceType.King) ||
+                newCaptured.black.some(p => p.isKing || p.originalType === PieceType.King || p.type === PieceType.King || p.power === PieceType.King);
+            if (capturedKing) {
+                newStatus = 'kingCaptured';
+                newWinner = nextTurn === Color.White ? 'Black' : 'White'; // Fixed winner logic: turn is the one who just moved
+            } else {
+                const hasStandardLegalMoves = hasLegalMoves(currentBoard, nextTurn, nextEnPassantTarget);
+                const canPlayerCaptureKing = canCaptureKing(currentBoard, nextTurn);
 
-            if (!hasStandardLegalMoves && !canPlayerCaptureKing) {
-                const isPlayerInCheck = isKingInCheck(currentBoard, nextTurn);
-                if (isPlayerInCheck) {
-                    newStatus = 'checkmate';
-                    newWinner = turn === Color.White ? 'White' : 'Black';
-                } else {
-                    newStatus = 'stalemate';
+                if (!hasStandardLegalMoves && !canPlayerCaptureKing) {
+                    const isPlayerInCheck = isKingInCheck(currentBoard, nextTurn);
+                    if (isPlayerInCheck) {
+                        newStatus = 'checkmate';
+                        newWinner = nextTurn === Color.White ? 'Black' : 'White';
+                    } else {
+                        newStatus = 'stalemate';
+                    }
                 }
             }
         }
@@ -1117,7 +1126,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         // Play sounds
         if (newStatus === 'checkmate' || newStatus === 'kingCaptured') {
             playWinSound();
-        } else if (newStatus === 'stalemate') {
+        } else if (newStatus === 'stalemate' || newStatus === 'draw_threefold' || newStatus === 'draw_fiftyMove' || newStatus === 'draw_insufficient') {
             playDrawSound();
         } else {
             const isCapture = !!capturedPiece;
