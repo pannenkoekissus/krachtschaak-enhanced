@@ -419,61 +419,69 @@ export const canCaptureKing = (board: BoardState, attackerColor: Color): boolean
 };
 
 export const isInsufficientMaterial = (board: BoardState): boolean => {
-    const pieces: Piece[] = [];
+    return false;
+    const whiteMinors: Piece[] = [];
+    const blackMinors: Piece[] = [];
+    let whiteKingPower = false;
+    let blackKingPower = false;
+
     for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
-            if (board[r][c]) {
-                pieces.push({ ...board[r][c]!, pos: { r, c } } as any);
+            const piece = board[r][c];
+            if (!piece) continue;
+
+            // 1. Sufficient if any Pawn, Rook, Queen, or minor piece with useful power.
+            if (!piece.isKing && !(piece.originalType === PieceType.King)) {
+                if (piece.type === PieceType.Pawn || piece.type === PieceType.Rook || piece.type === PieceType.Queen) return false;
+                if (piece.power && piece.power !== piece.type) return false;
+
+                const pWithPos = { ...piece, pos: { r, c } };
+                if (piece.color === Color.White) whiteMinors.push(pWithPos as any);
+                else blackMinors.push(pWithPos as any);
+            } else {
+                if (piece.originalType === PieceType.King && !(piece.type === PieceType.King)) {
+                    if (piece.color === Color.White) whiteKingPower = true;
+                    else blackKingPower = true;
+                    if (piece.power !== piece.type) {
+                        if (piece.type === PieceType.Queen) {
+                            if (piece.power === PieceType.Knight) return false;
+                        }
+                    }
+                }
+                // If it's a King, check for useful power.
+                if (piece.power && piece.power !== piece.type) {
+                    if (piece.color === Color.White) whiteKingPower = true;
+                    else blackKingPower = true;
+                }
             }
         }
     }
 
-    const whitePieces = pieces.filter(p => p.color === Color.White);
-    const blackPieces = pieces.filter(p => p.color === Color.Black);
+    // 2. Sufficient if any side has 2+ minor pieces.
+    if (whiteMinors.length >= 2 || blackMinors.length >= 2) return false;
 
-    const whiteKing = whitePieces.find(p => p.isKing);
-    const blackKing = blackPieces.find(p => p.isKing);
-    if (!whiteKing || !blackKing) return false;
+    const wCount = whiteMinors.length;
+    const bCount = blackMinors.length;
 
-    const isSufficient = (sidePieces: Piece[]) => {
-        const nonKingPieces = sidePieces.filter(p => !p.isKing);
-        
-        // 1. Any Pawn is sufficient (can promote)
-        if (nonKingPieces.some(p => p.type === PieceType.Pawn)) return true;
-        
-        // 2. Any Queen or Rook that is NOT the king is sufficient
-        if (nonKingPieces.some(p => p.type === PieceType.Queen || p.type === PieceType.Rook)) return true;
-        
-        // 3. Two or more minor pieces (not the king) are sufficient
-        // (Even if they are same color bishops, in some variants, but we'll stick to 2+ minors)
-        const minorCount = nonKingPieces.filter(p => p.type === PieceType.Bishop || p.type === PieceType.Knight).length;
-        if (minorCount >= 2) return true;
-
-        // 4. Any piece with a power that isn't just King power?
-        // User said: "king with any power vs a king is also a draw"
-        // This implies power on the King doesn't count.
-        // What about power on a minor piece?
-        // If I have a Bishop(Queen power) vs King. That is definitely sufficient.
-        if (nonKingPieces.some(p => p.power && p.power !== PieceType.King)) return true;
-
-        return false;
-    };
-
-    if (isSufficient(whitePieces) || isSufficient(blackPieces)) return false;
-
-    // Both sides are insufficient based on above rules.
-    // Now check the specific "same color bishops" rule for the 1 vs 1 case.
-    if (whitePieces.length === 2 && blackPieces.length === 2) {
-        const wMinor = whitePieces.find(p => !p.isKing)!;
-        const bMinor = blackPieces.find(p => !p.isKing)!;
-        if (wMinor.type === PieceType.Bishop && bMinor.type === PieceType.Bishop) {
-            const wPos = (wMinor as any).pos;
-            const bPos = (bMinor as any).pos;
-            if ((wPos.r + wPos.c) % 2 === (bPos.r + bPos.c) % 2) return true;
-            return false; // Opposite color bishops might be sufficient? (Hard to mate, but possible in theory)
+    // 3. K + minor vs K + minor is NOT a draw unless same-color bishops.
+    if (wCount === 1 && bCount === 1) {
+        const wB = whiteMinors[0];
+        const bB = blackMinors[0];
+        if (wB.type === PieceType.Bishop && bB.type === PieceType.Bishop) {
+            const wPos = (wB as any).pos;
+            const bPos = (bB as any).pos;
+            if ((wPos.r + wPos.c) % 2 === (bPos.r + bPos.c) % 2) return true; // Draw
+            return false; // Mate possible
         }
+        return false; // K+N vs K+N, K+N vs K+B, etc.
     }
 
+    // 4. K(useful power) vs K + 1 minor is NOT a draw (mate possible).
+    if (whiteKingPower && bCount >= 1) return false;
+    if (blackKingPower && wCount >= 1) return false;
+
+    // 5. All other cases are draws:
+    // K vs K, K+m vs K, K(power) vs K, K(power) vs K(power)
     return true;
 };
 

@@ -78,6 +78,9 @@ const GameOverlay: React.FC<GameOverlayProps> = ({
             case 'draw_fiftyMove':
                 message = `Draw by 50-move rule.`;
                 break;
+            case 'draw_insufficient':
+                message = `Draw by insufficient material.`;
+                break;
             case 'draw_agreement':
                 message = `Draw by agreement.`;
                 break;
