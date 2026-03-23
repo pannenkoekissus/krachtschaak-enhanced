@@ -132,14 +132,16 @@ const App: React.FC = () => {
     const [localAmbiguousEnPassantState, setLocalAmbiguousEnPassantState] = useState<{ from: Position, to: Position } | null>(null);
 
     // Settings State
-    const [premovesEnabled, _setPremovesEnabled] = useState(true);
-    const [moveConfirmationEnabled, _setMoveConfirmationEnabled] = useState(true);
-    const [drawConfirmationEnabled, _setDrawConfirmationEnabled] = useState(true);
-    const [resignConfirmationEnabled, _setResignConfirmationEnabled] = useState(true);
-    const [showPowerPieces, _setShowPowerPieces] = useState(true);
-    const [showPowerRings, _setShowPowerRings] = useState(true);
-    const [showOriginalType, _setShowOriginalType] = useState(true);
-    const [soundsEnabled, _setSoundsEnabled] = useState(true);
+    const [premovesEnabled, _setPremovesEnabled] = useState(() => localStorage.getItem('premovesEnabled') !== 'false');
+    const [moveConfirmationEnabled, _setMoveConfirmationEnabled] = useState(() => localStorage.getItem('moveConfirmationEnabled') !== 'false');
+    const [drawConfirmationEnabled, _setDrawConfirmationEnabled] = useState(() => localStorage.getItem('drawConfirmationEnabled') !== 'false');
+    const [resignConfirmationEnabled, _setResignConfirmationEnabled] = useState(() => localStorage.getItem('resignConfirmationEnabled') !== 'false');
+    const [showPowerPieces, _setShowPowerPieces] = useState(() => localStorage.getItem('showPowerPieces') !== 'false');
+    const [showPowerRings, _setShowPowerRings] = useState(() => localStorage.getItem('showPowerRings') !== 'false');
+    const [showOriginalType, _setShowOriginalType] = useState(() => localStorage.getItem('showOriginalType') !== 'false');
+    const [soundsEnabled, _setSoundsEnabled] = useState(() => localStorage.getItem('soundsEnabled') !== 'false');
+
+
     const [premoves, setPremoves] = useState<GameState['premoves']>({});
 
     // Commit confirmation interception state
@@ -314,6 +316,7 @@ const App: React.FC = () => {
 
     const setPremovesEnabled = (enabled: boolean) => {
         _setPremovesEnabled(enabled);
+        localStorage.setItem('premovesEnabled', String(enabled));
         if (currentUser && isFirebaseConfigured) {
             db.ref(`userSettings/${currentUser.uid}/premovesEnabled`).set(enabled);
         }
@@ -321,12 +324,14 @@ const App: React.FC = () => {
 
     const setMoveConfirmationEnabled = (enabled: boolean) => {
         _setMoveConfirmationEnabled(enabled);
+        localStorage.setItem('moveConfirmationEnabled', String(enabled));
         if (currentUser && isFirebaseConfigured) {
             db.ref(`userSettings/${currentUser.uid}/moveConfirmationEnabled`).set(enabled);
         }
     };
     const setDrawConfirmationEnabled = (enabled: boolean) => {
         _setDrawConfirmationEnabled(enabled);
+        localStorage.setItem('drawConfirmationEnabled', String(enabled));
         if (currentUser && isFirebaseConfigured) {
             db.ref(`userSettings/${currentUser.uid}/drawConfirmationEnabled`).set(enabled);
         }
@@ -334,30 +339,35 @@ const App: React.FC = () => {
 
     const setResignConfirmationEnabled = (enabled: boolean) => {
         _setResignConfirmationEnabled(enabled);
+        localStorage.setItem('resignConfirmationEnabled', String(enabled));
         if (currentUser && isFirebaseConfigured) {
             db.ref(`userSettings/${currentUser.uid}/resignConfirmationEnabled`).set(enabled);
         }
     };
     const setShowPowerPieces = (enabled: boolean) => {
         _setShowPowerPieces(enabled);
+        localStorage.setItem('showPowerPieces', String(enabled));
         if (currentUser && isFirebaseConfigured) {
             db.ref(`userSettings/${currentUser.uid}/showPowerPieces`).set(enabled);
         }
     };
     const setShowPowerRings = (enabled: boolean) => {
         _setShowPowerRings(enabled);
+        localStorage.setItem('showPowerRings', String(enabled));
         if (currentUser && isFirebaseConfigured) {
             db.ref(`userSettings/${currentUser.uid}/showPowerRings`).set(enabled);
         }
     };
     const setShowOriginalType = (enabled: boolean) => {
         _setShowOriginalType(enabled);
+        localStorage.setItem('showOriginalType', String(enabled));
         if (currentUser && isFirebaseConfigured) {
             db.ref(`userSettings/${currentUser.uid}/showOriginalType`).set(enabled);
         }
     };
     const setSoundsEnabled = (enabled: boolean) => {
         _setSoundsEnabled(enabled);
+        localStorage.setItem('soundsEnabled', String(enabled));
         if (currentUser && isFirebaseConfigured) {
             db.ref(`userSettings/${currentUser.uid}/soundsEnabled`).set(enabled);
         }
@@ -1333,6 +1343,27 @@ const App: React.FC = () => {
             sentChallengesRef.off('value', sentListener);
         };
     }, [currentUser, isFirebaseConfigured, gameId, serverOffset, soundsEnabled, handleOnlineGameStart, gameMode]);
+
+    // Effects to sync settings from Firebase on login
+    useEffect(() => {
+        if (!currentUser || !isFirebaseConfigured) return;
+        const settingsRef = db.ref(`userSettings/${currentUser.uid}`);
+        const onValue = (snapshot: any) => {
+            const settings = snapshot.val();
+            if (settings) {
+                if (settings.premovesEnabled !== undefined) { _setPremovesEnabled(settings.premovesEnabled); localStorage.setItem('premovesEnabled', String(settings.premovesEnabled)); }
+                if (settings.moveConfirmationEnabled !== undefined) { _setMoveConfirmationEnabled(settings.moveConfirmationEnabled); localStorage.setItem('moveConfirmationEnabled', String(settings.moveConfirmationEnabled)); }
+                if (settings.drawConfirmationEnabled !== undefined) { _setDrawConfirmationEnabled(settings.drawConfirmationEnabled); localStorage.setItem('drawConfirmationEnabled', String(settings.drawConfirmationEnabled)); }
+                if (settings.resignConfirmationEnabled !== undefined) { _setResignConfirmationEnabled(settings.resignConfirmationEnabled); localStorage.setItem('resignConfirmationEnabled', String(settings.resignConfirmationEnabled)); }
+                if (settings.showPowerPieces !== undefined) { _setShowPowerPieces(settings.showPowerPieces); localStorage.setItem('showPowerPieces', String(settings.showPowerPieces)); }
+                if (settings.showPowerRings !== undefined) { _setShowPowerRings(settings.showPowerRings); localStorage.setItem('showPowerRings', String(settings.showPowerRings)); }
+                if (settings.showOriginalType !== undefined) { _setShowOriginalType(settings.showOriginalType); localStorage.setItem('showOriginalType', String(settings.showOriginalType)); }
+                if (settings.soundsEnabled !== undefined) { _setSoundsEnabled(settings.soundsEnabled); localStorage.setItem('soundsEnabled', String(settings.soundsEnabled)); }
+            }
+        };
+        settingsRef.on('value', onValue);
+        return () => settingsRef.off('value', onValue);
+    }, [currentUser, isFirebaseConfigured]);
 
     const handleBackToMenu = useCallback(async () => {
         const localStatus = statusRef.current;

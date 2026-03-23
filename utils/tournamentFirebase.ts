@@ -31,7 +31,7 @@ export const createTournament = async (
     if (hostParticipates) {
         const hostPlayerId = generatePlayerId();
         players[hostPlayerId] = {
-            oderId: hostPlayerId,
+            playerId: hostPlayerId,
             uid: hostUid,
             nickname: hostName,
             score: 0,
@@ -73,7 +73,7 @@ export const joinTournament = async (
 ): Promise<string> => {
     const playerId = generatePlayerId();
     const player: TournamentPlayer = {
-        oderId: playerId,
+        playerId,
         uid,
         nickname,
         score: 0,
@@ -197,22 +197,23 @@ export const getTournament = async (tournamentId: string): Promise<TournamentDat
 };
 
 export const listActiveTournaments = async (userId?: string): Promise<TournamentData[]> => {
-    const snap = await db.ref('tournaments').orderByChild('status').once('value');
+    const snap = await db.ref('tournaments').once('value');
     const data = snap.val() || {};
     return Object.values(data).filter((t: any) => {
         if (t.status === 'finished') return false;
         if (!t.isPrivate) return true;
-        if (t.hostUid === userId) return true;
+        if (userId && t.hostUid === userId) return true;
         // Also include if I am a player in it
-        return t.players && Object.values(t.players).some((p: any) => p.uid === userId);
+        return userId && t.players && Object.values(t.players).some((p: any) => p.uid === userId);
     }) as TournamentData[];
 };
 
 // List tournament history for a user (finished tournaments they participated in or hosted)
 export const listTournamentHistory = async (userId: string): Promise<TournamentData[]> => {
-    const snap = await db.ref('tournaments').orderByChild('status').equalTo('finished').once('value');
+    const snap = await db.ref('tournaments').once('value');
     const data = snap.val() || {};
     return Object.values(data).filter((t: any) => {
+        if (t.status !== 'finished') return false;
         const isHost = t.hostUid === userId;
         const isPlayer = t.players && Object.values(t.players).some((p: any) => p.uid === userId);
         return isHost || isPlayer;
@@ -238,7 +239,7 @@ export const toggleHostParticipation = async (tournamentId: string, hostUid: str
         // Add host as player
         const newPlayerId = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
         await db.ref(`tournaments/${tournamentId}/players/${newPlayerId}`).set({
-            oderId: newPlayerId,
+            playerId: newPlayerId,
             uid: hostUid,
             nickname: hostName,
             score: 0,
@@ -248,7 +249,7 @@ export const toggleHostParticipation = async (tournamentId: string, hostUid: str
         });
     } else if (!shouldParticipate && existingPlayer) {
         // Remove host from players
-        await db.ref(`tournaments/${tournamentId}/players/${existingPlayer.oderId}`).remove();
+        await db.ref(`tournaments/${tournamentId}/players/${existingPlayer.playerId}`).remove();
     }
 };
 
@@ -263,9 +264,9 @@ export const generateSwissPairings = (
     const byesReceived: Record<string, number> = {};
 
     players.forEach(p => {
-        playedAgainst[p.oderId] = new Set();
-        colorBalance[p.oderId] = 0;
-        byesReceived[p.oderId] = 0;
+        playedAgainst[p.playerId] = new Set();
+        colorBalance[p.playerId] = 0;
+        byesReceived[p.playerId] = 0;
     });
 
     Object.values(previousRounds || {}).forEach(round => {
@@ -293,17 +294,17 @@ export const generateSwissPairings = (
     if (available.length % 2 !== 0) {
         // Find candidate for BYE: lowest score, and hasn't had a bye (or fewer byes)
         // Rule: 1 bye per player unless everyone has had one
-        const minByes = Math.min(...available.map(p => byesReceived[p.oderId]));
+        const minByes = Math.min(...available.map(p => byesReceived[p.playerId]));
 
         // Candidates are those with minByes
-        const byeCandidates = available.filter(p => byesReceived[p.oderId] === minByes);
+        const byeCandidates = available.filter(p => byesReceived[p.playerId] === minByes);
         // Take the one with lowest score (end of sorted list) among candidates
         const byePlayer = byeCandidates[byeCandidates.length - 1];
 
         const pairingId = generatePlayerId();
         pairings.push({
             id: pairingId,
-            white: byePlayer.oderId,
+            white: byePlayer.playerId,
             black: 'BYE',
             gameId: null,
             result: '1-0',
@@ -311,14 +312,14 @@ export const generateSwissPairings = (
         });
 
         // Remove from available
-        available = available.filter(p => p.oderId !== byePlayer.oderId);
+        available = available.filter(p => p.playerId !== byePlayer.playerId);
     }
 
     const paired = new Set<string>();
 
     // Explicitly track match counts to find who was played LEAST against
     const matchCounts: Record<string, Record<string, number>> = {};
-    players.forEach(p => matchCounts[p.oderId] = {});
+    players.forEach(p => matchCounts[p.playerId] = {});
 
     Object.values(previousRounds || {}).forEach(round => {
         Object.values(round.pairings || {}).forEach(pairing => {
@@ -331,7 +332,7 @@ export const generateSwissPairings = (
 
     for (let i = 0; i < available.length; i++) {
         const p1 = available[i];
-        if (paired.has(p1.oderId)) continue;
+        if (paired.has(p1.playerId)) continue;
 
         let bestMatch: TournamentPlayer | null = null;
         let minPlayCount = Infinity;
@@ -339,9 +340,9 @@ export const generateSwissPairings = (
         // Greedy search for an opponent among the remaining players
         for (let j = i + 1; j < available.length; j++) {
             const p2 = available[j];
-            if (paired.has(p2.oderId)) continue;
+            if (paired.has(p2.playerId)) continue;
 
-            const count = matchCounts[p1.oderId][p2.oderId] || 0;
+            const count = matchCounts[p1.playerId][p2.playerId] || 0;
 
             // Priority 1: High priority if they have NEVER played (count === 0)
             if (count === 0) {
@@ -360,8 +361,8 @@ export const generateSwissPairings = (
             const pairingId = generatePlayerId();
 
             let p1White = Math.random() < 0.5;
-            const bal1 = colorBalance[p1.oderId] || 0;
-            const bal2 = colorBalance[bestMatch.oderId] || 0;
+            const bal1 = colorBalance[p1.playerId] || 0;
+            const bal2 = colorBalance[bestMatch.playerId] || 0;
 
             if (bal1 > bal2) {
                 p1White = false;
@@ -371,14 +372,14 @@ export const generateSwissPairings = (
 
             pairings.push({
                 id: pairingId,
-                white: p1White ? p1.oderId : bestMatch.oderId,
-                black: p1White ? bestMatch.oderId : p1.oderId,
+                white: p1White ? p1.playerId : bestMatch.playerId,
+                black: p1White ? bestMatch.playerId : p1.playerId,
                 gameId: null,
                 result: null,
                 status: 'pending'
             });
-            paired.add(p1.oderId);
-            paired.add(bestMatch.oderId);
+            paired.add(p1.playerId);
+            paired.add(bestMatch.playerId);
         }
     }
 

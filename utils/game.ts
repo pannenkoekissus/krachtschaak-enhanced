@@ -571,4 +571,141 @@ export const applyMoveToBoard = (board: BoardState, move: Move): BoardState => {
     }
 
     return newBoard;
-}
+};
+
+export const posToNotation = (row: number, col: number): string => {
+    return String.fromCharCode(97 + col) + (8 - row);
+};
+
+export const notationToPos = (notation: string): Position | null => {
+    if (notation.length !== 2) return null;
+    const col = notation.charCodeAt(0) - 97;
+    const row = 8 - parseInt(notation[1]);
+    if (isNaN(row) || col < 0 || col > 7 || row < 0 || row > 7) return null;
+    return { row, col };
+};
+
+export const boardToFen = (gameState: any): string => {
+    const { board, turn, enPassantTarget, halfmoveClock, moveHistory = [] } = gameState;
+    let fen = '';
+
+    // 1. Piece placement
+    for (let r = 0; r < 8; r++) {
+        let emptyCount = 0;
+        for (let c = 0; c < 8; c++) {
+            const piece = board[r][c];
+            if (!piece) {
+                emptyCount++;
+            } else {
+                if (emptyCount > 0) {
+                    fen += emptyCount;
+                    emptyCount = 0;
+                }
+                const char = piece.type === PieceType.Knight ? 'N' : piece.type.charAt(0).toUpperCase();
+                fen += piece.color === Color.White ? char : char.toLowerCase();
+            }
+        }
+        if (emptyCount > 0) fen += emptyCount;
+        if (r < 7) fen += '/';
+    }
+
+    // 2. Side to move
+    fen += ` ${turn === Color.White ? 'w' : 'b'}`;
+
+    // 3. Castling rights
+    let castling = '';
+    const whiteKing = board[7][4];
+    if (whiteKing && whiteKing.type === PieceType.King && whiteKing.color === Color.White && !whiteKing.hasMoved) {
+        const whiteKSRook = board[7][7];
+        if (whiteKSRook && whiteKSRook.type === PieceType.Rook && whiteKSRook.color === Color.White && !whiteKSRook.hasMoved) castling += 'K';
+        const whiteQSRook = board[7][0];
+        if (whiteQSRook && whiteQSRook.type === PieceType.Rook && whiteQSRook.color === Color.White && !whiteQSRook.hasMoved) castling += 'Q';
+    }
+    const blackKing = board[0][4];
+    if (blackKing && blackKing.type === PieceType.King && blackKing.color === Color.Black && !blackKing.hasMoved) {
+        const blackKSRook = board[0][7];
+        if (blackKSRook && blackKSRook.type === PieceType.Rook && blackKSRook.color === Color.Black && !blackKSRook.hasMoved) castling += 'k';
+        const blackQSRook = board[0][0];
+        if (blackQSRook && blackQSRook.type === PieceType.Rook && blackQSRook.color === Color.Black && !blackQSRook.hasMoved) castling += 'q';
+    }
+    fen += ` ${castling || '-'}`;
+
+    // 4. En passant target
+    fen += ` ${enPassantTarget ? posToNotation(enPassantTarget.row, enPassantTarget.col) : '-'}`;
+
+    // 5. Halfmove clock
+    fen += ` ${halfmoveClock || 0}`;
+
+    // 6. Fullmove counter
+    const fullmove = Math.floor(moveHistory.length / 2) + 1;
+    fen += ` ${fullmove}`;
+
+    return fen;
+};
+
+export const fenToBoard = (fen: string): Partial<any> | null => {
+    const parts = fen.trim().split(/\s+/);
+    if (parts.length < 1) return null;
+
+    const board: BoardState = Array(8).fill(null).map(() => Array(8).fill(null));
+    const rows = parts[0].split('/');
+    if (rows.length !== 8) return null;
+
+    for (let r = 0; r < 8; r++) {
+        let c = 0;
+        for (const char of rows[r]) {
+            if (/\d/.test(char)) {
+                c += parseInt(char);
+            } else {
+                const color = char === char.toUpperCase() ? Color.White : Color.Black;
+                const typeChar = char.toLowerCase();
+                let type: PieceType = PieceType.Pawn;
+                if (typeChar === 'n') type = PieceType.Knight;
+                else if (typeChar === 'b') type = PieceType.Bishop;
+                else if (typeChar === 'r') type = PieceType.Rook;
+                else if (typeChar === 'q') type = PieceType.Queen;
+                else if (typeChar === 'k') type = PieceType.King;
+
+                board[r][c] = {
+                    type,
+                    color,
+                    power: null,
+                    originalType: type,
+                    isKing: type === PieceType.King,
+                    hasMoved: true // Default to true, will fix with castling rights
+                };
+                c++;
+            }
+        }
+    }
+
+    const turn = parts[1] === 'b' ? Color.Black : Color.White;
+    const castling = parts[2] || '-';
+    // Reset hasMoved for Kings/Rooks based on castling rights
+    if (castling.includes('K')) { if (board[7][4]) board[7][4]!.hasMoved = false; if (board[7][7]) board[7][7]!.hasMoved = false; }
+    if (castling.includes('Q')) { if (board[7][4]) board[7][4]!.hasMoved = false; if (board[7][0]) board[7][0]!.hasMoved = false; }
+    if (castling.includes('k')) { if (board[0][4]) board[0][4]!.hasMoved = false; if (board[0][7]) board[0][7]!.hasMoved = false; }
+    if (castling.includes('q')) { if (board[0][4]) board[0][4]!.hasMoved = false; if (board[0][0]) board[0][0]!.hasMoved = false; }
+
+    const ep = parts[3] && parts[3] !== '-' ? notationToPos(parts[3]) : null;
+    const halfmove = parseInt(parts[4]) || 0;
+
+    return { board, turn, enPassantTarget: ep, halfmoveClock: halfmove, status: 'playing' as any };
+};
+
+export const generatePGN = (moveHistory: Move[], result: string = "*", initialFen?: string): string => {
+    let pgn = "";
+    const defaultFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    if (initialFen && initialFen !== defaultFen) {
+        pgn += `[FEN "${initialFen}"]\n`;
+        pgn += `[SetUp "1"]\n\n`;
+    }
+    for (let i = 0; i < moveHistory.length; i++) {
+        const moveNum = Math.floor(i / 2) + 1;
+        if (i % 2 === 0) {
+            pgn += moveNum + ". ";
+        }
+        pgn += moveHistory[i].notation + " ";
+    }
+    return pgn.trim() + " " + result;
+};

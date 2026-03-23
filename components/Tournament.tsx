@@ -108,7 +108,7 @@ const Tournament: React.FC<TournamentProps> = ({
                 setActiveTournament(data);
                 const players = data.players || {};
                 const myEntry = Object.values(players).find((p: any) => p.uid === userId);
-                setMyPlayerId(myEntry ? (myEntry as TournamentPlayer).oderId : null);
+                setMyPlayerId(myEntry ? (myEntry as TournamentPlayer).playerId : null);
             } else {
                 // Tournament deleted or not found
                 setActiveTournament(null);
@@ -150,9 +150,9 @@ const Tournament: React.FC<TournamentProps> = ({
     const currentRoundData = activeTournament?.rounds?.[currentRound] || null;
     const currentPairings = Object.values(currentRoundData?.pairings || {}) as TournamentPairing[];
 
-    const getPlayerName = (oderId: string) => {
-        if (oderId === 'BYE') return 'BYE';
-        const p = activeTournament?.players?.[oderId];
+    const getPlayerName = (playerId: string) => {
+        if (playerId === 'BYE') return 'BYE';
+        const p = activeTournament?.players?.[playerId];
         return p?.nickname || 'Unknown';
     };
 
@@ -534,6 +534,52 @@ const Tournament: React.FC<TournamentProps> = ({
                     {error && (
                         <div className="mb-4 p-3 bg-red-900/50 border border-red-600 rounded-lg text-red-200 text-sm">{error}</div>
                     )}
+
+                    {/* Your Active Tournaments Section */}
+                    {(() => {
+                        const myActive = tournaments.filter(t => {
+                            const isHost = t.hostUid === userId;
+                            const isPlayer = t.players && Object.values(t.players).some((p: any) => p.uid === userId);
+                            return (isHost || isPlayer) && t.status !== 'finished';
+                        });
+
+                        if (myActive.length === 0) return null;
+
+                        return (
+                            <div className="mb-6 p-4 bg-blue-900/20 rounded-xl border border-blue-700/50 shadow-lg">
+                                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                                    <span className="text-2xl">⚡</span> Your Active Tournaments
+                                </h2>
+                                <div className="space-y-3">
+                                    {myActive.map(t => {
+                                        const timeLabel = !t.timerSettings ? 'Unlimited' :
+                                            'daysPerMove' in t.timerSettings ? `${t.timerSettings.daysPerMove}d / move` :
+                                                `${t.timerSettings.initialTime / 60}m + ${t.timerSettings.increment}s`;
+                                        return (
+                                            <div
+                                                key={t.id}
+                                                onClick={() => handleJoin(t.id)}
+                                                className="p-3 bg-gray-800 hover:bg-gray-750 rounded-lg border border-gray-700 transition-all cursor-pointer group flex justify-between items-center"
+                                            >
+                                                <div>
+                                                    <h3 className="font-bold group-hover:text-blue-400 transition-colors">{t.name}</h3>
+                                                    <div className="text-xs text-gray-400">
+                                                        Round {t.currentRound} of {t.totalRounds} • {timeLabel}
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col items-end gap-1">
+                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${t.status === 'lobby' ? 'bg-green-900 text-green-400' : 'bg-blue-600 text-white'}`}>
+                                                        {t.status.replace('_', ' ')}
+                                                    </span>
+                                                    <div className="text-[10px] font-mono text-gray-500">{t.id}</div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })()}
 
                     {/* Join by code */}
                     <div className="mb-6 p-4 bg-gray-800 rounded-xl border border-gray-700">
@@ -956,7 +1002,7 @@ const Tournament: React.FC<TournamentProps> = ({
                                 </div>
                                 <div className="space-y-2">
                                     {players.map(p => (
-                                        <div key={p.oderId} className="flex items-center justify-between p-2 bg-gray-700 rounded-lg">
+                                        <div key={p.playerId} className="flex items-center justify-between p-2 bg-gray-700 rounded-lg">
                                             <div className="flex items-center gap-2">
                                                 <span className="font-semibold">{p.nickname}</span>
                                                 {p.uid === activeTournament.hostUid && (
@@ -968,7 +1014,7 @@ const Tournament: React.FC<TournamentProps> = ({
                                             </div>
                                             {isHost && p.uid !== userId && (
                                                 <button
-                                                    onClick={() => handleRemovePlayer(p.oderId)}
+                                                    onClick={() => handleRemovePlayer(p.playerId)}
                                                     className="text-xs px-2 py-1 bg-red-700 hover:bg-red-600 rounded font-bold transition-colors"
                                                 >
                                                     Remove
@@ -1016,7 +1062,7 @@ const Tournament: React.FC<TournamentProps> = ({
                                         </thead>
                                         <tbody>
                                             {sortedPlayers.map((p, i) => (
-                                                <tr key={p.oderId} className={`border-b border-gray-700/50 ${p.uid === userId ? 'bg-blue-900/30' : ''}`}>
+                                                <tr key={p.playerId} className={`border-b border-gray-700/50 ${p.uid === userId ? 'bg-blue-900/30' : ''}`}>
                                                     <td className="py-2 px-2 font-bold text-gray-400">{i + 1}</td>
                                                     <td className="py-2 px-2 font-semibold">
                                                         {p.nickname}
@@ -1153,7 +1199,7 @@ const Tournament: React.FC<TournamentProps> = ({
                                                             <label className="text-[10px] text-gray-400">White</label>
                                                             <select value={manualWhite} onChange={e => setManualWhite(e.target.value)} className="w-full px-2 py-1 bg-gray-600 rounded text-sm">
                                                                 <option value="">Select...</option>
-                                                                {players.map(p => <option key={p.oderId} value={p.oderId}>{p.nickname}</option>)}
+                                                                {players.map(p => <option key={p.playerId} value={p.playerId}>{p.nickname}</option>)}
                                                             </select>
                                                         </div>
                                                         <div className="text-gray-500 text-xs pb-1">vs</div>
@@ -1164,7 +1210,7 @@ const Tournament: React.FC<TournamentProps> = ({
                                                                 <option value="BYE">Full BYE (1.0 pt)</option>
                                                                 <option value="HALF_BYE">Half BYE (0.5 pt)</option>
                                                                 <option value="ZERO_BYE">0 point BYE (0.0 pt)</option>
-                                                                {players.filter(p => p.oderId !== manualWhite).map(p => <option key={p.oderId} value={p.oderId}>{p.nickname}</option>)}
+                                                                {players.filter(p => p.playerId !== manualWhite).map(p => <option key={p.playerId} value={p.playerId}>{p.nickname}</option>)}
                                                             </select>
                                                         </div>
                                                         <button

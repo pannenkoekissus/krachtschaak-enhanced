@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { BoardState, Color, PieceType, Piece, Position, Square } from '../types';
+import { boardToFen, fenToBoard } from '../utils/game';
 import Board from './Board';
 import PieceComponent from './Piece';
 
@@ -19,6 +20,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
     const [selectedPower, setSelectedPower] = useState<PieceType | null>(null);
     const [selectedOriginalType, setSelectedOriginalType] = useState<PieceType | null>(null);
     const [touchPaletteDragging, setTouchPaletteDragging] = useState<{ source: 'palette' | 'power' | 'originalType', data: any, x: number, y: number } | null>(null);
+    const [fenEditorInput, setFenEditorInput] = useState('');
 
     const clearBoard = () => {
         setBoard(Array(8).fill(null).map(() => Array(8).fill(null)));
@@ -451,6 +453,45 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                         className="py-2 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-colors"
                     >
                         Clear Board
+                    </button>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                    <label className="text-sm font-semibold text-gray-400 uppercase tracking-wider">FEN Import / Export</label>
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            value={fenEditorInput}
+                            onChange={(e) => setFenEditorInput(e.target.value)}
+                            placeholder="Paste FEN string..."
+                            className="flex-1 px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white text-sm placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                        />
+                        <button
+                            onClick={() => {
+                                const result = fenToBoard(fenEditorInput);
+                                if (result && result.board) {
+                                    setBoard(result.board);
+                                    if (result.turn) setTurn(result.turn);
+                                    setFenEditorInput('');
+                                } else {
+                                    alert('Invalid FEN string');
+                                }
+                            }}
+                            disabled={!fenEditorInput.trim()}
+                            className="px-3 py-1.5 bg-green-600 hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded font-semibold text-sm transition-colors"
+                        >
+                            Load
+                        </button>
+                    </div>
+                    <button
+                        onClick={() => {
+                            const fen = boardToFen({ board, turn });
+                            navigator.clipboard.writeText(fen);
+                            setFenEditorInput(fen);
+                        }}
+                        className="w-full py-1.5 bg-gray-600 hover:bg-gray-500 text-white rounded font-semibold text-sm transition-colors"
+                    >
+                        📋 Copy FEN
                     </button>
                 </div>
 

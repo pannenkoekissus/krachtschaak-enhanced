@@ -176,20 +176,32 @@ const Board: React.FC<BoardProps> = ({
                 onTouchStart={handleTouchStart}
         >
             {overlays}
-                {piece &&
-                    <Piece
-                        piece={piece}
-                        onDragStart={(e) => {
-                            if (isInteractionDisabled) return;
-                            interactionRef.current = null; // Drag started, prevent subsequent 'click' from toggling selection
-                            onPieceDragStart(e, row, col);
-                        }}
-                        onDragEnd={onPieceDragEnd}
-                        isBeingDragged={isBeingDragged}
-                        showPowerPieces={showPowerPieces}
-                        showPowerRings={showPowerRings}
-                        showOriginalType={showOriginalType}
-                    />}
+            {/* Rank Labels (1-8) - Only on the first column */}
+            {col === 0 && (
+                <span className={`absolute left-0.5 top-0.5 text-[10px] sm:text-xs font-bold ${isLight ? 'text-green-800' : 'text-gray-400'} opacity-60 pointer-events-none select-none`}>
+                    {8 - row}
+                </span>
+            )}
+            {/* File Labels (a-h) - Only on the last row */}
+            {row === 7 && (
+                <span className={`absolute right-0.5 bottom-0.5 text-[10px] sm:text-xs font-bold ${isLight ? 'text-green-800' : 'text-gray-400'} opacity-60 pointer-events-none select-none`}>
+                    {String.fromCharCode(97 + col)}
+                </span>
+            )}
+            {piece &&
+                <Piece
+                    piece={piece}
+                    onDragStart={(e) => {
+                        if (isInteractionDisabled) return;
+                        interactionRef.current = null; // Drag started, prevent subsequent 'click' from toggling selection
+                        onPieceDragStart(e, row, col);
+                    }}
+                    onDragEnd={onPieceDragEnd}
+                    isBeingDragged={isBeingDragged}
+                    showPowerPieces={showPowerPieces}
+                    showPowerRings={showPowerRings}
+                    showOriginalType={showOriginalType}
+                />}
         </div>
         );
     };

@@ -202,7 +202,7 @@ export type PairingResult = '1-0' | '0-1' | '0.5-0.5' | null;
 export type PairingStatus = 'pending' | 'playing' | 'finished';
 
 export interface TournamentPlayer {
-  oderId: string;          // unique id within the tournament
+  playerId: string;          // unique id within the tournament
   uid: string;             // firebase uid (auth required)
   nickname: string;
   score: number;           // cumulative: 1 = win, 0.5 = draw, 0 = loss
@@ -213,8 +213,8 @@ export interface TournamentPlayer {
 
 export interface TournamentPairing {
   id: string;
-  white: string;           // oderId of player
-  black: string;           // oderId of player
+  white: string;           // playerId of player
+  black: string;           // playerId of player
   gameId: string | null;   // link to /games/{gameId} when started
   result: PairingResult;
   status: PairingStatus;

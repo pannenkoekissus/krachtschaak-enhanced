@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, Move } from '../types';
-import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard } from '../utils/game';
+import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, boardToFen, fenToBoard, generatePGN } from '../utils/game';
 import { playMoveSound, playCaptureSound, playWinSound, playDrawSound, playLossSound } from '../utils/sounds';
 import { saveAnalysis, loadAnalysis, generateId, AnalysisFolder, SavedAnalysis } from '../utils/analysisFirebase';
 import { getAllFolders } from '../utils/analysisFirebase';
@@ -298,6 +298,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         }
     }, [currentUser?.uid]);
 
+
     const getResultMessage = () => {
         const game = initialState;
         if (!game) return "Analysis Mode";
@@ -334,10 +335,13 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
     const [halfmoveClock, setHalfmoveClock] = useState<number>(0);
     const [positionHistory, setPositionHistory] = useState<Record<string, number>>({});
     const [moveHistory, setMoveHistory] = useState<Move[]>([]);
-    const [lastMove, setLastMove] = useState<Move | null>(null);
+    const [lastMove, setLastMove] = useState<Move | { from: Position; to: Position } | null>(null);
     const [saveName, setSaveName] = useState<string>('');
     const [saveModalOpen, setSaveModalOpen] = useState(false);
     const [showLinkCopied, setShowLinkCopied] = useState(false);
+    const [pgnInput, setPgnInput] = useState('');
+    const [showExportModal, setShowExportModal] = useState(false);
+    const [exportData, setExportData] = useState<{ type: string; value: string } | null>(null);
 
     // UI State
     const [highlightedSquares, setHighlightedSquares] = useState<Position[]>([]);
@@ -346,6 +350,17 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
     const [showEngineArrow, setShowEngineArrow] = useState(true);
     const [rightClickStartSquare, setRightClickStartSquare] = useState<Position | null>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number, nodeId: string | null }>({ x: 0, y: 0, nodeId: null });
+
+    // Close context menu on global click
+    useEffect(() => {
+        const handleClick = () => {
+            if (contextMenu.nodeId) {
+                setContextMenu({ x: 0, y: 0, nodeId: null });
+            }
+        };
+        window.addEventListener('click', handleClick);
+        return () => window.removeEventListener('click', handleClick);
+    }, [contextMenu.nodeId]);
 
     // Engine State
     const [engineThinking, setEngineThinking] = useState(false);
@@ -505,18 +520,15 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         isLongPressActive.current = false;
         if (longTouchTimerRef.current) clearTimeout(longTouchTimerRef.current);
 
-        const targetNodeId = nodeId;
         const touch = e.touches[0];
         const clientX = touch.clientX;
         const clientY = touch.clientY;
 
         longTouchTimerRef.current = setTimeout(() => {
             isLongPressActive.current = true;
-            setContextMenu({ x: clientX, y: clientY, nodeId: targetNodeId });
-            if (window.navigator.vibrate) {
-                try { window.navigator.vibrate(25); } catch (e) { }
-            }
-        }, 300); // 300ms hold for context menu on mobile
+            setContextMenu({ x: clientX, y: clientY, nodeId: nodeId });
+            if (navigator.vibrate) try { navigator.vibrate(50); } catch (e) { }
+        }, 500);
     };
 
     const handleMoveTouchEnd = () => {
@@ -529,6 +541,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
     const handleMoveTouchMove = () => {
         handleMoveTouchEnd();
     };
+
 
     const updateValidMoves = useCallback(() => {
         if (selectedPiece && status !== 'promotion' && status !== 'ambiguous_en_passant') {
@@ -571,7 +584,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         if (currentNode.parentId) {
             goToNode(currentNode.parentId, false); // No sound for undo
         }
-        if (nodes[nodes[currentNodeId].parentId].parentId === null) setLastMove(null); // Clear highlights if we're at the root
+        if (nodes[nodes[currentNodeId].parentId]?.parentId === null) setLastMove(null); // Clear highlights if we're at the root
     }, [currentNodeId, nodes]);
 
     const handleRedo = useCallback(() => {
@@ -665,19 +678,6 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         }
     };
 
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-            if (e.key === 'ArrowLeft') {
-                handleUndo();
-            } else if (e.key === 'ArrowRight') {
-                handleRedo();
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [handleUndo, handleRedo]);
-
     const handleShareLink = () => {
         if (!currentAnalysisId) return;
         const ownerId = analysisOwnerUserId || currentUser?.uid;
@@ -693,16 +693,163 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         });
     };
 
-    const getCurrentState = (): GameState => ({
-        board, turn, status, winner, promotionData, capturedPieces,
-        enPassantTarget, halfmoveClock, positionHistory,
-        ambiguousEnPassantData, drawOffer: null, playerTimes: null,
-        turnStartTime: null, moveDeadline: null, timerSettings: null,
-        ratingCategory: 'unlimited' as any, players: {},
-        playerColors: { white: null, black: null }, initialRatings: null,
-        isRated: false, rematchOffer: null, nextGameId: null,
-        ratingChange: null, moveHistory
-    });
+    const handleImportPGN = () => {
+        if (!pgnInput) return;
+        
+        // Basic PGN parser
+        let initialFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        const fenMatch = pgnInput.match(/\[FEN\s+"([^"]+)"\]/);
+        if (fenMatch) initialFen = fenMatch[1];
+
+        const startState = fenToBoard(initialFen) as GameState;
+        if (!startState) {
+            alert("Invalid starting FEN in PGN");
+            return;
+        }
+
+        // Extract moves (strip tags, comments, variations, numbers, and extra space)
+        const moveText = pgnInput
+            .replace(/\[.*?\]/g, '')        // Remove tags
+            .replace(/\{.*?\}/g, '')        // Remove comments { ... }
+            .replace(/\(.*?\)/g, '')        // Remove variations ( ... ) - note: non-recursive
+            .replace(/\d+\.+/g, '')         // Remove move numbers like 1., 1..., etc.
+            .replace(/\$\d+/g, '')          // Remove NAGs like $1, $2
+            .trim();
+        const moveStrings = moveText.split(/\s+/).filter(s => s && !s.includes('*') && !s.match(/^[0-1]-[0-1]$/) && s !== '1/2-1/2');
+
+        // Start from root node with initial FEN
+        const importRootId = 'root';
+        const newNodes: Record<string, AnalysisTreeNode> = {
+            [importRootId]: {
+                id: importRootId,
+                gameState: startState,
+                notation: null,
+                children: [],
+                parentId: null
+            }
+        };
+
+        let tempBoard = startState.board;
+        let tempTurn = startState.turn;
+        let tempEp = startState.enPassantTarget;
+        let tempHalfmove = startState.halfmoveClock;
+        let lastNodeId = importRootId;
+        for (const notation of moveStrings) {
+            let foundMove: Move | null = null;
+
+            // Find the move that matches this notation
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const piece = tempBoard[r][c];
+                    if (piece && piece.color === tempTurn) {
+                        const from = { row: r, col: c };
+                        const validMoves = getValidMoves(tempBoard, from, tempEp, true);
+                        
+                        for (const to of validMoves) {
+                            // Determine captured piece for notation
+                            let capturedPiece: Piece | null = tempBoard[to.row][to.col];
+                            if (!capturedPiece && piece.type === PieceType.Pawn && tempEp && to.row === tempEp.row && to.col === tempEp.col) {
+                                capturedPiece = tempBoard[from.row][to.col];
+                            }
+
+                            // Check standard move
+                            const n = getNotation(tempBoard, from, to, piece, capturedPiece, null);
+                            if (n === notation) {
+                                foundMove = { from, to, notation: n, piece: piece.type, color: tempTurn, captured: capturedPiece?.type };
+                                break;
+                            }
+                            // Check for possible promotion
+                            if (piece.type === PieceType.Pawn && (to.row === 0 || to.row === 7)) {
+                                for (const prom of [PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight]) {
+                                    const nProm = getNotation(tempBoard, from, to, piece, capturedPiece, prom);
+                                    if (nProm === notation) {
+                                        foundMove = { from, to, notation: nProm, piece: piece.type, color: tempTurn, promotion: prom, captured: capturedPiece?.type };
+                                        break;
+                                    }
+                                }
+                            }
+                            if (foundMove) break;
+                        }
+                    }
+                    if (foundMove) break;
+                }
+                if (foundMove) break;
+            }
+            
+            if (!foundMove) {
+                console.warn(`Could not find legal move for notation: ${notation}`);
+                break; 
+            }
+
+            const nextBoard = applyMoveToBoard(tempBoard, foundMove);
+            
+            // Calculate next EP target
+            let nextEp: Position | null = null;
+            if (foundMove.piece === PieceType.Pawn && Math.abs(foundMove.from.row - foundMove.to.row) === 2) {
+                nextEp = { row: (foundMove.from.row + foundMove.to.row) / 2, col: foundMove.from.col };
+            }
+
+            const nextTurn = tempTurn === Color.White ? Color.Black : Color.White;
+            const nextState = normalizeGameState({
+                board: nextBoard,
+                turn: nextTurn,
+                enPassantTarget: nextEp,
+                halfmoveClock: tempHalfmove + 1,
+                lastMove: foundMove
+            });
+
+            const newNodeId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
+            
+            newNodes[newNodeId] = {
+                id: newNodeId,
+                gameState: nextState,
+                notation: foundMove.notation,
+                children: [],
+                parentId: lastNodeId
+            };
+            newNodes[lastNodeId].children.push(newNodeId);
+
+            tempBoard = nextBoard;
+            tempTurn = nextTurn;
+            tempEp = nextEp;
+            tempHalfmove = nextState.halfmoveClock;
+            lastNodeId = newNodeId;
+        }
+
+
+        setNodes(newNodes);
+        setCurrentNodeId(lastNodeId);
+        applyState(newNodes[lastNodeId].gameState);
+        setPgnInput("");
+    };
+
+    const handleCopyFen = () => {
+        const fen = boardToFen(nodes[currentNodeId].gameState);
+        navigator.clipboard.writeText(fen);
+        setExportData({ type: 'FEN', value: fen });
+        setShowExportModal(true);
+    };
+
+    const handleCopyPGN = () => {
+        const history: Move[] = [];
+        let currId = currentNodeId;
+        while (currId && nodes[currId]) {
+            const curr = nodes[currId];
+            if (curr.notation) {
+                history.unshift({ notation: curr.notation } as Move);
+            }
+            currId = curr.parentId || "";
+            if (!currId) break;
+        }
+        
+        const rootNode = nodes['root'];
+        const initialFen = boardToFen(rootNode.gameState);
+        const pgn = generatePGN(history, "*", initialFen);
+        
+        navigator.clipboard.writeText(pgn);
+        setExportData({ type: 'PGN', value: pgn });
+        setShowExportModal(true);
+    };
 
     const commitNewState = (newState: GameState, notation: string) => {
         const newNodeId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
@@ -743,27 +890,6 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         stopWorker();
     };
 
-    const applyState = (state: GameState) => {
-        const safe = normalizeGameState(state || {});
-        setBoard(safe.board);
-        setTurn(safe.turn);
-        setStatus(safe.status);
-        setWinner(safe.winner);
-        setCapturedPieces(safe.capturedPieces || { white: [], black: [] });
-        setEnPassantTarget(safe.enPassantTarget);
-        setHalfmoveClock(safe.halfmoveClock || 0);
-        setPositionHistory(safe.positionHistory || {});
-        setMoveHistory(safe.moveHistory || []);
-        setPromotionData(safe.promotionData || null);
-        setAmbiguousEnPassantData(safe.ambiguousEnPassantData || null);
-        setLastMove((safe as any)?.lastMove || null);
-        setSelectedPiece(null);
-        setValidMoves([]);
-        setHighlightedSquares([]);
-        setArrows([]);
-        setEngineArrows([]);
-        setDraggedPiece(null);
-    };
 
     const goToNode = (nodeId: string, playSound = true) => {
         if (nodes[nodeId]) {
@@ -844,6 +970,90 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
     };
 
     const currentLine = getCurrentLine();
+
+    const getCurrentState = (): GameState => ({
+        board,
+        turn,
+        status,
+        winner,
+        capturedPieces,
+        enPassantTarget,
+        halfmoveClock,
+        positionHistory,
+        moveHistory,
+        lastMove: lastMove as { from: Position; to: Position } | null,
+        promotionData,
+        ambiguousEnPassantData,
+        drawOffer: null,
+        playerTimes: initialState?.playerTimes || null,
+        turnStartTime: initialState?.turnStartTime || null,
+        moveDeadline: initialState?.moveDeadline || null,
+        rematchOffer: null,
+        nextGameId: null,
+        ratingChange: initialState?.ratingChange || null,
+        timerSettings: initialState?.timerSettings || null,
+        players: initialState?.players || {},
+        playerColors: initialState?.playerColors || { white: null, black: null },
+        initialRatings: initialState?.initialRatings || null,
+        isRated: initialState?.isRated || false,
+        ratingCategory: initialState?.ratingCategory || 'unlimited' as any,
+    });
+
+    const applyState = (state: GameState) => {
+        setBoard(state.board);
+        setTurn(state.turn);
+        setStatus(state.status || 'playing');
+        setWinner(state.winner || null);
+        setCapturedPieces(state.capturedPieces || { white: [], black: [] });
+        setEnPassantTarget(state.enPassantTarget || null);
+        setHalfmoveClock(state.halfmoveClock || 0);
+        setPositionHistory(state.positionHistory || {});
+        setMoveHistory(state.moveHistory || []);
+        setLastMove(state.lastMove || null);
+        setPromotionData(state.promotionData || null);
+        setAmbiguousEnPassantData(state.ambiguousEnPassantData || null);
+        setSelectedPiece(null);
+        setValidMoves([]);
+    };
+
+    const handleKeyDown = useCallback((e: KeyboardEvent) => {
+        if (e.repeat) return;
+        if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+
+        if (e.key === 'ArrowLeft') {
+            handleUndo();
+        } else if (e.key === 'ArrowRight') {
+            handleRedo();
+        } else if (e.key === 'ArrowUp') {
+            // Variation navigation up
+            const currentNode = nodes[currentNodeId];
+            if (currentNode.parentId) {
+                const parent = nodes[currentNode.parentId];
+                if (parent.children.length > 1) {
+                    const idx = parent.children.indexOf(currentNodeId);
+                    const nextIdx = (idx - 1 + parent.children.length) % parent.children.length;
+                    goToNode(parent.children[nextIdx], true);
+                }
+            }
+        } else if (e.key === 'ArrowDown') {
+            // Variation navigation down
+            const currentNode = nodes[currentNodeId];
+            if (currentNode.parentId) {
+                const parent = nodes[currentNode.parentId];
+                if (parent.children.length > 1) {
+                    const idx = parent.children.indexOf(currentNodeId);
+                    const nextIdx = (idx + 1) % parent.children.length;
+                    goToNode(parent.children[nextIdx], true);
+                }
+            }
+        }
+    }, [handleUndo, handleRedo, nodes, currentNodeId]);
+
+    useEffect(() => {
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [handleKeyDown]);
+
 
     const finalizeTurn = (
         currentBoard: BoardState,
@@ -1420,7 +1630,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                                                         className="text-[10px] text-gray-500 hover:text-green-400 text-center uppercase font-bold py-0.5"
                                                         title="Promote to main line"
                                                     >
-                                                        ↑ Main
+                                                        ↑ Promote
                                                     </button>
                                                 )}
                                             </div>
@@ -1448,7 +1658,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                                                         className="text-[10px] text-gray-500 hover:text-purple-400 text-center uppercase font-bold py-0.5"
                                                         title="Promote to main line"
                                                     >
-                                                        ↑ Main
+                                                        ↑ Promote
                                                     </button>
                                                 )}
                                             </div>
@@ -1553,14 +1763,66 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                         )}
                     </div>
 
-                    <button
-                        onClick={handleShareLink}
-                        className={`w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${!currentAnalysisId ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        disabled={!currentAnalysisId}
-                        title={!currentAnalysisId ? 'Save the analysis first to get a shareable link' : 'Copy direct link to clipboard'}
-                    >
-                        <span>{showLinkCopied ? '✅ Link Copied!' : '🔗 Share Link'}</span>
-                    </button>
+                    {/* Share & Export Section */}
+                    <div className="bg-gray-700 p-3 rounded-lg flex flex-col gap-2">
+                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Share & Export</span>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={handleCopyFen}
+                                className="flex-1 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg font-semibold text-sm transition-colors"
+                                title="Copy current position as FEN"
+                            >
+                                📋 FEN
+                            </button>
+                            <button
+                                onClick={handleCopyPGN}
+                                className="flex-1 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg font-semibold text-sm transition-colors"
+                                title="Copy move history as PGN"
+                            >
+                                📋 PGN
+                            </button>
+                            <button
+                                onClick={handleShareLink}
+                                className={`flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold text-sm transition-all ${!currentAnalysisId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                disabled={!currentAnalysisId}
+                                title={!currentAnalysisId ? 'Save first' : 'Copy share link'}
+                            >
+                                {showLinkCopied ? '✅ Copied!' : '🔗 Link'}
+                            </button>
+                        </div>
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={pgnInput}
+                                onChange={(e) => setPgnInput(e.target.value)}
+                                placeholder="Paste PGN to import..."
+                                className="flex-1 px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-sm placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                            />
+                            <button
+                                onClick={handleImportPGN}
+                                disabled={!pgnInput.trim()}
+                                className="px-3 py-1.5 bg-green-600 hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded font-semibold text-sm transition-colors"
+                            >
+                                Import
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Export Modal */}
+                    {showExportModal && exportData && (
+                        <div className="bg-gray-700 p-3 rounded-lg flex flex-col gap-2 border border-blue-500/30">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-blue-400">{exportData.type} Copied!</span>
+                                <button onClick={() => setShowExportModal(false)} className="text-gray-400 hover:text-white text-sm">✕</button>
+                            </div>
+                            <textarea
+                                readOnly
+                                value={exportData.value}
+                                className="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs font-mono resize-none h-16"
+                                onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                            />
+                        </div>
+                    )}
 
                     <button
                         onClick={() => {
