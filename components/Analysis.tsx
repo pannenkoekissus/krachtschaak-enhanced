@@ -176,6 +176,8 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                     board: nextBoard,
                     turn: nextTurn,
                     lastMove: move,
+                    status: (i === initialState.moveHistory.length - 1) ? initialState.status : 'playing',
+                    winner: (i === initialState.moveHistory.length - 1) ? initialState.winner : null,
                     // VERBETERD: Gebruik i + 1 in plaats van indexOf(move)
                     moveHistory: initialState.moveHistory.slice(0, i + 1),
                     enPassantTarget: move.piece === PieceType.Pawn && Math.abs(move.from.row - move.to.row) === 2

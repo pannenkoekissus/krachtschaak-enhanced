@@ -1863,15 +1863,6 @@ const App: React.FC = () => {
             const capturedColor = actualCapturedPiece.color;
             newCapturedPieces[capturedColor].push(actualCapturedPiece);
 
-            if (actualCapturedPiece.isKing || actualCapturedPiece.originalType === PieceType.King) {
-                pieceToMove.power = acquiredPower;
-                pieceToMove.hasMoved = true;
-                newBoard[to.row][to.col] = pieceToMove;
-                newBoard[from.row][from.col] = null;
-                const finalState: GameState = { ...currentState, board: newBoard, capturedPieces: newCapturedPieces, lastMove: { from, to } };
-                handleGameOver(finalState, 'kingCaptured', turn.charAt(0).toUpperCase() + turn.slice(1));
-                return;
-            }
         }
 
         const promotionRank = turn === Color.White ? 0 : 7;
