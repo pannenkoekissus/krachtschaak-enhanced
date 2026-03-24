@@ -78,6 +78,13 @@ jobs:
           npx cap init "Krachtschaak" com.krachtschaak --web-dir $WEB_DIR
           npx cap add android || true
           
+      - name: Generate App Icons
+        run: |
+          mkdir -p assets
+          cp public/icon.jpg assets/icon.jpg
+          npm install -D @capacitor/assets
+          npx capacitor-assets generate
+
       - name: Fix Kotlin Duplicate Classes
         run: |
           echo "configurations.all {
