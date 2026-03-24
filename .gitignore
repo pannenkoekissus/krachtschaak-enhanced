@@ -17,6 +17,7 @@ dist-ssr
 android
 capacitor*
 icons
+assets
 
 # Editor directories and files
 .agent
