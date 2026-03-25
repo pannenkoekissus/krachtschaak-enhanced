@@ -306,7 +306,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         if (!game) return "Analysis Mode";
         switch (game.status) {
             case 'kingCaptured': return `${game.winner} wins by capturing the king!`;
-            case 'resignation': return `${game.winner} wins by resignation.`;
+            case 'resignation': return (game.moveHistory && game.moveHistory.length < 2) ? `${game.winner} wins by abort.` : `${game.winner} wins by resignation.`;
             case 'checkmate': return `${game.winner} wins by checkmate!`;
             case 'stalemate': return `Stalemate! It's a draw.`;
             case 'draw_threefold': return `Draw by threefold repetition.`;
@@ -1406,6 +1406,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                     onResolveAmbiguousEnPassant={resolveAmbiguousEnPassant}
                     gameMode="analysis"
                     isMyTurnForAction={true}
+                    currentGameState={getCurrentState()}
                 />
                 <Board
                     board={board}

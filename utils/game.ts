@@ -418,70 +418,53 @@ export const canCaptureKing = (board: BoardState, attackerColor: Color): boolean
     return false;
 };
 
-export const isInsufficientMaterial = (board: BoardState): boolean => {
-    return false;
-    const whiteMinors: Piece[] = [];
-    const blackMinors: Piece[] = [];
-    let whiteKingPower = false;
-    let blackKingPower = false;
-
+export const isInsufficientMaterial = (board: BoardState, color?): boolean => {
+    return false; //you can always capture the king
+    var whitepieces = new Array<Piece>();
+    var blackpieces = new Array<Piece>();
     for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
             const piece = board[r][c];
             if (!piece) continue;
-
-            // 1. Sufficient if any Pawn, Rook, Queen, or minor piece with useful power.
-            if (!piece.isKing && !(piece.originalType === PieceType.King)) {
-                if (piece.type === PieceType.Pawn || piece.type === PieceType.Rook || piece.type === PieceType.Queen) return false;
-                if (piece.power && piece.power !== piece.type) return false;
-
-                const pWithPos = { ...piece, pos: { r, c } };
-                if (piece.color === Color.White) whiteMinors.push(pWithPos as any);
-                else blackMinors.push(pWithPos as any);
-            } else {
-                if (piece.originalType === PieceType.King && !(piece.type === PieceType.King)) {
-                    if (piece.color === Color.White) whiteKingPower = true;
-                    else blackKingPower = true;
-                    if (piece.power !== piece.type) {
-                        if (piece.type === PieceType.Queen) {
-                            if (piece.power === PieceType.Knight) return false;
-                        }
-                    }
+            if (piece.color === Color.White) whitepieces.push(piece);
+            else blackpieces.push(piece);
+        }
+    }
+    //white check
+    if (color === Color.White) {
+        if (whitepieces.length >= 3) return false;
+        //king vs king
+        if (whitepieces.length === 1) {
+            if (whitepieces[0].originalType === PieceType.King) {
+                if (whitepieces[0].type === PieceType.Queen) {
+                    if (whitepieces[0].power === PieceType.Knight) return false;
+                    else return true;
                 }
-                // If it's a King, check for useful power.
-                if (piece.power && piece.power !== piece.type) {
-                    if (piece.color === Color.White) whiteKingPower = true;
-                    else blackKingPower = true;
+                if (whitepieces[0].type === PieceType.Knight && whitepieces[0].power === PieceType.Queen) return false;
+                else return true;
+            }
+            else return true;
+        }
+        if (whitepieces.length === 2) {
+            const first = whitepieces[0]
+            const second = whitepieces[1]
+            //no powers case
+            if (first.power === null && second.power === null) {
+                if (first.type === PieceType.King || second.type === PieceType.King) {
+                    if (first.type === PieceType.Knight || first.type === PieceType.Bishop || second.type === PieceType.Knight || second.type === PieceType.Bishop) return true;
+                    else return false;
                 }
             }
         }
     }
-
-    // 2. Sufficient if any side has 2+ minor pieces.
-    if (whiteMinors.length >= 2 || blackMinors.length >= 2) return false;
-
-    const wCount = whiteMinors.length;
-    const bCount = blackMinors.length;
-
-    // 3. K + minor vs K + minor is NOT a draw unless same-color bishops.
-    if (wCount === 1 && bCount === 1) {
-        const wB = whiteMinors[0];
-        const bB = blackMinors[0];
-        if (wB.type === PieceType.Bishop && bB.type === PieceType.Bishop) {
-            const wPos = (wB as any).pos;
-            const bPos = (bB as any).pos;
-            if ((wPos.r + wPos.c) % 2 === (bPos.r + bPos.c) % 2) return true; // Draw
-            return false; // Mate possible
-        }
-        return false; // K+N vs K+N, K+N vs K+B, etc.
+    //black check
+    if (color === Color.Black) {
+        if (blackpieces.length >= 3) return false;
     }
-
-    // 4. K(useful power) vs K + 1 minor is NOT a draw (mate possible).
-    if (whiteKingPower && bCount >= 1) return false;
-    if (blackKingPower && wCount >= 1) return false;
-
-    // 5. All other cases are draws:
-    // K vs K, K+m vs K, K(power) vs K, K(power) vs K(power)
+    //no color check
+    if (color === null) {
+        if (whitepieces.length >= 3 || blackpieces.length >= 3) return false;
+    }
     return true;
 };
 

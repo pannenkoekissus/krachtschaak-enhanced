@@ -102,7 +102,7 @@ const GameReview: React.FC<GameReviewProps> = ({ game, onBack, onAnalyze }) => {
     const getResultMessage = () => {
         switch (status) {
             case 'kingCaptured': return `${winner} wins by capturing the king!`;
-            case 'resignation': return `${winner} wins by resignation.`;
+            case 'resignation': return (game.moveHistory && game.moveHistory.length < 2) ? `${winner} wins by abort.` : `${winner} wins by resignation.`;
             case 'checkmate': return `${winner} wins by checkmate!`;
             case 'stalemate': return `Stalemate! It's a draw.`;
             case 'draw_threefold': return `Draw by threefold repetition.`;

@@ -64,7 +64,11 @@ const GameOverlay: React.FC<GameOverlayProps> = ({
                 message = `${winner} wins by capturing the king!`;
                 break;
             case 'resignation':
-                message = `${winner} wins by resignation.`;
+                if (currentGameState?.moveHistory && currentGameState.moveHistory.length < 2) {
+                    message = `${winner} wins by abort.`;
+                } else {
+                    message = `${winner} wins by resignation.`;
+                }
                 break;
             case 'checkmate':
                 message = `${winner} wins by checkmate!`;
