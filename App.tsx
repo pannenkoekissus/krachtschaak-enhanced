@@ -3347,7 +3347,7 @@ const App: React.FC = () => {
                         >
                             How to Play (Official Rules on Official Website in Dutch)
                         </a>
-                        {!((window as any).Capacitor?.isNativePlatform?.()) && (
+                        {!((window as any).Capacitor?.isNativePlatform?.()) && !isPwaInstalled && (
                             <div className="flex flex-col md:flex-row items-center justify-center gap-3">
                                 {!isPwaInstalled && (
                                     <button
