@@ -2,31 +2,34 @@
 
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="dark">
-    <link rel="icon" type="image/jpeg" href="/icon.jpg">
-    <link rel="shortcut icon" href="/favicon.ico">
-    <link rel="apple-touch-icon" href="/icon.jpg">
-    <title>Krachtschaak Online</title>
-    <style>
-      body {
-        font-family: 'Inter', sans-serif;
-      }
-      
-    </style>
-    <!-- Firebase SDKs (Compat) -->
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics-compat.js"></script>
-<link rel="stylesheet" href="/src/style.css">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#111827">
+  <link rel="icon" type="image/png" href="/icons/icon-192.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <title>Krachtschaak</title>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+  </style>
+  <!-- Firebase SDKs (Local for offline PWA support) -->
+  <script src="/vendor/firebase/firebase-app-compat.js"></script>
+  <script src="/vendor/firebase/firebase-auth-compat.js"></script>
+  <script src="/vendor/firebase/firebase-database-compat.js"></script>
+  <script src="/vendor/firebase/firebase-analytics-compat.js"></script>
+  <link rel="stylesheet" href="/src/style.css">
 </head>
-  <body class="bg-gray-900 text-white">
-    <div id="root"></div>
-    
-    <!-- App Scripts -->
-    <script type="module" src="/index.tsx"></script>
-  </body>
+
+<body class="bg-gray-900 text-white">
+  <div id="root"></div>
+
+  <!-- App Scripts -->
+  <script type="module" src="/index.tsx"></script>
+</body>
+
 </html>

@@ -98,6 +98,36 @@ const App: React.FC = () => {
     const [isForcePowerMode, setIsForcePowerMode] = useState(false);
     const [challengedPlayerInfo, setChallengedPlayerInfo] = useState<{ uid: string; displayName: string } | null>(null);
     const [draggedPiece, setDraggedPiece] = useState<Position | null>(null);
+    const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+    const [isPwaInstalled, setIsPwaInstalled] = useState(false);
+
+    useEffect(() => {
+        const handler = (e: any) => {
+            e.preventDefault();
+            setDeferredPrompt(e);
+        };
+        window.addEventListener('beforeinstallprompt', handler);
+        if (window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone) {
+            setIsPwaInstalled(true);
+        }
+        window.addEventListener('appinstalled', () => {
+            setIsPwaInstalled(true);
+            setDeferredPrompt(null);
+        });
+        return () => window.removeEventListener('beforeinstallprompt', handler);
+    }, []);
+
+    const handleInstallClick = async () => {
+        if (deferredPrompt) {
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            if (outcome === 'accepted') {
+                setDeferredPrompt(null);
+            }
+        } else {
+            alert('To install this app on your device:\n\niOS: Tap the share button (square with arrow pointing up) and select "Add to Home Screen".\n\nAndroid/Chrome: Tap the 3 dots menu and select "Install app" or "Add to Home screen".');
+        }
+    };
     const [rejoinCountdown, setRejoinCountdown] = useState<number | null>(null);
     const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
     const [gameTournamentId, setGameTournamentId] = useState<string | null>(null);
@@ -1863,6 +1893,42 @@ const App: React.FC = () => {
             const capturedColor = actualCapturedPiece.color;
             newCapturedPieces[capturedColor].push(actualCapturedPiece);
 
+            if (actualCapturedPiece.isKing || actualCapturedPiece.originalType === PieceType.King) {
+                pieceToMove.power = acquiredPower;
+                pieceToMove.hasMoved = true;
+                newBoard[to.row][to.col] = pieceToMove;
+                newBoard[from.row][from.col] = null;
+
+                // Build the move history entry for this king capture
+                const notation = getNotation(currentState.board, from, to, pieceToMove, actualCapturedPiece, null, isForcePowerMode);
+                const pieceOnNewBoard = newBoard[to.row][to.col];
+                const afterPower = pieceOnNewBoard ? pieceOnNewBoard.power : null;
+                const powerConsumed = !!(pieceToMove.power && !afterPower);
+
+                const moveData: Move = {
+                    from,
+                    to,
+                    piece: pieceToMove.type || PieceType.Pawn,
+                    notation,
+                    color: turn,
+                    captured: actualCapturedPiece.type,
+                    afterPower: afterPower || null,
+                    isForcePower: !!isForcePowerMode,
+                    powerConsumed,
+                };
+
+                const newMoveHistory = [...(moveHistory || []), moveData];
+
+                const finalState: GameState = {
+                    ...currentState,
+                    board: newBoard,
+                    capturedPieces: newCapturedPieces,
+                    lastMove: { from, to },
+                    moveHistory: newMoveHistory,
+                };
+                handleGameOver(finalState, 'kingCaptured', turn.charAt(0).toUpperCase() + turn.slice(1));
+                return;
+            }
         }
 
         const promotionRank = turn === Color.White ? 0 : 7;
@@ -3282,12 +3348,22 @@ const App: React.FC = () => {
                             How to Play (Official Rules on Official Website in Dutch)
                         </a>
                         {!((window as any).Capacitor?.isNativePlatform?.()) && (
-                            <a
-                                href="https://github.com/pannenkoekissus/krachtschaak-enhanced/releases/latest/download/krachtschaak.apk"
-                                className="px-5 py-2 bg-green-700/40 hover:bg-green-700/60 border border-green-600/50 rounded-full text-green-300 text-sm font-bold flex items-center gap-2 transition-all"
-                            >
-                                Download Android App APK
-                            </a>
+                            <div className="flex flex-col md:flex-row items-center justify-center gap-3">
+                                {!isPwaInstalled && (
+                                    <button
+                                        onClick={handleInstallClick}
+                                        className="px-5 py-2 bg-green-700/80 hover:bg-green-700 border border-green-600 rounded-full text-green-100 text-sm font-bold flex items-center gap-2 transition-all shadow-lg"
+                                    >
+                                        Install App
+                                    </button>
+                                )}
+                                <a
+                                    href="https://github.com/pannenkoekissus/krachtschaak-enhanced/releases/latest/download/krachtschaak.apk"
+                                    className="px-5 py-2 bg-green-700/40 hover:bg-green-700/60 border border-green-600/50 rounded-full text-green-300 text-sm font-bold flex items-center gap-2 transition-all"
+                                >
+                                    Download Android App APK
+                                </a>
+                            </div>
                         )}
                     </div>
 

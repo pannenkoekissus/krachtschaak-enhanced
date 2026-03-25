@@ -16,7 +16,7 @@ dist-ssr
 *.local
 android
 capacitor*
-icons
+./icons
 assets
 
 # Editor directories and files
