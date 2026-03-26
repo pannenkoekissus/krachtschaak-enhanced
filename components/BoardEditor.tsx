@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { BoardState, Color, PieceType, Piece, Position, Square } from '../types';
-import { boardToFen, fenToBoard } from '../utils/game';
+import { boardToFen, boardToKrachtschaakFen, fenToBoard } from '../utils/game';
 import Board from './Board';
 import PieceComponent from './Piece';
 
@@ -495,16 +495,29 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                             Load
                         </button>
                     </div>
-                    <button
-                        onClick={() => {
-                            const fen = boardToFen({ board, turn });
-                            navigator.clipboard.writeText(fen);
-                            setFenEditorInput(fen);
-                        }}
-                        className="w-full py-1.5 bg-gray-600 hover:bg-gray-500 text-white rounded font-semibold text-sm transition-colors"
-                    >
-                        📋 Copy FEN
-                    </button>
+                    <div className="flex gap-2 w-full mt-2">
+                        <button
+                            onClick={() => {
+                                const fen = boardToFen({ board, turn });
+                                navigator.clipboard.writeText(fen);
+                                setFenEditorInput(fen);
+                            }}
+                            className="flex-1 py-1.5 bg-gray-600 hover:bg-gray-500 text-white rounded font-semibold text-sm transition-colors"
+                        >
+                            📋 Standard FEN
+                        </button>
+                        <button
+                            onClick={() => {
+                                const fen = boardToKrachtschaakFen({ board, turn });
+                                navigator.clipboard.writeText(fen);
+                                setFenEditorInput(fen);
+                            }}
+                            className="flex-1 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded font-semibold text-sm transition-colors"
+                            title="Copy current position as Krachtschaak FEN (includes powers)"
+                        >
+                            📋 K-FEN
+                        </button>
+                    </div>
                 </div>
 
                 <div className="flex flex-col gap-3 mt-4">
