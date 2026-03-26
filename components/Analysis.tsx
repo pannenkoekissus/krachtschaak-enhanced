@@ -912,23 +912,70 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
     };
 
     const handleCopyPGN = () => {
-        const history: Move[] = [];
-        let currId = currentNodeId;
-        while (currId && nodes[currId]) {
-            const curr = nodes[currId];
-            if (curr.notation) {
-                history.unshift({ notation: curr.notation } as Move);
-            }
-            currId = curr.parentId || "";
-            if (!currId) break;
-        }
-        
         const rootNode = nodes['root'];
-        const initialFen = boardToFen(rootNode.gameState);
-        const pgn = generatePGN(history, "*", initialFen);
+        if (!rootNode) return;
         
-        navigator.clipboard.writeText(pgn);
-        setExportData({ type: 'PGN', value: pgn });
+        const initialFen = boardToFen(rootNode.gameState);
+        const fenParts = initialFen.split(' ');
+        const initialTurnOffset = fenParts[1] && fenParts[1].toLowerCase() === 'b' ? 1 : 0;
+        const initialFullmove = parseInt(fenParts[5]) || 1;
+
+        let pgnHeader = "";
+        const defaultFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        // Check if starting FEN is non-standard
+        if (initialFen.split(' ').slice(0, 4).join(' ') !== defaultFen.split(' ').slice(0, 4).join(' ')) {
+            pgnHeader += `[SetUp "1"]\n[FEN "${initialFen}"]\n\n`;
+        }
+
+        const buildMove = (nodeId: string, ply: number, forceMoveNumber: boolean): string => {
+            const node = nodes[nodeId];
+            if (!node) return '';
+            let pgn = '';
+            if (node.notation) {
+                const actualPly = (initialFullmove - 1) * 2 + initialTurnOffset + ply;
+                const moveNum = Math.floor((actualPly - 1) / 2) + 1;
+                const isWhite = (actualPly % 2 !== 0);
+                
+                if (isWhite) {
+                    pgn += `${moveNum}. ${node.notation} `;
+                } else {
+                    if (forceMoveNumber || ply === 1) pgn += `${moveNum}... ${node.notation} `;
+                    else pgn += `${node.notation} `;
+                }
+            }
+            if (node.comment) pgn += `{${node.comment}} `;
+            return pgn;
+        };
+
+        const traverseChildren = (parentId: string, ply: number, forceMoveNumber: boolean): string => {
+            const parent = nodes[parentId];
+            if (!parent || parent.children.length === 0) return '';
+            
+            let pgn = '';
+            const mainChildId = parent.children[0];
+            
+            pgn += buildMove(mainChildId, ply, forceMoveNumber);
+
+            for (let i = 1; i < parent.children.length; i++) {
+                const siblingId = parent.children[i];
+                const childPgn = traverseChildren(siblingId, ply + 1, false).trim();
+                const childBody = childPgn ? ` ${childPgn}` : '';
+                pgn += `(${buildMove(siblingId, ply, true).trim()}${childBody}) `;
+            }
+            
+            const printedVariations = parent.children.length > 1;
+            pgn += traverseChildren(mainChildId, ply + 1, printedVariations || forceMoveNumber);
+            
+            return pgn;
+        };
+
+        const bodyPart = traverseChildren('root', 1, false).trim();
+        const rootComment = rootNode.comment ? `{${rootNode.comment}} ` : '';
+        const body = `${rootComment}${bodyPart} *`.trim();
+        const finalPgn = (pgnHeader + body).trim();
+
+        navigator.clipboard.writeText(finalPgn);
+        setExportData({ type: 'PGN', value: finalPgn });
         setShowExportModal(true);
     };
 
