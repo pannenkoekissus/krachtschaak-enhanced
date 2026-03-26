@@ -720,6 +720,57 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
             .trim();
         const moveStrings = moveText.split(/\s+/).filter(s => s && !s.includes('*') && !s.match(/^[0-1]-[0-1]$/) && s !== '1/2-1/2');
 
+        const doesMoveMatchSAN = (from: Position, to: Position, piece: Piece, capturedPiece: Piece | null, promotion: PieceType | null, sanNotation: string) => {
+            const cleanSan = sanNotation.replace(/[+#!\?\^]/g, '');
+            // check castling
+            if (cleanSan === 'O-O' || cleanSan === '0-0') return piece.originalType === PieceType.King && to.col - from.col === 2;
+            if (cleanSan === 'O-O-O' || cleanSan === '0-0-0') return piece.originalType === PieceType.King && from.col - to.col === 2;
+            
+            const match = cleanSan.match(/^([KQRBN])?([a-h])?([1-8])?(x)?([a-h][1-8])(?:=?([QRBN]))?$/);
+            if (!match) return false;
+
+            const sanPieceStr = match[1];
+            const sanFromFile = match[2];
+            const sanFromRank = match[3];
+            const sanCapture = match[4];
+            const sanToSquare = match[5];
+            const sanPromotionStr = match[6];
+
+            let expectedPieceType = PieceType.Pawn;
+            if (sanPieceStr === 'K') expectedPieceType = PieceType.King;
+            else if (sanPieceStr === 'Q') expectedPieceType = PieceType.Queen;
+            else if (sanPieceStr === 'R') expectedPieceType = PieceType.Rook;
+            else if (sanPieceStr === 'B') expectedPieceType = PieceType.Bishop;
+            else if (sanPieceStr === 'N') expectedPieceType = PieceType.Knight;
+
+            if (piece.originalType !== expectedPieceType) return false;
+
+            const targetFile = String.fromCharCode('a'.charCodeAt(0) + to.col);
+            const targetRank = (8 - to.row).toString();
+            if (sanToSquare !== `${targetFile}${targetRank}`) return false;
+
+            const fromFileStr = String.fromCharCode('a'.charCodeAt(0) + from.col);
+            const fromRankStr = (8 - from.row).toString();
+
+            if (sanFromFile && sanFromFile !== fromFileStr) return false;
+            if (sanFromRank && sanFromRank !== fromRankStr) return false;
+
+            if (sanCapture && !capturedPiece) return false; 
+
+            if (sanPromotionStr) {
+                let eprom = null;
+                if (sanPromotionStr === 'Q') eprom = PieceType.Queen;
+                else if (sanPromotionStr === 'R') eprom = PieceType.Rook;
+                else if (sanPromotionStr === 'B') eprom = PieceType.Bishop;
+                else if (sanPromotionStr === 'N') eprom = PieceType.Knight;
+                if (promotion !== eprom) return false;
+            } else if (promotion) {
+                return false;
+            }
+
+            return true;
+        };
+
         // Start from root node with initial FEN
         const importRootId = 'root';
         const newNodes: Record<string, AnalysisTreeNode> = {
@@ -757,7 +808,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
                             // Check standard move
                             const n = getNotation(tempBoard, from, to, piece, capturedPiece, null);
-                            if (n === notation) {
+                            if (n === notation || doesMoveMatchSAN(from, to, piece, capturedPiece, null, notation)) {
                                 foundMove = { from, to, notation: n, piece: piece.type, color: tempTurn, captured: capturedPiece?.type };
                                 break;
                             }
@@ -765,7 +816,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                             if (piece.type === PieceType.Pawn && (to.row === 0 || to.row === 7)) {
                                 for (const prom of [PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight]) {
                                     const nProm = getNotation(tempBoard, from, to, piece, capturedPiece, prom);
-                                    if (nProm === notation) {
+                                    if (nProm === notation || doesMoveMatchSAN(from, to, piece, capturedPiece, prom, notation)) {
                                         foundMove = { from, to, notation: nProm, piece: piece.type, color: tempTurn, promotion: prom, captured: capturedPiece?.type };
                                         break;
                                     }
