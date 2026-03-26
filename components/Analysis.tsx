@@ -710,15 +710,13 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
             return;
         }
 
-        // Extract moves (strip tags, comments, variations, numbers, and extra space)
+        // Extract moves and variations using a tokenizer
         const moveText = pgnInput
             .replace(/\[.*?\]/g, '')        // Remove tags
-            .replace(/\{.*?\}/g, '')        // Remove comments { ... }
-            .replace(/\(.*?\)/g, '')        // Remove variations ( ... ) - note: non-recursive
-            .replace(/\d+\.+/g, '')         // Remove move numbers like 1., 1..., etc.
-            .replace(/\$\d+/g, '')          // Remove NAGs like $1, $2
             .trim();
-        const moveStrings = moveText.split(/\s+/).filter(s => s && !s.includes('*') && !s.match(/^[0-1]-[0-1]$/) && s !== '1/2-1/2');
+
+        // Tokenizer: comments { ... }, start variation (, end variation ), or individual moves/symbols
+        const tokens = moveText.match(/\{[^}]*\}|\(|\)|[^\s()]+/g) || [];
 
         const doesMoveMatchSAN = (from: Position, to: Position, piece: Piece, capturedPiece: Piece | null, promotion: PieceType | null, sanNotation: string) => {
             const cleanSan = sanNotation.replace(/[+#!\?\^]/g, '');
@@ -779,16 +777,50 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                 gameState: startState,
                 notation: null,
                 children: [],
-                parentId: null
+                parentId: null,
+                comment: ''
             }
         };
 
-        let tempBoard = startState.board;
-        let tempTurn = startState.turn;
-        let tempEp = startState.enPassantTarget;
-        let tempHalfmove = startState.halfmoveClock;
-        let lastNodeId = importRootId;
-        for (const notation of moveStrings) {
+        let currentId = importRootId;
+        const stack: string[] = [];
+
+        for (const token of tokens) {
+            if (token === '(') {
+                stack.push(currentId);
+                const parentId = newNodes[currentId].parentId;
+                if (parentId) {
+                    currentId = parentId;
+                }
+                continue;
+            }
+            if (token === ')') {
+                if (stack.length > 0) {
+                    currentId = stack.pop()!;
+                }
+                continue;
+            }
+            if (token.startsWith('{') && token.endsWith('}')) {
+                const commentText = token.slice(1, -1).trim();
+                newNodes[currentId].comment = (newNodes[currentId].comment ? newNodes[currentId].comment + '\n' : '') + commentText;
+                continue;
+            }
+            // Ignore move numbers (e.g., "1.", "13...", "24") and results ("1-0", "0-1", "1/2-1/2", "*")
+            if (/^\d+\.*$/.test(token) || /^[0-1]-[0-1]$/.test(token) || token === '1/2-1/2' || token === '*') {
+                continue;
+            }
+            if (token.startsWith('$')) {
+                continue; // Ignore NAGs for now
+            }
+
+            const notation = token;
+            const currentState = newNodes[currentId].gameState;
+            
+            const tempBoard = currentState.board;
+            const tempTurn = currentState.turn;
+            const tempEp = currentState.enPassantTarget;
+            const tempHalfmove = currentState.halfmoveClock;
+
             let foundMove: Move | null = null;
 
             // Find the move that matches this notation
@@ -832,7 +864,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
             
             if (!foundMove) {
                 console.warn(`Could not find legal move for notation: ${notation}`);
-                break; 
+                continue; 
             }
 
             const nextBoard = applyMoveToBoard(tempBoard, foundMove);
@@ -859,21 +891,16 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                 gameState: nextState,
                 notation: foundMove.notation,
                 children: [],
-                parentId: lastNodeId
+                parentId: currentId,
+                comment: ''
             };
-            newNodes[lastNodeId].children.push(newNodeId);
-
-            tempBoard = nextBoard;
-            tempTurn = nextTurn;
-            tempEp = nextEp;
-            tempHalfmove = nextState.halfmoveClock;
-            lastNodeId = newNodeId;
+            newNodes[currentId].children.push(newNodeId);
+            currentId = newNodeId;
         }
 
-
         setNodes(newNodes);
-        setCurrentNodeId(lastNodeId);
-        applyState(newNodes[lastNodeId].gameState);
+        setCurrentNodeId(currentId);
+        applyState(newNodes[currentId].gameState);
         setPgnInput("");
     };
 
