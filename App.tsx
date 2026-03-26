@@ -3354,14 +3354,14 @@ const App: React.FC = () => {
                                         onClick={handleInstallClick}
                                         className="px-5 py-2 bg-green-700/80 hover:bg-green-700 border border-green-600 rounded-full text-green-100 text-sm font-bold flex items-center gap-2 transition-all shadow-lg"
                                     >
-                                        Install App
+                                        Install App (Android or iOS)
                                     </button>
                                 )}
                                 <a
                                     href="https://github.com/pannenkoekissus/krachtschaak-enhanced/releases/latest/download/krachtschaak.apk"
                                     className="px-5 py-2 bg-green-700/40 hover:bg-green-700/60 border border-green-600/50 rounded-full text-green-300 text-sm font-bold flex items-center gap-2 transition-all"
                                 >
-                                    Download Android App APK
+                                    APK (Advanced Users Only)
                                 </a>
                             </div>
                         )}

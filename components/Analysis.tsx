@@ -838,18 +838,61 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                                 capturedPiece = tempBoard[from.row][to.col];
                             }
 
+                            const isForcePowerFlag = notation.includes('^');
+
+                            const buildMoveData = (n: string, prom: PieceType | null) => {
+                                const wasPowerMove = isPowerMove(tempBoard, from, to, tempEp);
+                                const wasAmbiguousMove = isAmbiguousMove(tempBoard, from, to, tempEp);
+                                let powerAfterMove = piece.power;
+                                let powerConsumed = false;
+
+                                if (capturedPiece) {
+                                    powerAfterMove = capturedPiece.originalType;
+                                    if (prom && capturedPiece.originalType === PieceType.Pawn) {
+                                        powerAfterMove = null;
+                                    }
+                                } else if (isForcePowerFlag && wasAmbiguousMove) {
+                                    powerAfterMove = null;
+                                    powerConsumed = true;
+                                } else if (wasPowerMove) {
+                                    powerAfterMove = null;
+                                    powerConsumed = true;
+                                }
+
+                                if (prom && !capturedPiece) {
+                                    if (piece.originalType === PieceType.Pawn && !wasPowerMove) {
+                                        powerAfterMove = piece.power === PieceType.Pawn ? null : piece.power;
+                                    } else {
+                                        powerAfterMove = null;
+                                    }
+                                }
+
+                                return {
+                                    from,
+                                    to,
+                                    notation: n,
+                                    piece: piece.type,
+                                    color: tempTurn,
+                                    captured: capturedPiece?.type,
+                                    promotion: prom,
+                                    isForcePower: isForcePowerFlag,
+                                    afterPower: powerAfterMove,
+                                    powerConsumed
+                                } as Move;
+                            };
+
                             // Check standard move
-                            const n = getNotation(tempBoard, from, to, piece, capturedPiece, null);
+                            const n = getNotation(tempBoard, from, to, piece, capturedPiece, null, isForcePowerFlag);
                             if (n === notation || doesMoveMatchSAN(from, to, piece, capturedPiece, null, notation)) {
-                                foundMove = { from, to, notation: n, piece: piece.type, color: tempTurn, captured: capturedPiece?.type };
+                                foundMove = buildMoveData(n, null);
                                 break;
                             }
                             // Check for possible promotion
                             if (piece.type === PieceType.Pawn && (to.row === 0 || to.row === 7)) {
                                 for (const prom of [PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight]) {
-                                    const nProm = getNotation(tempBoard, from, to, piece, capturedPiece, prom);
+                                    const nProm = getNotation(tempBoard, from, to, piece, capturedPiece, prom, isForcePowerFlag);
                                     if (nProm === notation || doesMoveMatchSAN(from, to, piece, capturedPiece, prom, notation)) {
-                                        foundMove = { from, to, notation: nProm, piece: piece.type, color: tempTurn, promotion: prom, captured: capturedPiece?.type };
+                                        foundMove = buildMoveData(nProm, prom);
                                         break;
                                     }
                                 }
@@ -902,6 +945,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         setCurrentNodeId(currentId);
         applyState(newNodes[currentId].gameState);
         setPgnInput("");
+        setDraggedPiece(null);
     };
 
     const handleCopyFen = () => {
@@ -922,7 +966,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         const rootNode = nodes['root'];
         if (!rootNode) return;
         
-        const initialFen = boardToFen(rootNode.gameState);
+        const initialFen = boardToKrachtschaakFen(rootNode.gameState);
         const fenParts = initialFen.split(' ');
         const initialTurnOffset = fenParts[1] && fenParts[1].toLowerCase() === 'b' ? 1 : 0;
         const initialFullmove = parseInt(fenParts[5]) || 1;

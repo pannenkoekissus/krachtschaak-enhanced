@@ -727,8 +727,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
         if (!gameId) return;
 
         var isCreatorWhite = Math.random() < 0.5;
-        if (challenge.challengeColor === 'white') isCreatorWhite = true;
-        if (challenge.challengeColor === 'black') isCreatorWhite = false;
+        if (challenge.challengeColor.toLowerCase() === 'white') isCreatorWhite = true;
+        if (challenge.challengeColor.toLowerCase() === 'black') isCreatorWhite = false;
         const myColor = isCreatorWhite ? Color.Black : Color.White;
         const opponentColor = isCreatorWhite ? Color.White : Color.Black;
 
@@ -1263,7 +1263,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                 {currentLobbyTab === 'finished_games' && (
                     <div className="w-full max-w-3xl p-4 border border-gray-600 rounded-lg flex flex-col gap-4">
                         <h3 className="text-xl font-semibold text-center mb-0">Game History</h3>
-                        
+
                         {/* History Filter Buttons */}
                         <div className="flex flex-wrap gap-2 justify-center bg-gray-800/50 p-3 rounded-lg border border-gray-700">
                             <span className="text-sm text-gray-400 w-full text-center mb-1 font-medium">Filter by time control:</span>
@@ -1356,7 +1356,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                         </div>
                         <div className="p-4 border border-gray-600 rounded-lg flex flex-col min-h-[500px]">
                             <h3 className="text-xl font-semibold text-center mb-4">Join a Game</h3>
-                            
+
                             {/* Filter Buttons */}
                             <div className="flex flex-wrap gap-2 justify-center bg-gray-800/50 p-3 rounded-lg border border-gray-700 mb-4">
                                 <span className="text-sm text-gray-400 w-full text-center mb-1 font-medium italic">Filter open games:</span>
@@ -1379,7 +1379,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                             ) : filteredOpenGames.length === 0 ? (
                                 <p className="text-gray-400 text-center py-4 italic">No open {openGames.length > 0 ? 'matching ' : ''}games available.</p>
                             ) : null}
-                            
+
                             <div className="flex-grow overflow-y-auto max-h-[600px] space-y-2 pr-2 custom-scrollbar">
                                 {filteredOpenGames.map(game => (
                                     <div key={game.gameId} className="bg-gray-700 hover:bg-gray-650 p-3 rounded-lg flex justify-between items-center border border-transparent hover:border-gray-500 transition-all shadow-sm">
@@ -1394,9 +1394,9 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                                                 <p className="text-[10px] text-gray-500 mt-1 italic leading-tight">{renderVisualSettings(game.showPowerPieces, game.showPowerRings, game.showOriginalType)}</p>
                                             )}
                                         </div>
-                                        <button 
-                                            onClick={() => handleJoinGame(game)} 
-                                            disabled={isActionInProgress} 
+                                        <button
+                                            onClick={() => handleJoinGame(game)}
+                                            disabled={isActionInProgress}
                                             className="ml-4 px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold transition-all shadow-md active:scale-95 disabled:bg-gray-600 disabled:cursor-not-allowed text-sm"
                                         >
                                             {isJoiningGame === game.gameId ? 'Joining...' : 'Join'}
