@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, Move } from '../types';
-import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, boardToFen, fenToBoard, generatePGN, isInsufficientMaterial } from '../utils/game';
+import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, boardToFen, boardToKrachtschaakFen, fenToBoard, generatePGN, isInsufficientMaterial } from '../utils/game';
 import { playMoveSound, playCaptureSound, playWinSound, playDrawSound, playLossSound } from '../utils/sounds';
 import { saveAnalysis, loadAnalysis, generateId, AnalysisFolder, SavedAnalysis } from '../utils/analysisFirebase';
 import { getAllFolders } from '../utils/analysisFirebase';
@@ -908,6 +908,13 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         const fen = boardToFen(nodes[currentNodeId].gameState);
         navigator.clipboard.writeText(fen);
         setExportData({ type: 'FEN', value: fen });
+        setShowExportModal(true);
+    };
+
+    const handleCopyKrachtschaakFen = () => {
+        const fen = boardToKrachtschaakFen(nodes[currentNodeId].gameState);
+        navigator.clipboard.writeText(fen);
+        setExportData({ type: 'K-FEN', value: fen });
         setShowExportModal(true);
     };
 
@@ -1907,9 +1914,16 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                             <button
                                 onClick={handleCopyFen}
                                 className="flex-1 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg font-semibold text-sm transition-colors"
-                                title="Copy current position as FEN"
+                                title="Copy current position as standard FEN"
                             >
-                                📋 FEN
+                                📋 Standard FEN
+                            </button>
+                            <button
+                                onClick={handleCopyKrachtschaakFen}
+                                className="flex-1 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-semibold text-sm transition-colors"
+                                title="Copy current position as Krachtschaak FEN (includes powers)"
+                            >
+                                📋 K-FEN
                             </button>
                             <button
                                 onClick={handleCopyPGN}
