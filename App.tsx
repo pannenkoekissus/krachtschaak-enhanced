@@ -1917,7 +1917,7 @@ const App: React.FC = () => {
                     powerConsumed,
                 };
 
-                const newMoveHistory = [...(moveHistory || []), moveData];
+                const newMoveHistory = [...(currentState.moveHistory || []), moveData];
 
                 const finalState: GameState = {
                     ...currentState,
