@@ -117,6 +117,18 @@ const App: React.FC = () => {
         return () => window.removeEventListener('beforeinstallprompt', handler);
     }, []);
 
+    useEffect(() => {
+        const handleRelease = () => setDraggedPiece(null);
+        window.addEventListener('mouseup', handleRelease);
+        window.addEventListener('touchend', handleRelease);
+        window.addEventListener('dragend', handleRelease);
+        return () => {
+            window.removeEventListener('mouseup', handleRelease);
+            window.removeEventListener('touchend', handleRelease);
+            window.removeEventListener('dragend', handleRelease);
+        };
+    }, []);
+
     const handleInstallClick = async () => {
         if (deferredPrompt) {
             deferredPrompt.prompt();

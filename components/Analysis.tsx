@@ -474,8 +474,19 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                 setContextMenu({ x: 0, y: 0, nodeId: null });
             }
         };
+        const handleRelease = () => setDraggedPiece(null);
+
         window.addEventListener('click', handleClick);
-        return () => window.removeEventListener('click', handleClick);
+        window.addEventListener('mouseup', handleRelease);
+        window.addEventListener('touchend', handleRelease);
+        window.addEventListener('dragend', handleRelease);
+        
+        return () => {
+            window.removeEventListener('click', handleClick);
+            window.removeEventListener('mouseup', handleRelease);
+            window.removeEventListener('touchend', handleRelease);
+            window.removeEventListener('dragend', handleRelease);
+        }
     }, [contextMenu.nodeId]);
 
     const deleteFromHere = (nodeId: string) => {
