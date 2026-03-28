@@ -338,8 +338,8 @@ const Auth: React.FC<AuthProps> = ({ onClose, onAuthSuccess }) => {
     );
 
     return (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
-            <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md relative">
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-2">
+            <div className="bg-gray-800 p-4 sm:p-8 rounded-xl shadow-2xl w-full max-w-md relative overflow-y-auto max-h-[95vh]">
                 <button onClick={onClose} className="absolute top-2 right-3 text-2xl text-gray-400 hover:text-white">&times;</button>
                 {isFirebaseConfigured && !isOnline && (
                     <div className="flex items-center gap-2 bg-yellow-900/60 border border-yellow-600 text-yellow-200 px-3 py-2 rounded-lg mb-4 text-sm font-semibold">
