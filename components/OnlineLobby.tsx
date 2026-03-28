@@ -219,6 +219,15 @@ const PlayerGameHistoryModal: React.FC<{
                             const whitePlayer = game.data.players && game.data.playerColors?.white ? game.data.players[game.data.playerColors.white] : null;
                             const blackPlayer = game.data.players && game.data.playerColors?.black ? game.data.players[game.data.playerColors.black] : null;
 
+                            const isDraw = !game.data.winner;
+                            let isWin = false;
+                            if (game.data.winner && game.data.playerColors) {
+                                const winnerColor = game.data.winner.toLowerCase() as 'white' | 'black';
+                                isWin = game.data.playerColors[winnerColor] === userId;
+                            }
+                            const resultText = isDraw ? 'Draw' : (isWin ? 'Win' : 'Loss');
+                            const resultColor = isDraw ? 'text-yellow-500' : (isWin ? 'text-green-500' : 'text-red-500');
+
                             return (
                                 <div key={game.id} className="bg-gray-700 p-4 rounded-xl border border-gray-600 flex flex-col md:flex-row justify-between items-center hover:bg-gray-650 transition-colors">
                                     <div className="flex-grow mb-3 md:mb-0">
@@ -232,8 +241,8 @@ const PlayerGameHistoryModal: React.FC<{
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <span className="text-lg font-bold text-yellow-500">
-                                            {game.data.winner ? (game.data.winner === 'White' ? '1-0' : '0-1') : '½-½'}
+                                        <span className={`text-lg font-bold ${resultColor}`}>
+                                            {resultText}
                                         </span>
                                         <div className="flex gap-2">
                                             <button
