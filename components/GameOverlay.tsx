@@ -29,6 +29,7 @@ export interface GameOverlayProps {
     onAnalyse?: (game: GameState) => void;
     onReview?: (game: GameState) => void;
     currentGameState?: GameState | null;
+    onDismiss?: () => void;
 }
 
 const promotionPieces = [PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight];
@@ -37,7 +38,7 @@ const GameOverlay: React.FC<GameOverlayProps> = ({
     status, winner, onRestart, onPromote, promotionData, onResolveAmbiguousEnPassant,
     gameMode, isMyTurnForAction, ratingChange, initialRatings, players, playerColors, isRated,
     rematchOffer, myOnlineColor, onOfferRematch, onAcceptRematch, onDeclineRematch, nextGameId, onCancelRematch,
-    onAnalyse, onReview, currentGameState
+    onAnalyse, onReview, currentGameState, onDismiss
 }) => {
     if (status === 'playing' || status === 'waiting') {
         return null;
@@ -179,6 +180,14 @@ const GameOverlay: React.FC<GameOverlayProps> = ({
                     >
                         {buttonText}
                     </button>
+                    {onDismiss && (
+                        <button
+                            onClick={onDismiss}
+                            className="px-6 py-2 border-2 border-gray-500 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg text-sm font-semibold transition-colors mt-2"
+                        >
+                            Dismiss Overlay
+                        </button>
+                    )}
                 </div>
             </div>
         );
