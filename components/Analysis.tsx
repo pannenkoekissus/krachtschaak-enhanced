@@ -1458,7 +1458,9 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         let powerAfterMove = pieceToMove.power;
         if (actualCapturedPiece && acquiredPower) {
             powerAfterMove = acquiredPower;
-        } else if (isForcePowerMode || wasPowerMove) {
+        } else if (wasPowerMove) {
+            powerAfterMove = null;
+        } else if (isForcePowerMode && isAmbiguousMove(board, from, to, enPassantTarget)) {
             powerAfterMove = null;
         }
         pieceToMove.power = powerAfterMove;
