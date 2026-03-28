@@ -100,6 +100,7 @@ const App: React.FC = () => {
     const [draggedPiece, setDraggedPiece] = useState<Position | null>(null);
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
     const [isPwaInstalled, setIsPwaInstalled] = useState(false);
+    const [overlayDismissed, setOverlayDismissed] = useState(false);
 
     useEffect(() => {
         const handler = (e: any) => {
@@ -758,6 +759,7 @@ const App: React.FC = () => {
         if (statusRef.current !== 'playing' && statusRef.current !== 'promotion') return;
         if (isProcessingGameOver.current) return;
         isProcessingGameOver.current = true;
+        setOverlayDismissed(false);
 
         let finalState: GameState = {
             ...baseState,
@@ -2826,24 +2828,27 @@ const App: React.FC = () => {
                         />
                     </div>
                     <div className="w-full relative">
-                        <GameOverlay
-                            status={effectiveStatus} winner={winner} onRestart={handlePlayAgain}
-                            onPromote={handlePromotion} promotionData={localPromotionState || promotionData}
-                            onResolveAmbiguousEnPassant={resolveAmbiguousEnPassant}
-                            gameMode={gameMode}
-                            isMyTurnForAction={gameMode === 'local' || turn === myOnlineColor}
-                            ratingChange={ratingChange} initialRatings={initialRatings}
-                            players={players} playerColors={playerColors} isRated={isRated}
-                            rematchOffer={rematchOffer} myOnlineColor={myOnlineColor}
-                            onOfferRematch={handleOfferRematch}
-                            onAcceptRematch={handleAcceptRematch}
-                            onDeclineRematch={handleDeclineRematch}
-                            nextGameId={nextGameId}
-                            onCancelRematch={onCancelRematch}
-                            onAnalyse={handleStartAnalysisFromPosition}
-                            onReview={handleReviewGame}
-                            currentGameState={currentGameState}
-                        />
+                        {!overlayDismissed && (
+                            <GameOverlay
+                                status={effectiveStatus} winner={winner} onRestart={handlePlayAgain}
+                                onPromote={handlePromotion} promotionData={localPromotionState || promotionData}
+                                onResolveAmbiguousEnPassant={resolveAmbiguousEnPassant}
+                                gameMode={gameMode}
+                                isMyTurnForAction={gameMode === 'local' || turn === myOnlineColor}
+                                ratingChange={ratingChange} initialRatings={initialRatings}
+                                players={players} playerColors={playerColors} isRated={isRated}
+                                rematchOffer={rematchOffer} myOnlineColor={myOnlineColor}
+                                onOfferRematch={handleOfferRematch}
+                                onAcceptRematch={handleAcceptRematch}
+                                onDeclineRematch={handleDeclineRematch}
+                                nextGameId={nextGameId}
+                                onCancelRematch={onCancelRematch}
+                                onAnalyse={handleStartAnalysisFromPosition}
+                                onReview={handleReviewGame}
+                                currentGameState={currentGameState}
+                                onDismiss={() => setOverlayDismissed(true)}
+                            />
+                        )}
                         <Board
                             board={board} selectedPiece={selectedPiece} validMoves={validMoves}
                             onSquareClick={handleSquareClick} turn={turn} playerColor={myOnlineColor}
