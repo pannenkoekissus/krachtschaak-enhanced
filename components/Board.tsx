@@ -28,6 +28,7 @@ interface BoardProps {
     showPowerRings?: boolean;
     showOriginalType?: boolean;
     allowTouchDragging?: boolean;
+    onPieceTouchDropOutside?: (from: Position) => void;
 }
 
 const Board: React.FC<BoardProps> = ({
@@ -35,9 +36,9 @@ const Board: React.FC<BoardProps> = ({
     onPieceDragStart, onPieceDragEnd, onSquareDrop, draggedPiece, premove,
     lastMove, highlightedSquares, arrows, onBoardMouseDown, onBoardMouseUp, onBoardContextMenu,
     showPowerPieces = true, showPowerRings = true, showOriginalType = true,
-    allowTouchDragging = true
+    allowTouchDragging = true, onPieceTouchDropOutside
 }) => {
-    const [touchDragging, setTouchDragging] = useState<{ from: Position; x: number; y: number; piece: any; selectedAtStart: boolean; isVisualDrag: boolean } | null>(null);
+    const [touchDragging, setTouchDragging] = useState<{ from: Position; x: number; y: number; startX: number; startY: number; piece: any; selectedAtStart: boolean; isVisualDrag: boolean } | null>(null);
     const touchTimerRef = useRef<NodeJS.Timeout | null>(null);
     const lastTouchActionRef = useRef<number>(0);
     // Use a ref for immediate access to interaction data to avoid closure/state race conditions on fast taps
@@ -118,6 +119,8 @@ const Board: React.FC<BoardProps> = ({
                     from: { row, col },
                     x: touch.clientX,
                     y: touch.clientY,
+                    startX: touch.clientX,
+                    startY: touch.clientY,
                     piece: piece,
                     selectedAtStart: !!isAlreadySelected,
                     isVisualDrag: false
@@ -209,7 +212,19 @@ const Board: React.FC<BoardProps> = ({
     const handleTouchMove = (e: React.TouchEvent) => {
         if (!touchDragging) return;
         const touch = e.touches[0];
-        setTouchDragging(prev => prev ? { ...prev, x: touch.clientX, y: touch.clientY } : null);
+        
+        // If moved more than 10px from start, treat as an immediate drag
+        const dx = touch.clientX - touchDragging.startX;
+        const dy = touch.clientY - touchDragging.startY;
+        const distSq = dx * dx + dy * dy;
+        const moveThreshold = 10;
+        
+        setTouchDragging(prev => {
+            if (!prev) return null;
+            const shouldBeVisualDrag = prev.isVisualDrag || distSq > moveThreshold * moveThreshold;
+            return { ...prev, x: touch.clientX, y: touch.clientY, isVisualDrag: shouldBeVisualDrag };
+        });
+        
         if (e.cancelable) e.preventDefault();
     };
 
@@ -247,6 +262,12 @@ const Board: React.FC<BoardProps> = ({
                     }
                     interactionRef.current = null;
                 }
+            }
+        } else {
+            // Touch ended outside a square.
+            // If we were dragging a piece and a callback is provided, trigger it.
+            if (touchDragging.isVisualDrag && onPieceTouchDropOutside) {
+                onPieceTouchDropOutside(touchDragging.from);
             }
         }
 

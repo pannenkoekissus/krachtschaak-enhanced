@@ -21,6 +21,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
     const [selectedOriginalType, setSelectedOriginalType] = useState<PieceType | null>(null);
     const [touchPaletteDragging, setTouchPaletteDragging] = useState<{ source: 'palette' | 'power' | 'originalType', data: any, x: number, y: number } | null>(null);
     const [fenEditorInput, setFenEditorInput] = useState('');
+    const [desktopDragging, setDesktopDragging] = useState(false);
 
     const clearBoard = () => {
         setBoard(Array(8).fill(null).map(() => Array(8).fill(null)));
@@ -89,6 +90,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
             return;
         }
         setDraggedPos({ row, col });
+        setDesktopDragging(true);
     };
 
     const handleSquareDrop = (e: React.DragEvent, toRow: number, toCol: number) => {
@@ -147,6 +149,15 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
         if (selectedPalettePiece === 'cursor' && draggedPos) {
             const newBoard = board.map(r => [...r]);
             newBoard[draggedPos.row][draggedPos.col] = null;
+            setBoard(newBoard);
+            setDraggedPos(null);
+        }
+    };
+    
+    const handlePieceTouchDropOutside = (from: Position) => {
+        if (selectedPalettePiece === 'cursor') {
+            const newBoard = board.map(r => [...r]);
+            newBoard[from.row][from.col] = null;
             setBoard(newBoard);
             setDraggedPos(null);
         }
@@ -256,9 +267,12 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                     gameMode="board_editor"
                     isInteractionDisabled={false}
                     onPieceDragStart={handlePieceDragStart}
-                    onPieceDragEnd={() => setDraggedPos(null)}
+                    onPieceDragEnd={() => {
+                        setDraggedPos(null);
+                        setDesktopDragging(false);
+                    }}
                     onSquareDrop={handleSquareDrop}
-                    draggedPiece={draggedPos}
+                    draggedPiece={desktopDragging ? draggedPos : null}
                     premove={null}
                     lastMove={null}
                     highlightedSquares={[]}
@@ -267,6 +281,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                     onBoardMouseUp={() => { }}
                     onBoardContextMenu={(e) => e.preventDefault()}
                     allowTouchDragging={selectedPalettePiece === 'cursor'}
+                    onPieceTouchDropOutside={handlePieceTouchDropOutside}
                 />
             </div>
 
