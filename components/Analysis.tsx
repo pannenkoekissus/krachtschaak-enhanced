@@ -246,7 +246,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
         const unsubscribe = listenToAnalysis(ownerUserId, currentAnalysisId, (saved) => {
             if (!saved) return;
-            
+
             // Rebuild nodes
             const newNodes: Record<string, AnalysisTreeNode> = {};
             const savedNodes = saved.nodes || {};
@@ -264,7 +264,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
             }
 
             setNodes(newNodes);
-            
+
             const remoteLastNodeId = saved.lastNodeId || saved.rootNodeId;
 
             // Automatically follow if enabled
@@ -274,7 +274,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                     const targetNode = newNodes[remoteLastNodeId];
                     setCurrentNodeId(remoteLastNodeId);
                     applyState(targetNode.gameState);
-                    
+
                     // Play sound
                     const history = targetNode.gameState.moveHistory || [];
                     if (history.length > 0) {
@@ -1149,6 +1149,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         }));
 
         setCurrentNodeId(newNodeId);
+        currentNodeIdRef.current = newNodeId; // Update ref immediately to prevent echo flicker
         applyState(newState);
 
         // SYNC WITH FIREBASE (Auto-save)
@@ -1164,10 +1165,8 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
     const goToNode = (nodeId: string, playSound = true, isAutoFollow = false) => {
         setDraggedPiece(null);
         if (nodes[nodeId]) {
-            // If manual navigation (not auto-follow), turn off "Follow Live" if we move to a different node
-            if (!isAutoFollow && nodeId !== currentNodeId) {
-                setIsFollowingLive(false);
-            }
+
+            currentNodeIdRef.current = nodeId; // Update ref immediately to prevent echo flicker
 
             // Mark path from root as last visited
             setNodes(prev => {
