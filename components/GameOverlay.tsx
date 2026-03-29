@@ -106,13 +106,13 @@ const GameOverlay: React.FC<GameOverlayProps> = ({
 
         return (
             <div>
-                <h2 className="text-4xl font-bold mb-2">Game Over</h2>
-                <p className="text-2xl mb-6">{message}</p>
+                <h2 className="text-2xl md:text-4xl font-bold mb-1 md:mb-2">Game Over</h2>
+                <p className="text-lg md:text-2xl mb-4 md:mb-6">{message}</p>
 
                 {gameMode === 'online_playing' && isRated && ratingChange && initialRatings && (
-                    <div className="mb-6 text-lg bg-gray-700 p-4 rounded-lg">
-                        <p className="font-semibold text-xl mb-2">Rating Changes</p>
-                        <div className="flex justify-center gap-6">
+                    <div className="mb-4 md:mb-6 text-sm md:text-lg bg-gray-700 p-2 md:p-4 rounded-lg">
+                        <p className="font-semibold text-lg md:text-xl mb-1 md:mb-2">Rating Changes</p>
+                        <div className="flex justify-center gap-3 md:gap-6">
                             <p>
                                 <span className="font-bold">{whitePlayer?.displayName || 'White'}: </span>
                                 {initialRatings.white} → {initialRatings.white + ratingChange.white}
@@ -147,7 +147,7 @@ const GameOverlay: React.FC<GameOverlayProps> = ({
                             </div>
                         )}
                         {!rematchOffer && (
-                            <button onClick={onOfferRematch} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-lg font-semibold transition-colors">Offer Rematch</button>
+                            <button onClick={onOfferRematch} className="px-4 py-2 md:px-6 md:py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-md md:text-lg font-semibold transition-colors">Offer Rematch</button>
                         )}
                     </div>
                 )}
@@ -176,14 +176,14 @@ const GameOverlay: React.FC<GameOverlayProps> = ({
 
                     <button
                         onClick={onRestart}
-                        className="px-6 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-lg font-semibold transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed"
+                        className="px-4 py-2 md:px-6 md:py-2 bg-red-600 hover:bg-red-700 rounded-lg text-md md:text-lg font-semibold transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed"
                     >
                         {buttonText}
                     </button>
                     {onDismiss && (
                         <button
                             onClick={onDismiss}
-                            className="px-6 py-2 border-2 border-gray-500 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg text-sm font-semibold transition-colors mt-2"
+                            className="px-4 py-1.5 md:px-6 md:py-2 border-2 border-gray-500 text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg text-xs md:text-sm font-semibold transition-colors mt-1 md:mt-2"
                         >
                             Dismiss Overlay
                         </button>
@@ -200,14 +200,14 @@ const GameOverlay: React.FC<GameOverlayProps> = ({
 
         return (
             <div>
-                <h2 className="text-3xl font-bold mb-4">Promote Your Piece</h2>
-                <div className="flex justify-center gap-4">
+                <h2 className="text-xl md:text-3xl font-bold mb-3 md:mb-4">Promote Your Piece</h2>
+                <div className="flex justify-center gap-3 md:gap-4">
                     {promotionPieces.map(pieceType => {
                         if (isKingPromoting && pieceType === promotionData.promotingPiece.originalType) {
                             return null;
                         }
                         return (
-                            <div key={pieceType} onClick={() => onPromote(pieceType)} className="w-24 h-24 p-2 bg-gray-500 rounded-lg cursor-pointer hover:bg-gray-400 transition-colors">
+                            <div key={pieceType} onClick={() => onPromote(pieceType)} className="w-16 h-16 md:w-24 md:h-24 p-1 md:p-2 bg-gray-500 rounded-lg cursor-pointer hover:bg-gray-400 transition-colors">
                                 <Piece piece={{ type: pieceType, color: color, isKing: false, originalType: pieceType, power: null }} />
                             </div>
                         )
@@ -220,18 +220,18 @@ const GameOverlay: React.FC<GameOverlayProps> = ({
     const renderAmbiguousEnPassant = () => {
         return (
             <div>
-                <h2 className="text-3xl font-bold mb-4">Choose Your Move</h2>
-                <p className="text-xl mb-6">This piece can move to the square or capture en passant.</p>
-                <div className="flex justify-center gap-4">
+                <h2 className="text-xl md:text-3xl font-bold mb-3 md:mb-4">Choose Your Move</h2>
+                <p className="text-md md:text-xl mb-4 md:mb-6">This piece can move to the square or capture en passant.</p>
+                <div className="flex flex-col md:flex-row justify-center gap-3 md:gap-4 px-4">
                     <button
                         onClick={() => onResolveAmbiguousEnPassant('move')}
-                        className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-xl font-semibold transition-colors"
+                        className="px-4 py-2 md:px-6 md:py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-md md:text-xl font-semibold transition-colors"
                     >
                         Move to Square
                     </button>
                     <button
                         onClick={() => onResolveAmbiguousEnPassant('capture')}
-                        className="px-6 py-3 bg-red-600 hover:bg-red-700 rounded-lg text-xl font-semibold transition-colors"
+                        className="px-4 py-2 md:px-6 md:py-3 bg-red-600 hover:bg-red-700 rounded-lg text-md md:text-xl font-semibold transition-colors"
                     >
                         Capture En Passant
                     </button>
