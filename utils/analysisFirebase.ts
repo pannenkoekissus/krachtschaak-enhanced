@@ -88,6 +88,65 @@ export const loadAnalysis = async (
   }
 };
 
+// Listen to analysis updates from Firebase
+export const listenToAnalysis = (
+  userId: string,
+  analysisId: string,
+  callback: (data: SavedAnalysis | null) => void
+) => {
+  const ref = db.ref(`/analyses/${userId}/${analysisId}`);
+  const onValue = (snapshot: any) => {
+    callback(snapshot.val());
+  };
+  ref.on('value', onValue);
+  return () => ref.off('value', onValue);
+};
+
+// Update a single node and the last visited node in Firebase
+export const updateAnalysisNode = async (
+  userId: string,
+  analysisId: string,
+  parentId: string | null,
+  newNodeId: string,
+  nodeData: AnalysisTreeNode,
+  lastNodeId: string
+): Promise<void> => {
+  try {
+    const updates: any = {
+      [`/analyses/${userId}/${analysisId}/nodes/${newNodeId}`]: sanitizeForFirebase(nodeData),
+      [`/analyses/${userId}/${analysisId}/lastNodeId`]: lastNodeId,
+      [`/analyses/${userId}/${analysisId}/updatedAt`]: Date.now()
+    };
+    if (parentId) {
+      // We need to fetch current children to append safely, or just update the whole parent node
+      // For simplicity in a collaborative context, updating the child array of the parent is usually best
+      const parentRef = db.ref(`/analyses/${userId}/${analysisId}/nodes/${parentId}/children`);
+      await parentRef.transaction((currentChildren: string[]) => {
+        if (!currentChildren) return [newNodeId];
+        if (currentChildren.includes(newNodeId)) return currentChildren;
+        return [...currentChildren, newNodeId];
+      });
+    }
+    await db.ref().update(updates);
+  } catch (error) {
+    console.error('Error updating analysis node:', error);
+    throw error;
+  }
+};
+
+// Update only the current position (lastNodeId) in Firebase
+export const updateCurrentNodeId = async (
+  userId: string,
+  analysisId: string,
+  nodeId: string
+): Promise<void> => {
+    try {
+        await db.ref(`/analyses/${userId}/${analysisId}/lastNodeId`).set(nodeId);
+    } catch (error) {
+        console.error('Error updating lastNodeId:', error);
+    }
+};
+
 // Delete analysis from Firebase
 export const deleteAnalysis = async (
   userId: string,

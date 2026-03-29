@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, Move } from '../types';
 import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, boardToFen, boardToKrachtschaakFen, fenToBoard, generatePGN, isInsufficientMaterial } from '../utils/game';
 import { playMoveSound, playCaptureSound, playWinSound, playDrawSound, playLossSound } from '../utils/sounds';
-import { saveAnalysis, loadAnalysis, generateId, AnalysisFolder, SavedAnalysis } from '../utils/analysisFirebase';
+import { saveAnalysis, loadAnalysis, generateId, AnalysisFolder, SavedAnalysis, listenToAnalysis, updateAnalysisNode, updateCurrentNodeId } from '../utils/analysisFirebase';
 import { getAllFolders } from '../utils/analysisFirebase';
 import Board from './Board';
 import GameOverlay from './GameOverlay';
@@ -217,6 +217,13 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
     // Initialize and manage nodes and currentNodeId
     const [nodes, setNodes] = useState<Record<string, AnalysisTreeNode>>(initialTree.initialNodes);
     const [currentNodeId, setCurrentNodeId] = useState<string>(initialTree.leafId);
+    const [isFollowingLive, setIsFollowingLive] = useState(true);
+    const currentNodeIdRef = useRef(currentNodeId);
+    const isSyncingRef = useRef(false);
+
+    useEffect(() => {
+        currentNodeIdRef.current = currentNodeId;
+    }, [currentNodeId]);
 
     // Reset tree when initialState changes (for new analyses only, not when loading from Firebase)
     useEffect(() => {
@@ -230,7 +237,69 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         }
     }, [initialTree, analysisId]);
 
-    // Load analysis if analysisId is provided — only once per mount
+    // Listen to analysis updates from Firebase in real-time
+    useEffect(() => {
+        if (!currentAnalysisId || !currentUser?.uid) return;
+        const ownerUserId = analysisOwnerUserId || currentUser.uid;
+
+        console.log(`[AnalysisSync] Starting listener for analysis ${currentAnalysisId} (Owner: ${ownerUserId})`);
+
+        const unsubscribe = listenToAnalysis(ownerUserId, currentAnalysisId, (saved) => {
+            if (!saved) return;
+            
+            // Rebuild nodes
+            const newNodes: Record<string, AnalysisTreeNode> = {};
+            const savedNodes = saved.nodes || {};
+            for (const [id, node] of Object.entries(savedNodes)) {
+                const normalized = normalizeGameState((node as any).gameState || {});
+                newNodes[id] = {
+                    id: (node as any).id || id,
+                    children: (node as any).children || [],
+                    parentId: (node as any).parentId || null,
+                    notation: (node as any).notation || null,
+                    gameState: normalized,
+                    lastVisited: (node as any).lastVisited !== false,
+                    comment: (node as any).comment || '',
+                };
+            }
+
+            setNodes(newNodes);
+            
+            const remoteLastNodeId = saved.lastNodeId || saved.rootNodeId;
+
+            // Automatically follow if enabled
+            if (isFollowingLive && remoteLastNodeId && newNodes[remoteLastNodeId]) {
+                if (remoteLastNodeId !== currentNodeIdRef.current) {
+                    console.log(`[AnalysisSync] Jumping to remote node: ${remoteLastNodeId}`);
+                    const targetNode = newNodes[remoteLastNodeId];
+                    setCurrentNodeId(remoteLastNodeId);
+                    applyState(targetNode.gameState);
+                    
+                    // Play sound
+                    const history = targetNode.gameState.moveHistory || [];
+                    if (history.length > 0) {
+                        const lastMoveInState = history[history.length - 1];
+                        if (lastMoveInState.captured) playCaptureSound();
+                        else playMoveSound();
+                    } else {
+                        playMoveSound();
+                    }
+                }
+            }
+
+            setSaveName(saved.name || '');
+            if (saved.folderId) {
+                setSelectedFolderId(saved.folderId);
+            }
+        });
+
+        return () => {
+            console.log(`[AnalysisSync] Cleaning up listener for analysis ${currentAnalysisId}`);
+            unsubscribe();
+        };
+    }, [currentAnalysisId, currentUser?.uid, isFollowingLive, analysisOwnerUserId]);
+
+    // Initial load analysis if analysisId is provided — only once per mount if not already listening
     useEffect(() => {
         if (analysisId && currentUser?.uid && !loadedOnceFromFirebase) {
             const loadSavedAnalysis = async () => {
@@ -485,7 +554,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         window.addEventListener('mouseup', handleRelease);
         window.addEventListener('touchend', handleRelease);
         window.addEventListener('dragend', handleRelease);
-        
+
         return () => {
             window.removeEventListener('click', handleClick);
             window.removeEventListener('mouseup', handleRelease);
@@ -714,7 +783,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
     const handleImportPGN = () => {
         if (!pgnInput) return;
-        
+
         // Basic PGN parser
         let initialFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
         const fenMatch = pgnInput.match(/\[FEN\s+"([^"]+)"\]/);
@@ -739,7 +808,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
             // check castling
             if (cleanSan === 'O-O' || cleanSan === '0-0') return piece.originalType === PieceType.King && to.col - from.col === 2;
             if (cleanSan === 'O-O-O' || cleanSan === '0-0-0') return piece.originalType === PieceType.King && from.col - to.col === 2;
-            
+
             const match = cleanSan.match(/^([KQRBN])?([a-h])?([1-8])?(x)?([a-h][1-8])(?:=?([QRBN]))?$/);
             if (!match) return false;
 
@@ -769,7 +838,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
             if (sanFromFile && sanFromFile !== fromFileStr) return false;
             if (sanFromRank && sanFromRank !== fromRankStr) return false;
 
-            if (sanCapture && !capturedPiece) return false; 
+            if (sanCapture && !capturedPiece) return false;
 
             if (sanPromotionStr) {
                 let eprom = null;
@@ -831,7 +900,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
             const notation = token;
             const currentState = newNodes[currentId].gameState;
-            
+
             const tempBoard = currentState.board;
             const tempTurn = currentState.turn;
             const tempEp = currentState.enPassantTarget;
@@ -846,7 +915,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                     if (piece && piece.color === tempTurn) {
                         const from = { row: r, col: c };
                         const validMoves = getValidMoves(tempBoard, from, tempEp, true);
-                        
+
                         for (const to of validMoves) {
                             // Determine captured piece for notation
                             let capturedPiece: Piece | null = tempBoard[to.row][to.col];
@@ -920,14 +989,14 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                 }
                 if (foundMove) break;
             }
-            
+
             if (!foundMove) {
                 console.warn(`Could not find legal move for notation: ${notation}`);
-                continue; 
+                continue;
             }
 
             const nextBoard = applyMoveToBoard(tempBoard, foundMove);
-            
+
             // Calculate next EP target
             let nextEp: Position | null = null;
             if (foundMove.piece === PieceType.Pawn && Math.abs(foundMove.from.row - foundMove.to.row) === 2) {
@@ -944,7 +1013,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
             });
 
             const newNodeId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
-            
+
             newNodes[newNodeId] = {
                 id: newNodeId,
                 gameState: nextState,
@@ -981,7 +1050,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
     const handleCopyPGN = () => {
         const rootNode = nodes['root'];
         if (!rootNode) return;
-        
+
         const initialFen = boardToKrachtschaakFen(rootNode.gameState);
         const fenParts = initialFen.split(' ');
         const initialTurnOffset = fenParts[1] && fenParts[1].toLowerCase() === 'b' ? 1 : 0;
@@ -1002,7 +1071,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                 const actualPly = (initialFullmove - 1) * 2 + initialTurnOffset + ply;
                 const moveNum = Math.floor((actualPly - 1) / 2) + 1;
                 const isWhite = (actualPly % 2 !== 0);
-                
+
                 if (isWhite) {
                     pgn += `${moveNum}. ${node.notation} `;
                 } else {
@@ -1017,10 +1086,10 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         const traverseChildren = (parentId: string, ply: number, forceMoveNumber: boolean): string => {
             const parent = nodes[parentId];
             if (!parent || parent.children.length === 0) return '';
-            
+
             let pgn = '';
             const mainChildId = parent.children[0];
-            
+
             pgn += buildMove(mainChildId, ply, forceMoveNumber);
 
             for (let i = 1; i < parent.children.length; i++) {
@@ -1029,10 +1098,10 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                 const childBody = childPgn ? ` ${childPgn}` : '';
                 pgn += `(${buildMove(siblingId, ply, true).trim()}${childBody}) `;
             }
-            
+
             const printedVariations = parent.children.length > 1;
             pgn += traverseChildren(mainChildId, ply + 1, printedVariations || forceMoveNumber);
-            
+
             return pgn;
         };
 
@@ -1057,8 +1126,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         });
 
         if (existingChildId) {
-            setCurrentNodeId(existingChildId);
-            applyState(nodes[existingChildId].gameState);
+            goToNode(existingChildId);
             return;
         }
 
@@ -1082,13 +1150,25 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
         setCurrentNodeId(newNodeId);
         applyState(newState);
+
+        // SYNC WITH FIREBASE (Auto-save)
+        if (canEditAnalysis && currentAnalysisId && currentUser?.uid) {
+            const ownerId = analysisOwnerUserId || currentUser.uid;
+            updateAnalysisNode(ownerId, currentAnalysisId, currentNodeId, newNodeId, newNode, newNodeId);
+        }
+
         stopWorker();
     };
 
 
-    const goToNode = (nodeId: string, playSound = true) => {
+    const goToNode = (nodeId: string, playSound = true, isAutoFollow = false) => {
         setDraggedPiece(null);
         if (nodes[nodeId]) {
+            // If manual navigation (not auto-follow), turn off "Follow Live" if we move to a different node
+            if (!isAutoFollow && nodeId !== currentNodeId) {
+                setIsFollowingLive(false);
+            }
+
             // Mark path from root as last visited
             setNodes(prev => {
                 const newNodes = { ...prev };
@@ -1119,6 +1199,12 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
             setCurrentNodeId(nodeId);
             applyState(nodes[nodeId].gameState);
+
+            // SYNC POSITION WITH FIREBASE
+            if (canEditAnalysis && currentAnalysisId && currentUser?.uid && !isAutoFollow) {
+                const ownerId = analysisOwnerUserId || currentUser.uid;
+                updateCurrentNodeId(ownerId, currentAnalysisId, nodeId);
+            }
         }
     };
 
@@ -1676,7 +1762,20 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
             </div>
 
             <div className="w-full md:w-96 bg-gray-800 p-4 rounded-xl shadow-2xl flex flex-col h-fit">
-                <h2 className="text-2xl font-bold text-center text-green-400 mb-2">Analysis Board</h2>
+                <div className="mb-2">
+                    <h2 className="text-2xl font-bold text-center text-green-400">Analysis Board</h2>
+                    {currentAnalysisId && (
+                        <div className="flex justify-center mt-2">
+                            <button
+                                onClick={() => setIsFollowingLive(!isFollowingLive)}
+                                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black transition-all shadow-md group ${isFollowingLive ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-500 hover:bg-gray-650'}`}
+                            >
+                                <span className={`w-2 h-2 rounded-full ${isFollowingLive ? 'bg-white animate-pulse' : 'bg-gray-600'}`}></span>
+                                {isFollowingLive ? 'FOLLOWING LIVE' : 'FOLLOW LIVE'}
+                            </button>
+                        </div>
+                    )}
+                </div>
 
                 <div className="flex justify-between items-center mb-3 bg-gray-700 p-2 rounded">
                     <button onClick={() => { goToNode('root', false); setLastMove(null); }} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50">&lt;&lt;</button>
