@@ -222,6 +222,9 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
     const isSyncingRef = useRef(false);
 
     useEffect(() => {
+        if (nodes[nodes[currentNodeId].parentId!]?.parentId === null) setLastMove(null);
+    }, [currentNodeId]);
+    useEffect(() => {
         currentNodeIdRef.current = currentNodeId;
     }, [currentNodeId]);
 
