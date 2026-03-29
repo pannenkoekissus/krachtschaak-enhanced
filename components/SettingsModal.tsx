@@ -106,19 +106,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[200] p-4 scale-in-center overflow-hidden" onClick={onClose}>
             <div 
-                className="bg-gray-800 border border-gray-700 p-8 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.5)] w-full max-w-md max-h-[85vh] overflow-y-auto relative custom-scrollbar flex flex-col gap-8 ring-1 ring-white/10"
+                className="bg-gray-800 border border-gray-700 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.5)] w-full max-w-md max-h-[85vh] overflow-y-auto relative custom-scrollbar flex flex-col ring-1 ring-white/10"
                 onClick={(e) => e.stopPropagation()}
                 style={{
                     scrollbarWidth: 'thin',
                     scrollbarColor: '#4b5563 transparent'
                 }}
             >
-                <div className="flex flex-col items-center gap-2 mb-2 sticky top-0 bg-gray-800 z-10 pb-4">
+                <div className="flex flex-col items-center gap-2 sticky top-0 bg-gray-800 z-20 pt-8 pb-4 px-8 border-b border-gray-700/50">
                     <h3 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-blue-500 to-purple-600 filter drop-shadow-sm">Settings</h3>
                     <div className="w-12 h-1.5 bg-gradient-to-r from-green-500 to-blue-600 rounded-full"></div>
                 </div>
 
-                <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-6 p-8">
                     <section>
                         <SectionHeader title="Gameplay" icon="♟️" />
                         <div className="bg-gray-900/40 rounded-2xl border border-white/5 py-2">
@@ -154,12 +154,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </section>
                 </div>
 
-                <button
-                    onClick={onClose}
-                    className="w-full mt-4 py-4 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-500 hover:to-blue-500 text-white rounded-2xl font-black text-lg transition-all active:scale-95 shadow-xl hover:shadow-green-500/20 group"
-                >
-                    <span className="group-hover:tracking-widest transition-all">SAVE & CLOSE</span>
-                </button>
+                <div className="px-8 pb-8">
+                    <button
+                        onClick={onClose}
+                        className="w-full mt-4 py-4 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-500 hover:to-blue-500 text-white rounded-2xl font-black text-lg transition-all active:scale-95 shadow-xl hover:shadow-green-500/20 group"
+                    >
+                        <span className="group-hover:tracking-widest transition-all">SAVE & CLOSE</span>
+                    </button>
+                </div>
             </div>
         </div>
     );
