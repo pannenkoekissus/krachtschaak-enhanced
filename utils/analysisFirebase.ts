@@ -112,14 +112,17 @@ export const updateAnalysisNode = async (
   lastNodeId: string
 ): Promise<void> => {
   try {
+    // 1. First, save the node data itself and update the timestamp
+    // This ensures that when the parent's children list is updated or lastNodeId is changed,
+    // the actual node data is already present in the database.
     const updates: any = {
       [`/analyses/${userId}/${analysisId}/nodes/${newNodeId}`]: sanitizeForFirebase(nodeData),
-      [`/analyses/${userId}/${analysisId}/lastNodeId`]: lastNodeId,
       [`/analyses/${userId}/${analysisId}/updatedAt`]: Date.now()
     };
+    await db.ref().update(updates);
+
+    // 2. Then update the parent's children list using a transaction for concurrency safety
     if (parentId) {
-      // We need to fetch current children to append safely, or just update the whole parent node
-      // For simplicity in a collaborative context, updating the child array of the parent is usually best
       const parentRef = db.ref(`/analyses/${userId}/${analysisId}/nodes/${parentId}/children`);
       await parentRef.transaction((currentChildren: string[]) => {
         if (!currentChildren) return [newNodeId];
@@ -127,7 +130,10 @@ export const updateAnalysisNode = async (
         return [...currentChildren, newNodeId];
       });
     }
-    await db.ref().update(updates);
+
+    // 3. Finally, update the lastNodeId (current position)
+    // We do this last to ensure the entire tree structure is valid before jumping to it
+    await db.ref(`/analyses/${userId}/${analysisId}/lastNodeId`).set(lastNodeId);
   } catch (error) {
     console.error('Error updating analysis node:', error);
     throw error;

@@ -1910,9 +1910,9 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                     const currentNode = nodes[currentNodeId];
                     if (!currentNode) return null;
 
-                    const parent = currentNode.parentId ? nodes[currentNode.parentId] : null;
-                    const siblingVariations = parent && parent.children.length > 1 ? parent.children : [];
-                    const childVariations = currentNode.children.length > 1 ? currentNode.children : [];
+                    const parentNode = currentNode.parentId ? nodes[currentNode.parentId] : null;
+                    const siblingVariations = parentNode && parentNode.children ? parentNode.children.filter(id => !!nodes[id]) : [];
+                    const childVariations = currentNode.children ? currentNode.children.filter(id => !!nodes[id]) : [];
 
                     if (siblingVariations.length === 0 && childVariations.length === 0) return null;
 
@@ -1930,7 +1930,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                                                         ? 'bg-blue-600 text-white shadow-md ring-1 ring-blue-400'
                                                         : 'bg-gray-700 text-gray-300 hover:bg-blue-700 hover:text-white'}`}
                                                 >
-                                                    {nodes[vId].notation}
+                                                    {nodes[vId]?.notation || '?'}
                                                 </button>
                                                 {vId !== siblingVariations[0] && (
                                                     <button
@@ -1954,11 +1954,11 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                                             <div key={cId} className="flex flex-col gap-1">
                                                 <button
                                                     onClick={() => goToNode(cId, true)}
-                                                    className={`py-2 px-4 rounded-md text-sm font-semibold transition-all ${nodes[cId].lastVisited
+                                                    className={`py-2 px-4 rounded-md text-sm font-semibold transition-all ${nodes[cId]?.lastVisited
                                                         ? 'bg-purple-600 text-white shadow-md ring-1 ring-purple-400'
                                                         : 'bg-gray-700 text-gray-300 hover:bg-purple-700 hover:text-white'}`}
                                                 >
-                                                    {nodes[cId].notation}
+                                                    {nodes[cId]?.notation || '?'}
                                                 </button>
                                                 {cId !== childVariations[0] && (
                                                     <button
