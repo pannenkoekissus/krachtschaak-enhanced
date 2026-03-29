@@ -115,6 +115,7 @@ export interface IncomingChallenge {
   showPowerPieces?: boolean;
   showPowerRings?: boolean;
   showOriginalType?: boolean;
+  kFen?: string;
 }
 
 export interface SentChallenge {
@@ -130,6 +131,7 @@ export interface SentChallenge {
   showPowerPieces?: boolean;
   showPowerRings?: boolean;
   showOriginalType?: boolean;
+  kFen?: string;
 }
 
 export interface ActiveGameSummary {
@@ -145,6 +147,7 @@ export interface ActiveGameSummary {
   turnStartTime: number | null;
   challengedPlayerInfo?: { uid: string, displayName: string } | null;
   isRated: boolean;
+  kFen?: string;
 }
 
 
@@ -186,6 +189,7 @@ export interface GameState {
   showPowerPieces?: boolean;
   showPowerRings?: boolean;
   showOriginalType?: boolean;
+  kFen?: string;
 }
 
 export interface LobbyGame {

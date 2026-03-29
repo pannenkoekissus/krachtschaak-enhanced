@@ -9,10 +9,12 @@ interface BoardEditorProps {
     initialBoard?: BoardState;
     initialTurn?: Color;
     onStartAnalysis: (board: BoardState, turn: Color) => void;
+    onChallengeSomeone?: (board: BoardState, turn: Color) => void;
     onCancel: () => void;
+    isLoggedIn?: boolean;
 }
 
-const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, onStartAnalysis, onCancel }) => {
+const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, onStartAnalysis, onChallengeSomeone, onCancel, isLoggedIn }) => {
     const [board, setBoard] = useState<BoardState>(() => initialBoard || Array(8).fill(null).map(() => Array(8).fill(null)));
     const [turn, setTurn] = useState<Color>(initialTurn || Color.White);
     const [selectedPalettePiece, setSelectedPalettePiece] = useState<{ type: PieceType, color: Color } | 'eraser' | 'cursor'>('cursor');
@@ -542,6 +544,14 @@ const BoardEditor: React.FC<BoardEditorProps> = ({ initialBoard, initialTurn, on
                     >
                         Start Analysis
                     </button>
+                    {onChallengeSomeone && isLoggedIn && (
+                        <button
+                            onClick={() => onChallengeSomeone(board, turn)}
+                            className="w-full py-4 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-bold text-lg shadow-lg transition-all active:scale-95"
+                        >
+                            Challenge Player
+                        </button>
+                    )}
                     <button
                         onClick={onCancel}
                         className="w-full py-2 bg-transparent hover:bg-gray-700 text-gray-400 rounded-lg font-semibold transition-colors"

@@ -14,7 +14,7 @@ import AnalysisManager from './components/AnalysisManager';
 import Tournament from './components/Tournament';
 import ConfirmationModal from './components/ConfirmationModal';
 import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, GameMode, TimerSettings, PlayerInfo, SentChallenge, Move, ChatMessage, LobbyGame, IncomingChallenge, AutoSetting } from './types';
-import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, sanitizePiece, isInsufficientMaterial } from './utils/game';
+import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, sanitizePiece, isInsufficientMaterial, fenToBoard, boardToKrachtschaakFen } from './utils/game';
 import { getRatingCategory, RatingCategory, RATING_CATEGORIES } from './utils/ratings';
 import { getSharedFolders, getPublicFolders } from './utils/analysisFirebase';
 import { updatePairing, updatePlayerScore, recalculateTiebreaks } from './utils/tournamentFirebase';
@@ -162,6 +162,7 @@ const App: React.FC = () => {
     const [pendingMove, setPendingMove] = useState<{ from: Position, to: Position } | null>(null);
     const [pendingPremove, setPendingPremove] = useState<{ from: Position, to: Position, isForcePower: boolean } | null>(null);
     const [showLogoutWarning, setShowLogoutWarning] = useState(false);
+    const [pendingChallengeKFen, setPendingChallengeKFen] = useState<string | null>(null);
 
     // New Features: History & Chat
     const [moveHistory, setMoveHistory] = useState<Move[]>([]);
@@ -1912,9 +1913,9 @@ const App: React.FC = () => {
 
                 const promotionRank = turn === Color.White ? 0 : 7;
                 if (to.row === promotionRank) {
-                     // Still need to handle promotion if en passant leads to last rank
-                     // But usually en passant happens on ranks 3/6 (0-indexed 2/5 or 3/4)
-                     // In Krachtschaak, pawns can move multiple squares, but en passant only happens on specific ranks.
+                    // Still need to handle promotion if en passant leads to last rank
+                    // But usually en passant happens on ranks 3/6 (0-indexed 2/5 or 3/4)
+                    // In Krachtschaak, pawns can move multiple squares, but en passant only happens on specific ranks.
                 }
 
                 finalizeTurn(currentState, newBoard, null, true, newCapturedPieces, { from, to }, pieceToMove, actualCapturedPiece, null);
@@ -3337,7 +3338,23 @@ const App: React.FC = () => {
         }
 
         if (gameMode === 'board_editor') {
-            return <BoardEditor initialBoard={lastEditedBoard || undefined} initialTurn={lastEditedTurn} onStartAnalysis={handleStartAnalysisFromEditor} onCancel={handleBackToMenu} />;
+            return (
+                <BoardEditor
+                    initialBoard={lastEditedBoard || undefined}
+                    initialTurn={lastEditedTurn}
+                    onStartAnalysis={handleStartAnalysisFromEditor}
+                    onChallengeSomeone={(board, turn) => {
+                        setLastEditedBoard(board);
+                        setLastEditedTurn(turn);
+                        const kFen = boardToKrachtschaakFen({ board, turn });
+                        setPendingChallengeKFen(kFen);
+                        setLobbyView('players');
+                        setGameMode('online_lobby');
+                    }}
+                    onCancel={handleBackToMenu}
+                    isLoggedIn={!!currentUser}
+                />
+            );
         }
 
         if (gameMode === 'menu') {
@@ -3563,6 +3580,16 @@ const App: React.FC = () => {
                     allMyGames={allMyGamesData}
                     incomingChallenges={incomingChallenges}
                     sentChallenges={sentChallenges}
+                    pendingChallengeKFen={pendingChallengeKFen}
+                    setPendingChallengeKFen={setPendingChallengeKFen}
+                    onViewPositionChallenge={(kFen) => {
+                        const result = fenToBoard(kFen);
+                        if (result && result.board) {
+                            setLastEditedBoard(result.board);
+                            setLastEditedTurn(result.turn || Color.White);
+                            setGameMode('board_editor');
+                        }
+                    }}
                 />
             );
         }

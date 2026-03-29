@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { auth, db } from '../firebaseConfig';
 import { Color, GameState, LobbyGame, TimerSettings, PlayerInfo, UserInfo, ActiveGameSummary, GameStatus, IncomingChallenge, SentChallenge, AutoSetting } from '../types';
 import { getRatingCategory, RatingCategory, RATING_CATEGORIES } from '../utils/ratings';
+import { fenToBoard } from '../utils/game';
 import SettingsModal from './SettingsModal';
 
 type LobbyTab = 'games' | 'players' | 'current_games' | 'finished_games' | 'challenges' | 'live';
@@ -46,6 +47,9 @@ interface OnlineLobbyProps {
     allMyGames: Record<string, GameState>;
     incomingChallenges: IncomingChallenge[];
     sentChallenges: SentChallenge[];
+    pendingChallengeKFen: string | null;
+    setPendingChallengeKFen: (val: string | null) => void;
+    onViewPositionChallenge: (kFen: string) => void;
 }
 
 const formatTime = (totalSeconds: number | null): string => {
@@ -281,8 +285,9 @@ const ChallengeConfigModal: React.FC<{
     opponent: UserInfo;
     onCancel: () => void;
     onSend: (settings: TimerSettings, isRated: boolean, challengeColor: string, visualSettings: { showPowerPieces: boolean, showPowerRings: boolean, showOriginalType: boolean }) => void;
-}> = ({ opponent, onCancel, onSend }) => {
-    const [isRated, setIsRated] = useState(true);
+    isCustomPosition?: boolean;
+}> = ({ opponent, onCancel, onSend, isCustomPosition }) => {
+    const [isRated, setIsRated] = useState(!isCustomPosition);
     const [type, setType] = useState<'realtime' | 'correspondence'>('realtime');
     const [corrType, setCorrType] = useState<'daily' | 'unlimited'>('daily');
     const [baseMin, setBaseMin] = useState('10');
@@ -309,8 +314,10 @@ const ChallengeConfigModal: React.FC<{
                 <h3 className="text-xl font-bold mb-4 text-center">Challenge {opponent.displayName}</h3>
 
                 <div className="mb-4 flex items-center justify-center">
-                    <input type="checkbox" id="modal-rated" checked={isRated} onChange={e => setIsRated(e.target.checked)} className="w-4 h-4 text-purple-600 bg-gray-700 rounded focus:ring-purple-600" />
-                    <label htmlFor="modal-rated" className="ml-2 text-gray-300 font-medium">Rated Game</label>
+                    <input type="checkbox" id="modal-rated" checked={isRated} onChange={e => !isCustomPosition && setIsRated(e.target.checked)} disabled={!!isCustomPosition} className="w-4 h-4 text-purple-600 bg-gray-700 rounded focus:ring-purple-600 disabled:opacity-50" />
+                    <label htmlFor="modal-rated" className={`ml-2 font-medium ${isCustomPosition ? 'text-gray-500 italic' : 'text-gray-300'}`}>
+                        {isCustomPosition ? 'From Position (Unrated)' : 'Rated Game'}
+                    </label>
                 </div>
 
                 <div className="flex bg-gray-700 rounded-lg p-1 mb-4">
@@ -381,7 +388,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
     showPowerPieces, setShowPowerPieces, showPowerRings, setShowPowerRings, showOriginalType, setShowOriginalType, soundsEnabled, setSoundsEnabled,
     autoQueen, setAutoQueen, autoEnPassant, setAutoEnPassant,
     currentLobbyTab, setCurrentLobbyTab, onSpectate, onAnalyse,
-    allMyGames, incomingChallenges, sentChallenges
+    allMyGames, incomingChallenges, sentChallenges,
+    pendingChallengeKFen, setPendingChallengeKFen, onViewPositionChallenge
 }) => {
     const [openGames, setOpenGames] = useState<LobbyGame[]>([]);
     const [myCurrentGames, setMyCurrentGames] = useState<ActiveGameSummary[]>([]);
@@ -598,7 +606,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                 currentGames.push({
                     gameId, myColor, opponent, isMyTurn: false, status: data.status, timerSettings: data.timerSettings,
                     ratingCategory: data.ratingCategory, isRated: typeof data.isRated === 'boolean' ? data.isRated : true,
-                    moveDeadline: null, playerTimes: null, challengedPlayerInfo: data.challengedPlayerInfo || null, turnStartTime: null
+                    moveDeadline: null, playerTimes: null, challengedPlayerInfo: data.challengedPlayerInfo || null, turnStartTime: null,
+                    kFen: data.kFen
                 });
             } else if (data.status === 'playing') {
                 const opponentColor = myColor === Color.White ? Color.Black : Color.White;
@@ -608,7 +617,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                         gameId, myColor, opponent: data.players[opponentUid], isMyTurn: data.turn === myColor,
                         status: data.status, timerSettings: data.timerSettings, ratingCategory: data.ratingCategory,
                         isRated: typeof data.isRated === 'boolean' ? data.isRated : true,
-                        moveDeadline: data.moveDeadline, playerTimes: data.playerTimes, turnStartTime: data.turnStartTime
+                        moveDeadline: data.moveDeadline, playerTimes: data.playerTimes, turnStartTime: data.turnStartTime,
+                        kFen: data.kFen
                     });
                 }
             }
@@ -699,7 +709,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
             challengeColor: challengeColor,
             showPowerPieces: visualSettings.showPowerPieces,
             showPowerRings: visualSettings.showPowerRings,
-            showOriginalType: visualSettings.showOriginalType
+            showOriginalType: visualSettings.showOriginalType,
+            kFen: pendingChallengeKFen || null
         };
 
         const newChallengeRef = db.ref(`challenges/${targetUid}`).push();
@@ -718,10 +729,12 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
             challengeColor: challengeColor,
             showPowerPieces: visualSettings.showPowerPieces,
             showPowerRings: visualSettings.showPowerRings,
-            showOriginalType: visualSettings.showOriginalType
+            showOriginalType: visualSettings.showOriginalType,
+            kFen: pendingChallengeKFen || null
         });
 
         setChallengeTarget(null); // Close Modal
+        setPendingChallengeKFen(null); // Reset pending K-FEN
         setCurrentLobbyTab('challenges'); // Switch to challenges tab
     };
 
@@ -790,6 +803,15 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
         initialState.showPowerPieces = challenge.showPowerPieces ?? true;
         initialState.showPowerRings = challenge.showPowerRings ?? true;
         initialState.showOriginalType = challenge.showOriginalType ?? true;
+
+        if (challenge.kFen) {
+            const result = fenToBoard(challenge.kFen);
+            if (result && result.board) {
+                initialState.board = result.board;
+                initialState.turn = result.turn || Color.White;
+                initialState.kFen = challenge.kFen;
+            }
+        }
 
         await newGameRef.set(initialState);
 
@@ -1081,6 +1103,21 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                     <MenuButton view="challenges" label="Challenges" count={incomingChallenges.length} />
                     <MenuButton view="live" label="Live Games" count={liveGames.length} />
                 </div>
+                {pendingChallengeKFen && (
+                    <div className="w-full max-w-3xl mb-4 p-3 bg-purple-900/40 border border-purple-500/50 rounded-lg flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-lg shadow-inner">♟️</div>
+                            <div>
+                                <p className="text-sm font-bold text-purple-200">Custom Position Active</p>
+                                <p className="text-xs text-purple-300/80 italic">Challenging someone from your board setup.</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => onViewPositionChallenge(pendingChallengeKFen)} className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded font-bold transition-all shadow-md active:scale-95">View</button>
+                            <button onClick={() => setPendingChallengeKFen(null)} className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 px-3 py-1.5 rounded font-bold transition-all border border-gray-600">Cancel</button>
+                        </div>
+                    </div>
+                )}
 
 
                 {currentLobbyTab === 'challenges' && (
@@ -1105,6 +1142,11 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                                                 <p className="font-bold text-white text-lg">{"Opponent plays as: " + c.challengeColor}</p>
                                                 {renderVisualSettings(c.showPowerPieces, c.showPowerRings, c.showOriginalType) && (
                                                     <p className="text-indigo-300 text-xs mt-1">{renderVisualSettings(c.showPowerPieces, c.showPowerRings, c.showOriginalType)}</p>
+                                                )}
+                                                {c.kFen && (
+                                                    <button onClick={() => onViewPositionChallenge(c.kFen!)} className="mt-2 text-xs bg-purple-700 hover:bg-purple-600 text-white px-2 py-1 rounded flex items-center gap-1 transition-colors">
+                                                        <span>👁️</span> View Position
+                                                    </button>
                                                 )}
                                             </div>
                                             <div className="flex gap-3">
@@ -1138,6 +1180,11 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                                                 <p className="text-xs text-blue-300 mt-1">{"you play as: " + c.challengeColor}</p>
                                                 {renderVisualSettings(c.showPowerPieces, c.showPowerRings, c.showOriginalType) && (
                                                     <p className="text-xs text-blue-300 mt-1">{renderVisualSettings(c.showPowerPieces, c.showPowerRings, c.showOriginalType)}</p>
+                                                )}
+                                                {c.kFen && (
+                                                    <button onClick={() => onViewPositionChallenge(c.kFen!)} className="mt-2 text-xs bg-purple-700 hover:bg-purple-600 text-white px-2 py-1 rounded flex items-center gap-1 transition-colors">
+                                                        <span>👁️</span> View Position
+                                                    </button>
                                                 )}
                                             </div>
                                             <button onClick={() => handleCancelSentChallenge(c)} className="px-3 py-1 bg-red-600 hover:bg-red-500 rounded text-sm font-semibold text-white transition-colors">Cancel</button>
@@ -1248,7 +1295,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                                             <p className="font-semibold truncate">
                                                 Open Game (Waiting for Opponent)
                                             </p>
-                                            <p className="text-sm text-gray-300">{renderTimerSetting(game.timerSettings)} ({game.ratingCategory}, {game.isRated ? 'Rated' : 'Unrated'})</p>
+                                            <p className="text-sm text-gray-300">{renderTimerSetting(game.timerSettings)} ({game.ratingCategory}, {game.isRated ? 'Rated' : 'Unrated'}{game.kFen ? ', From Position' : ''})</p>
                                         </div>
                                         <div className="flex flex-col items-center gap-1">
                                             <p className="font-bold text-gray-400 flex items-center gap-2 text-xs"><div className="w-2 h-2 bg-yellow-500 rounded-full animate-ping"></div> Waiting...</p>
@@ -1258,8 +1305,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                                 ) : (
                                     <>
                                         <div>
-                                            <p className="font-semibold truncate">vs {game.opponent?.displayName} ({game.opponent?.ratings?.[game.ratingCategory] ?? '...'})</p>
-                                            <p className="text-sm text-gray-300">{renderTimerSetting(game.timerSettings)} ({game.ratingCategory}, {game.isRated ? 'Rated' : 'Unrated'})</p>
+                                            <p className="font-semibold truncate text-gray-100">vs {game.opponent?.displayName} ({game.opponent?.ratings?.[game.ratingCategory] ?? '...'})</p>
+                                            <p className="text-sm text-gray-300">{renderTimerSetting(game.timerSettings)} ({game.ratingCategory}, {game.isRated ? 'Rated' : 'Unrated'}{game.kFen ? ', From Position' : ''})</p>
                                         </div>
                                         <div className="text-right flex items-center gap-4">
                                             <div>
@@ -1428,13 +1475,13 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                             <div key={user.uid} className="bg-gray-700 p-3 rounded-lg flex justify-between items-center">
                                 <button onClick={() => setViewingPlayerRatings(user)} className="flex items-center gap-2 text-left hover:bg-gray-600 rounded p-1 flex-grow">
                                     <span className={`w-3 h-3 rounded-full flex-shrink-0 ${user.isOnline ? 'bg-green-500' : 'bg-gray-500'}`}></span>
-                                    <p className="font-semibold truncate">{user.displayName} (Blitz: {user.ratings?.blitz ?? 1200})</p>
+                                    <p className="font-semibold truncate">{user.displayName} (Blitz: {user.ratings?.[RatingCategory.Blitz] ?? 1200})</p>
                                 </button>
                                 <button
                                     onClick={() => setChallengeTarget(user)}
-                                    className="ml-2 px-3 py-1 bg-purple-600 hover:bg-purple-500 rounded text-sm font-semibold transition-colors whitespace-nowrap"
+                                    className={`ml-2 px-3 py-1 rounded text-sm font-semibold transition-colors whitespace-nowrap shadow-sm active:scale-95 ${pendingChallengeKFen ? 'bg-indigo-600 hover:bg-indigo-500' : 'bg-purple-600 hover:bg-purple-500'}`}
                                 >
-                                    Challenge
+                                    {pendingChallengeKFen ? 'Challenge (Position)' : 'Challenge'}
                                 </button>
                             </div>))}
                         </div>
@@ -1457,6 +1504,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                     opponent={challengeTarget}
                     onCancel={() => setChallengeTarget(null)}
                     onSend={handleSendChallenge}
+                    isCustomPosition={!!pendingChallengeKFen}
                 />
             )}
             {showSettings && (
