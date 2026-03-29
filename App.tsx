@@ -644,6 +644,15 @@ const App: React.FC = () => {
         if (newStatus === 'playing' || newStatus === 'promotion') {
             isProcessingGameOver.current = false;
         }
+
+        // Auto-show overlay when game ends (if transitioning from active to finished)
+        const isFinishing = (status === 'playing' || status === 'promotion' || status === 'ambiguous_en_passant') &&
+            (newStatus !== 'playing' && newStatus !== 'promotion' && newStatus !== 'ambiguous_en_passant' && newStatus !== 'waiting');
+
+        if (isFinishing) {
+            setOverlayDismissed(false);
+        }
+
         setStatus(newStatus);
         setWinner(state.winner || null);
         setPromotionData(state.promotionData || null);
@@ -2817,6 +2826,7 @@ const App: React.FC = () => {
         const bottomPlayerIsOpponent = (isFlipped ? Color.Black : Color.White) !== myOnlineColor;
 
         const effectiveStatus = localPromotionState ? 'promotion' : localAmbiguousEnPassantState ? 'ambiguous_en_passant' : status;
+        const isGameOver = status !== 'playing' && status !== 'waiting' && status !== 'promotion' && status !== 'ambiguous_en_passant';
 
         const topPlayerCapturedPieces = capturedPieces[isFlipped ? Color.Black : Color.White];
         const bottomPlayerCapturedPieces = capturedPieces[isFlipped ? Color.White : Color.Black];
@@ -2961,6 +2971,14 @@ const App: React.FC = () => {
                                         </div>
                                     </div>
                                 )}
+                                {isGameOver && overlayDismissed && (
+                                    <button
+                                        onClick={() => setOverlayDismissed(false)}
+                                        className="w-full mb-3 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-bold transition-all shadow-lg animate-pulse"
+                                    >
+                                        🏆 Show Game Result
+                                    </button>
+                                )}
                                 <div className="grid grid-cols-2 gap-4">
                                     <button
                                         onClick={() => setShowPowerLegend(true)}
@@ -3092,6 +3110,14 @@ const App: React.FC = () => {
                                 isTurn={isBottomPlayerTurn} captured={bottomPlayerCapturedPieces}
                             />
                             <div className="mt-auto pt-4">
+                                {isGameOver && overlayDismissed && (
+                                    <button
+                                        onClick={() => setOverlayDismissed(false)}
+                                        className="w-full mb-3 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-bold transition-all shadow-lg animate-pulse flex items-center justify-center gap-2"
+                                    >
+                                        🏆 Show Result
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => setShowPowerLegend(true)}
                                     className="w-full mb-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg font-semibold transition-colors text-sm"
