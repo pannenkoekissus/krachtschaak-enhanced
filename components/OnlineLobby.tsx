@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { auth, db } from '../firebaseConfig';
-import { Color, GameState, LobbyGame, TimerSettings, PlayerInfo, UserInfo, ActiveGameSummary, GameStatus, IncomingChallenge, SentChallenge } from '../types';
+import { Color, GameState, LobbyGame, TimerSettings, PlayerInfo, UserInfo, ActiveGameSummary, GameStatus, IncomingChallenge, SentChallenge, AutoSetting } from '../types';
 import { getRatingCategory, RatingCategory, RATING_CATEGORIES } from '../utils/ratings';
 import SettingsModal from './SettingsModal';
 
@@ -34,6 +34,10 @@ interface OnlineLobbyProps {
     setShowOriginalType: (enabled: boolean) => void;
     soundsEnabled: boolean;
     setSoundsEnabled: (enabled: boolean) => void;
+    autoQueen: AutoSetting;
+    setAutoQueen: (val: AutoSetting) => void;
+    autoEnPassant: AutoSetting;
+    setAutoEnPassant: (val: AutoSetting) => void;
     // State props
     currentLobbyTab: LobbyTab;
     setCurrentLobbyTab: (tab: LobbyTab) => void;
@@ -375,6 +379,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
     premovesEnabled, setPremovesEnabled, moveConfirmationEnabled, setMoveConfirmationEnabled,
     drawConfirmationEnabled, setDrawConfirmationEnabled, resignConfirmationEnabled, setResignConfirmationEnabled,
     showPowerPieces, setShowPowerPieces, showPowerRings, setShowPowerRings, showOriginalType, setShowOriginalType, soundsEnabled, setSoundsEnabled,
+    autoQueen, setAutoQueen, autoEnPassant, setAutoEnPassant,
     currentLobbyTab, setCurrentLobbyTab, onSpectate, onAnalyse,
     allMyGames, incomingChallenges, sentChallenges
 }) => {
@@ -1473,6 +1478,10 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                     setShowOriginalType={setShowOriginalType}
                     soundsEnabled={soundsEnabled}
                     setSoundsEnabled={setSoundsEnabled}
+                    autoQueen={autoQueen}
+                    setAutoQueen={setAutoQueen}
+                    autoEnPassant={autoEnPassant}
+                    setAutoEnPassant={setAutoEnPassant}
                 />
             )}
         </div>

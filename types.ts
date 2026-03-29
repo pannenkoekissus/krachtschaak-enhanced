@@ -15,6 +15,12 @@ export enum Color {
   Black = 'black',
 }
 
+export enum AutoSetting {
+  Never = 'never',
+  Realtime = 'realtime',
+  Always = 'always',
+}
+
 export interface Piece {
   type: PieceType;
   color: Color;

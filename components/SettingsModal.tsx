@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { AutoSetting } from '../types';
 
 interface SettingsModalProps {
     onClose: () => void;
@@ -19,6 +20,10 @@ interface SettingsModalProps {
     setShowOriginalType: (enabled: boolean) => void;
     soundsEnabled: boolean;
     setSoundsEnabled: (enabled: boolean) => void;
+    autoQueen: AutoSetting;
+    setAutoQueen: (val: AutoSetting) => void;
+    autoEnPassant: AutoSetting;
+    setAutoEnPassant: (val: AutoSetting) => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -38,157 +43,122 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     showOriginalType,
     setShowOriginalType,
     soundsEnabled,
-    setSoundsEnabled
+    setSoundsEnabled,
+    autoQueen,
+    setAutoQueen,
+    autoEnPassant,
+    setAutoEnPassant
 }) => {
+    const renderToggle = (label: string, description: string, value: boolean, onChange: (val: boolean) => void) => (
+        <div className="flex items-center justify-between py-3 group hover:bg-gray-700/30 px-4 rounded-xl transition-all">
+            <div className="flex flex-col gap-1">
+                <p className="font-bold text-gray-100 group-hover:text-green-400 transition-colors uppercase text-sm tracking-wide">{label}</p>
+                <p className="text-xs text-gray-400 leading-relaxed max-w-[200px]">{description}</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={value}
+                    onChange={(e) => onChange(e.target.checked)}
+                />
+                <div className="w-12 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-green-500/50 rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-green-600 peer-checked:to-green-400 shadow-inner"></div>
+            </label>
+        </div>
+    );
+
+    const renderTriStateSetting = (label: string, description: string, value: AutoSetting, onChange: (val: AutoSetting) => void) => (
+        <div className="flex flex-col gap-3 py-3 px-4 rounded-xl hover:bg-gray-700/30 transition-all border border-transparent hover:border-gray-600/50">
+            <div className="flex flex-col gap-1">
+                <p className="font-bold text-gray-100 uppercase text-sm tracking-wide hover:text-green-400 transition-colors">{label}</p>
+                <p className="text-xs text-gray-400 leading-relaxed">{description}</p>
+            </div>
+            <div className="flex p-1 bg-gray-900/50 rounded-lg border border-gray-700">
+                {[
+                    { val: AutoSetting.Never, label: 'Never' },
+                    { val: AutoSetting.Realtime, label: 'Realtime' },
+                    { val: AutoSetting.Always, label: 'Always' }
+                ].map((option) => (
+                    <button
+                        key={option.val}
+                        onClick={() => onChange(option.val)}
+                        className={`flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all ${
+                            value === option.val
+                                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg scale-100'
+                                : 'text-gray-500 hover:text-gray-300'
+                        }`}
+                    >
+                        {option.label}
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+
+    const SectionHeader = ({ title, icon }: { title: string, icon: string }) => (
+        <div className="flex items-center gap-2 mb-4 px-4">
+            <span className="text-xl">{icon}</span>
+            <h4 className="text-xs font-black uppercase tracking-[0.2em] text-gray-500">{title}</h4>
+            <div className="flex-grow h-[1px] bg-gradient-to-r from-gray-700 to-transparent ml-2"></div>
+        </div>
+    );
+
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50" onClick={onClose}>
-            <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto relative custom-scrollbar" onClick={(e) => e.stopPropagation()}>
-                <button onClick={onClose} className="absolute top-2 right-3 text-2xl text-gray-400 hover:text-white">&times;</button>
-                <h3 className="text-2xl font-bold mb-6 text-center text-green-400">Settings</h3>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[200] p-4 scale-in-center overflow-hidden" onClick={onClose}>
+            <div 
+                className="bg-gray-800 border border-gray-700 p-8 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.5)] w-full max-w-md max-h-[85vh] overflow-y-auto relative custom-scrollbar flex flex-col gap-8 ring-1 ring-white/10"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                    scrollbarWidth: 'thin',
+                    scrollbarColor: '#4b5563 transparent'
+                }}
+            >
+                <div className="flex flex-col items-center gap-2 mb-2 sticky top-0 bg-gray-800 z-10 pb-4">
+                    <h3 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-blue-500 to-purple-600 filter drop-shadow-sm">Settings</h3>
+                    <div className="w-12 h-1.5 bg-gradient-to-r from-green-500 to-blue-600 rounded-full"></div>
+                </div>
 
-                <div className="space-y-6">
-                    {/* Sound Toggle */}
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="font-semibold text-white">Enable Sounds</p>
-                            <p className="text-xs text-gray-400">Play sound effects for moves and events</p>
+                <div className="flex flex-col gap-6">
+                    <section>
+                        <SectionHeader title="Gameplay" icon="♟️" />
+                        <div className="bg-gray-900/40 rounded-2xl border border-white/5 py-2">
+                            {renderToggle('Enable Sounds', 'Sound effects for moves and events', soundsEnabled, setSoundsEnabled)}
+                            {renderToggle('Enable Premoves', 'Make moves during opponent\'s turn', premovesEnabled, setPremovesEnabled)}
                         </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                            <input
-                                type="checkbox"
-                                className="sr-only peer"
-                                checked={soundsEnabled}
-                                onChange={(e) => setSoundsEnabled(e.target.checked)}
-                            />
-                            <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                        </label>
-                    </div>
+                    </section>
 
-                    {/* Premove Toggle */}
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="font-semibold text-white">Enable Premoves</p>
-                            <p className="text-xs text-gray-400">Make moves during opponent's turn</p>
+                    <section>
+                        <SectionHeader title="Automations" icon="🤖" />
+                        <div className="bg-gray-900/40 rounded-2xl border border-white/5 py-4 flex flex-col gap-2">
+                            {renderTriStateSetting('Auto Queen', 'Promote to Queen automatically', autoQueen, setAutoQueen)}
+                            {renderTriStateSetting('Auto En Passant', 'Take En Passant automatically when optional', autoEnPassant, setAutoEnPassant)}
                         </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                            <input
-                                type="checkbox"
-                                className="sr-only peer"
-                                checked={premovesEnabled}
-                                onChange={(e) => setPremovesEnabled(e.target.checked)}
-                            />
-                            <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                        </label>
-                    </div>
+                    </section>
 
-                    {/* Move Confirmation Toggle */}
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="font-semibold text-white">Daily Move Confirmation</p>
-                            <p className="text-xs text-gray-400">Ask before submitting in Daily games</p>
+                    <section>
+                        <SectionHeader title="Visuals" icon="👁️" />
+                        <div className="bg-gray-900/40 rounded-2xl border border-white/5 py-2">
+                            {renderToggle('Show Power Icons', 'Display mini icons for powers', showPowerPieces, setShowPowerPieces)}
+                            {renderToggle('Show Power Rings', 'Colored rings around pieces', showPowerRings, setShowPowerRings)}
+                            {renderToggle('Show Original Status', 'Display icon if piece changed type', showOriginalType, setShowOriginalType)}
                         </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                            <input
-                                type="checkbox"
-                                className="sr-only peer"
-                                checked={moveConfirmationEnabled}
-                                onChange={(e) => setMoveConfirmationEnabled(e.target.checked)}
-                            />
-                            <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                        </label>
-                    </div>
+                    </section>
 
-                    {/* Draw Confirmation Toggle */}
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="font-semibold text-white">Draw Confirmation</p>
-                            <p className="text-xs text-gray-400">Confirm before offering draw</p>
+                    <section>
+                        <SectionHeader title="Confirmations" icon="🛡️" />
+                        <div className="bg-gray-900/40 rounded-2xl border border-white/5 py-2">
+                            {renderToggle('Daily Confirmation', 'Ask before submitting in Daily games', moveConfirmationEnabled, setMoveConfirmationEnabled)}
+                            {renderToggle('Draw Offer', 'Confirm before offering draw', drawConfirmationEnabled, setDrawConfirmationEnabled)}
+                            {renderToggle('Resignation', 'Confirm before resigning', resignConfirmationEnabled, setResignConfirmationEnabled)}
                         </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                            <input
-                                type="checkbox"
-                                className="sr-only peer"
-                                checked={drawConfirmationEnabled}
-                                onChange={(e) => setDrawConfirmationEnabled(e.target.checked)}
-                            />
-                            <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                        </label>
-                    </div>
-
-                    {/* Resign Confirmation Toggle */}
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="font-semibold text-white">Resign Confirmation</p>
-                            <p className="text-xs text-gray-400">Confirm before resigning</p>
-                        </div>
-                        <label className="relative inline-flex inline-flex items-center cursor-pointer">
-                            <input
-                                type="checkbox"
-                                className="sr-only peer"
-                                checked={resignConfirmationEnabled}
-                                onChange={(e) => setResignConfirmationEnabled(e.target.checked)}
-                            />
-                            <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                        </label>
-                    </div>
-
-                    {/* Show Power Pieces Toggle */}
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="font-semibold text-white">Show Power Icons</p>
-                            <p className="text-xs text-gray-400">Display mini icons for powers</p>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                            <input
-                                type="checkbox"
-                                className="sr-only peer"
-                                checked={showPowerPieces}
-                                onChange={(e) => setShowPowerPieces(e.target.checked)}
-                            />
-                            <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                        </label>
-                    </div>
-
-                    {/* Show Power Rings Toggle */}
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="font-semibold text-white">Show Power Rings</p>
-                            <p className="text-xs text-gray-400">Display colored rings around pieces</p>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                            <input
-                                type="checkbox"
-                                className="sr-only peer"
-                                checked={showPowerRings}
-                                onChange={(e) => setShowPowerRings(e.target.checked)}
-                            />
-                            <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                        </label>
-                    </div>
-
-                    {/* Show Original Type Toggle */}
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="font-semibold text-white">Show Original Type</p>
-                            <p className="text-xs text-gray-400">Display icon if piece changed type</p>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                            <input
-                                type="checkbox"
-                                className="sr-only peer"
-                                checked={showOriginalType}
-                                onChange={(e) => setShowOriginalType(e.target.checked)}
-                            />
-                            <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                        </label>
-                    </div>
+                    </section>
                 </div>
 
                 <button
                     onClick={onClose}
-                    className="w-full mt-8 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-semibold transition-colors"
+                    className="w-full mt-4 py-4 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-500 hover:to-blue-500 text-white rounded-2xl font-black text-lg transition-all active:scale-95 shadow-xl hover:shadow-green-500/20 group"
                 >
-                    Close
+                    <span className="group-hover:tracking-widest transition-all">SAVE & CLOSE</span>
                 </button>
             </div>
         </div>

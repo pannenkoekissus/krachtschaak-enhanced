@@ -13,7 +13,7 @@ import Analysis from './components/Analysis';
 import AnalysisManager from './components/AnalysisManager';
 import Tournament from './components/Tournament';
 import ConfirmationModal from './components/ConfirmationModal';
-import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, GameMode, TimerSettings, PlayerInfo, SentChallenge, Move, ChatMessage, LobbyGame, IncomingChallenge } from './types';
+import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, GameMode, TimerSettings, PlayerInfo, SentChallenge, Move, ChatMessage, LobbyGame, IncomingChallenge, AutoSetting } from './types';
 import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, sanitizePiece, isInsufficientMaterial } from './utils/game';
 import { getRatingCategory, RatingCategory, RATING_CATEGORIES } from './utils/ratings';
 import { getSharedFolders, getPublicFolders } from './utils/analysisFirebase';
@@ -183,6 +183,8 @@ const App: React.FC = () => {
     const [showPowerRings, _setShowPowerRings] = useState(() => localStorage.getItem('showPowerRings') !== 'false');
     const [showOriginalType, _setShowOriginalType] = useState(() => localStorage.getItem('showOriginalType') !== 'false');
     const [soundsEnabled, _setSoundsEnabled] = useState(() => localStorage.getItem('soundsEnabled') !== 'false');
+    const [autoQueen, _setAutoQueen] = useState<AutoSetting>(() => (localStorage.getItem('autoQueen') as AutoSetting) || AutoSetting.Never);
+    const [autoEnPassant, _setAutoEnPassant] = useState<AutoSetting>(() => (localStorage.getItem('autoEnPassant') as AutoSetting) || AutoSetting.Never);
 
 
     const [premoves, setPremoves] = useState<GameState['premoves']>({});
@@ -359,60 +361,58 @@ const App: React.FC = () => {
 
     const setPremovesEnabled = (enabled: boolean) => {
         _setPremovesEnabled(enabled);
-        localStorage.setItem('premovesEnabled', String(enabled));
-        if (currentUser && isFirebaseConfigured) {
-            db.ref(`userSettings/${currentUser.uid}/premovesEnabled`).set(enabled);
-        }
+        updateSetting('premovesEnabled', enabled);
     };
 
     const setMoveConfirmationEnabled = (enabled: boolean) => {
         _setMoveConfirmationEnabled(enabled);
-        localStorage.setItem('moveConfirmationEnabled', String(enabled));
-        if (currentUser && isFirebaseConfigured) {
-            db.ref(`userSettings/${currentUser.uid}/moveConfirmationEnabled`).set(enabled);
-        }
+        updateSetting('moveConfirmationEnabled', enabled);
     };
+
     const setDrawConfirmationEnabled = (enabled: boolean) => {
         _setDrawConfirmationEnabled(enabled);
-        localStorage.setItem('drawConfirmationEnabled', String(enabled));
-        if (currentUser && isFirebaseConfigured) {
-            db.ref(`userSettings/${currentUser.uid}/drawConfirmationEnabled`).set(enabled);
-        }
+        updateSetting('drawConfirmationEnabled', enabled);
     };
 
     const setResignConfirmationEnabled = (enabled: boolean) => {
         _setResignConfirmationEnabled(enabled);
-        localStorage.setItem('resignConfirmationEnabled', String(enabled));
-        if (currentUser && isFirebaseConfigured) {
-            db.ref(`userSettings/${currentUser.uid}/resignConfirmationEnabled`).set(enabled);
-        }
+        updateSetting('resignConfirmationEnabled', enabled);
     };
+
     const setShowPowerPieces = (enabled: boolean) => {
         _setShowPowerPieces(enabled);
-        localStorage.setItem('showPowerPieces', String(enabled));
-        if (currentUser && isFirebaseConfigured) {
-            db.ref(`userSettings/${currentUser.uid}/showPowerPieces`).set(enabled);
-        }
+        updateSetting('showPowerPieces', enabled);
     };
+
     const setShowPowerRings = (enabled: boolean) => {
         _setShowPowerRings(enabled);
-        localStorage.setItem('showPowerRings', String(enabled));
-        if (currentUser && isFirebaseConfigured) {
-            db.ref(`userSettings/${currentUser.uid}/showPowerRings`).set(enabled);
-        }
+        updateSetting('showPowerRings', enabled);
     };
+
     const setShowOriginalType = (enabled: boolean) => {
         _setShowOriginalType(enabled);
-        localStorage.setItem('showOriginalType', String(enabled));
-        if (currentUser && isFirebaseConfigured) {
-            db.ref(`userSettings/${currentUser.uid}/showOriginalType`).set(enabled);
-        }
+        updateSetting('showOriginalType', enabled);
     };
+
     const setSoundsEnabled = (enabled: boolean) => {
         _setSoundsEnabled(enabled);
-        localStorage.setItem('soundsEnabled', String(enabled));
+        updateSetting('soundsEnabled', enabled);
+    };
+
+    const setAutoQueen = (val: AutoSetting) => {
+        _setAutoQueen(val);
+        updateSetting('autoQueen', val);
+    };
+
+    const setAutoEnPassant = (val: AutoSetting) => {
+        _setAutoEnPassant(val);
+        updateSetting('autoEnPassant', val);
+    };
+
+    const updateSetting = (key: string, value: any) => {
+        localStorage.setItem(key, String(value));
         if (currentUser && isFirebaseConfigured) {
-            db.ref(`userSettings/${currentUser.uid}/soundsEnabled`).set(enabled);
+            db.ref(`userSettings/${currentUser.uid}/${key}`).set(value);
         }
     };
     const updateSettings = (key: string, value: boolean) => {
@@ -436,6 +436,8 @@ const App: React.FC = () => {
                     if (val.showPowerRings !== undefined) _setShowPowerRings(val.showPowerRings);
                     if (val.showOriginalType !== undefined) _setShowOriginalType(val.showOriginalType);
                     if (val.soundsEnabled !== undefined) _setSoundsEnabled(val.soundsEnabled);
+                    if (val.autoQueen !== undefined) _setAutoQueen(val.autoQueen);
+                    if (val.autoEnPassant !== undefined) _setAutoEnPassant(val.autoEnPassant);
                 }
             });
         }
@@ -1877,16 +1879,44 @@ const App: React.FC = () => {
             return;
         }
 
-        if (isAmbiguousEnPassant && !useForcePower) {
-            if (gameMode === 'online_playing') {
-                // Save state before visual interaction
-                preInteractionStateRef.current = currentState;
+        const shouldAutoApply = (setting: AutoSetting, timerSettings: any) => {
+            if (setting === AutoSetting.Always) return true;
+            if (setting === AutoSetting.Never) return false;
+            if (setting === AutoSetting.Realtime) return !!(timerSettings && 'initialTime' in timerSettings);
+            return false;
+        };
 
-                // For online, handle locally first but don't commit visual move
-                setLocalAmbiguousEnPassantState({ from, to });
+        if (isAmbiguousEnPassant && !useForcePower) {
+            if (shouldAutoApply(autoEnPassant, currentState.timerSettings)) {
+                // Auto-apply capture choice
+                const choice: 'capture' = 'capture';
+                let actualCapturedPiece = newBoard[from.row][to.col] as Piece;
+                newBoard[from.row][to.col] = null;
+                const wasCapture = true;
+                let acquiredPower = actualCapturedPiece.originalType;
+                newCapturedPieces[actualCapturedPiece.color].push(actualCapturedPiece);
+
+                pieceToMove.power = acquiredPower;
+                pieceToMove.hasMoved = true;
+                newBoard[to.row][to.col] = pieceToMove;
+                newBoard[from.row][from.col] = null;
+
+                const promotionRank = turn === Color.White ? 0 : 7;
+                if (to.row === promotionRank) {
+                     // Still need to handle promotion if en passant leads to last rank
+                     // But usually en passant happens on ranks 3/6 (0-indexed 2/5 or 3/4)
+                     // In Krachtschaak, pawns can move multiple squares, but en passant only happens on specific ranks.
+                }
+
+                finalizeTurn(currentState, newBoard, null, true, newCapturedPieces, { from, to }, pieceToMove, actualCapturedPiece, null);
                 return;
             }
 
+            if (gameMode === 'online_playing') {
+                preInteractionStateRef.current = currentState;
+                setLocalAmbiguousEnPassantState({ from, to });
+                return;
+            }
             const newState: GameState = { ...currentState, status: 'ambiguous_en_passant', ambiguousEnPassantData: { from, to }, lastMove: { from, to } };
             commitNewGameState(newState);
             return;
@@ -1966,6 +1996,22 @@ const App: React.FC = () => {
                 }
             }
 
+            if (shouldAutoApply(autoQueen, currentState.timerSettings)) {
+                // Auto Queen promotion
+                const promotedPiece: Piece = {
+                    ...pieceToMove,
+                    type: PieceType.Queen,
+                    originalType: pieceToMove.originalType,
+                    isKing: pieceToMove.isKing || pieceToMove.originalType === PieceType.King,
+                    hasMoved: true,
+                    power: powerAfterPromotion
+                };
+                newBoard[to.row][to.col] = promotedPiece;
+                newBoard[from.row][from.col] = null;
+                finalizeTurn(currentState, newBoard, null, true, newCapturedPieces, { from, to }, pieceToMove, actualCapturedPiece, PieceType.Queen);
+                return;
+            }
+
             const promotionInfo: PromotionData = {
                 from,
                 position: to,
@@ -1976,14 +2022,11 @@ const App: React.FC = () => {
 
             // For online games, don't commit state yet. Show promotion UI locally first.
             if (gameMode === 'online_playing') {
-                // Save state before visual interaction
                 preInteractionStateRef.current = currentState;
                 setLocalPromotionState(promotionInfo);
-                // Don't visually move yet to avoid bugs on cancel
                 return;
             }
 
-            // For local games, proceed as before
             const newState: GameState = {
                 ...currentState,
                 board: newBoard,
@@ -3446,6 +3489,10 @@ const App: React.FC = () => {
                             setShowOriginalType={setShowOriginalType}
                             soundsEnabled={soundsEnabled}
                             setSoundsEnabled={setSoundsEnabled}
+                            autoQueen={autoQueen}
+                            setAutoQueen={setAutoQueen}
+                            autoEnPassant={autoEnPassant}
+                            setAutoEnPassant={setAutoEnPassant}
                         />
                     )}
                 </div>
@@ -3481,6 +3528,10 @@ const App: React.FC = () => {
                     setShowOriginalType={setShowOriginalType}
                     soundsEnabled={soundsEnabled}
                     setSoundsEnabled={setSoundsEnabled}
+                    autoQueen={autoQueen}
+                    setAutoQueen={setAutoQueen}
+                    autoEnPassant={autoEnPassant}
+                    setAutoEnPassant={setAutoEnPassant}
                     currentLobbyTab={lobbyView}
                     setCurrentLobbyTab={setLobbyView}
                     allMyGames={allMyGamesData}
