@@ -328,12 +328,19 @@ const App: React.FC = () => {
 
     // Persistent Chat Read Status
     useEffect(() => {
-        if (currentUser && gameRef && (activeTab === 'chat')) {
-            // Mark all messages as read whenever we are looking at the chat
-            const now = Date.now();
-            gameRef.child(`players/${currentUser.uid}`).update({ lastReadChatTimestamp: now });
+        if (!currentUser || !gameRef || activeTab !== 'chat') return;
+
+        const myPlayer = players[currentUser.uid];
+        const lastRead = myPlayer?.lastReadChatTimestamp || 0;
+        const lastMessageTimestamp = chatMessages.length > 0 ? chatMessages[chatMessages.length - 1].timestamp : 0;
+
+        // If we are looking at the chat and there are messages we haven't officially "read" yet in the DB
+        if (lastMessageTimestamp > lastRead) {
+            gameRef.child(`players/${currentUser.uid}`).update({
+                lastReadChatTimestamp: window.firebase.database.ServerValue.TIMESTAMP
+            });
         }
-    }, [activeTab, chatMessages.length, currentUser, gameRef]);
+    }, [activeTab, chatMessages, currentUser, gameRef, players]);
 
     const unreadChatCount = useMemo(() => {
         if (!currentUser) return 0;
@@ -647,7 +654,8 @@ const App: React.FC = () => {
         }
 
         // Auto-show overlay when game ends (if transitioning from active to finished)
-        const isFinishing = (status === 'playing' || status === 'promotion' || status === 'ambiguous_en_passant') &&
+        const currentStatus = statusRef.current;
+        const isFinishing = (currentStatus === 'playing' || currentStatus === 'promotion' || currentStatus === 'ambiguous_en_passant') &&
             (newStatus !== 'playing' && newStatus !== 'promotion' && newStatus !== 'ambiguous_en_passant' && newStatus !== 'waiting');
 
         if (isFinishing) {
@@ -771,7 +779,6 @@ const App: React.FC = () => {
         if (statusRef.current !== 'playing' && statusRef.current !== 'promotion') return;
         if (isProcessingGameOver.current) return;
         isProcessingGameOver.current = true;
-        setOverlayDismissed(false);
 
         let finalState: GameState = {
             ...baseState,
