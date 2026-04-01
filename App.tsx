@@ -138,7 +138,7 @@ const App: React.FC = () => {
                 setDeferredPrompt(null);
             }
         } else {
-            alert('To install this app on your device:\n\niOS: Tap the share button (square with arrow pointing up) and select "Add to Home Screen".\n\nAndroid/Chrome: Tap the 3 dots menu and select "Install app" or "Add to Home screen".');
+            alert('To install this app on your device:\n\niOS (Safari): Tap the share button (square with arrow pointing up) and select "Add to Home Screen".\n\nAndroid (Chrome): Tap the 3 dots menu and select "Add to Home screen". Then click "Install".\n\nDesktop (Chrome): Tap the 3 dots menu in the top right and select: "Cast, save, and share" then click "Install page as app" and then "Install"');
         }
     };
     const [rejoinCountdown, setRejoinCountdown] = useState<number | null>(null);
@@ -3464,7 +3464,7 @@ const App: React.FC = () => {
                                         onClick={handleInstallClick}
                                         className="px-5 py-2 bg-green-700/80 hover:bg-green-700 border border-green-600 rounded-full text-green-100 text-sm font-bold flex items-center gap-2 transition-all shadow-lg"
                                     >
-                                        Install App (Android or iOS)
+                                        Install App (Android, iOS or Desktop)
                                     </button>
                                 )}
                                 <a
