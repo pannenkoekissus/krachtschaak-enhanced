@@ -6,7 +6,7 @@ import {
 } from '../types';
 import {
     createTournament, joinTournament, removePlayer,
-    startTournament, endTournament, deleteTournament, setPairings, updatePairing, deletePairing,
+    startTournament, endTournament, deleteTournament, setPairings, updatePairing, deletePairing, clearAllPairings,
     updatePlayerScore, advanceRound, getTournament,
     listActiveTournaments, listTournamentHistory, generateSwissPairings, recalculateTiebreaks,
     toggleHostParticipation, listPublicTournamentHistory
@@ -303,6 +303,17 @@ const Tournament: React.FC<TournamentProps> = ({
         if (window.confirm(`Are you sure you want to delete the pairing ${getPlayerName(pairing.white)} vs ${getPlayerName(pairing.black)}?`)) {
             try {
                 await deletePairing(activeTournament.id, currentRound, pairing.id);
+            } catch (err: any) {
+                setError(err.message);
+            }
+        }
+    };
+
+    const handleClearAllPairings = async () => {
+        if (!activeTournament || !isHost) return;
+        if (window.confirm('Are you sure you want to delete ALL pairings for this round? This will reset scores for this round.')) {
+            try {
+                await clearAllPairings(activeTournament.id, currentRound);
             } catch (err: any) {
                 setError(err.message);
             }
@@ -1192,6 +1203,15 @@ const Tournament: React.FC<TournamentProps> = ({
                                     {/* Host controls */}
                                     {isHost && (
                                         <div className="mt-4 space-y-3 border-t border-gray-600 pt-4">
+                                            {currentPairings.length > 0 && activeTournament.status !== 'finished' && (
+                                                <button
+                                                    onClick={handleClearAllPairings}
+                                                    className="w-full py-2 bg-red-900/50 hover:bg-red-800/50 text-red-200 border border-red-700/50 rounded-lg font-bold transition-colors text-sm mb-2"
+                                                >
+                                                    🗑 Clear All Pairings
+                                                </button>
+                                            )}
+
                                             {activeTournament.pairingMode === 'swiss' && currentPairings.length === 0 && (
                                                 <button
                                                     onClick={handleGenerateSwiss}

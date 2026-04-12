@@ -210,6 +210,50 @@ export const deletePairing = async (
     await recalculateTiebreaks(tournamentId);
 };
 
+// Clear all pairings for a round and reverse all score changes
+export const clearAllPairings = async (
+    tournamentId: string,
+    round: number
+): Promise<void> => {
+    const snap = await db.ref(`tournaments/${tournamentId}/rounds/${round}/pairings`).once('value');
+    const pairings = snap.val() || {};
+    if (Object.keys(pairings).length === 0) return;
+
+    const tSnap = await db.ref(`tournaments/${tournamentId}/players`).once('value');
+    const players = tSnap.val() || {};
+
+    const updates: Record<string, any> = {};
+    updates[`tournaments/${tournamentId}/rounds/${round}/pairings`] = null;
+
+    Object.values(pairings).forEach((pairing: any) => {
+        if (pairing.status === 'finished' && pairing.result) {
+            if (pairing.result === '1-0') {
+                if (players[pairing.white]) {
+                    players[pairing.white].score = Math.max(0, (players[pairing.white].score || 0) - 1);
+                    updates[`tournaments/${tournamentId}/players/${pairing.white}/score`] = players[pairing.white].score;
+                }
+            } else if (pairing.result === '0-1') {
+                if (pairing.black !== 'BYE' && players[pairing.black]) {
+                    players[pairing.black].score = Math.max(0, (players[pairing.black].score || 0) - 1);
+                    updates[`tournaments/${tournamentId}/players/${pairing.black}/score`] = players[pairing.black].score;
+                }
+            } else if (pairing.result === '0.5-0.5') {
+                if (players[pairing.white]) {
+                    players[pairing.white].score = Math.max(0, (players[pairing.white].score || 0) - 0.5);
+                    updates[`tournaments/${tournamentId}/players/${pairing.white}/score`] = players[pairing.white].score;
+                }
+                if (pairing.black !== 'BYE' && players[pairing.black]) {
+                    players[pairing.black].score = Math.max(0, (players[pairing.black].score || 0) - 0.5);
+                    updates[`tournaments/${tournamentId}/players/${pairing.black}/score`] = players[pairing.black].score;
+                }
+            }
+        }
+    });
+
+    await db.ref().update(updates);
+    await recalculateTiebreaks(tournamentId);
+};
+
 // Update player score
 export const updatePlayerScore = async (
     tournamentId: string,
