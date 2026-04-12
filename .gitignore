@@ -18,6 +18,9 @@ android
 capacitor*
 ./icons
 assets
+firebase.json
+database.rules.json
+.firebaserc
 
 # Editor directories and files
 .agent

@@ -6,7 +6,7 @@ import {
 } from '../types';
 import {
     createTournament, joinTournament, removePlayer,
-    startTournament, endTournament, deleteTournament, setPairings, updatePairing,
+    startTournament, endTournament, deleteTournament, setPairings, updatePairing, deletePairing,
     updatePlayerScore, advanceRound, getTournament,
     listActiveTournaments, listTournamentHistory, generateSwissPairings, recalculateTiebreaks,
     toggleHostParticipation, listPublicTournamentHistory
@@ -296,6 +296,17 @@ const Tournament: React.FC<TournamentProps> = ({
 
         setManualWhite('');
         setManualBlack('');
+    };
+
+    const handleDeletePairing = async (pairing: TournamentPairing) => {
+        if (!activeTournament || !isHost) return;
+        if (window.confirm(`Are you sure you want to delete the pairing ${getPlayerName(pairing.white)} vs ${getPlayerName(pairing.black)}?`)) {
+            try {
+                await deletePairing(activeTournament.id, currentRound, pairing.id);
+            } catch (err: any) {
+                setError(err.message);
+            }
+        }
     };
 
     // Host: start a specific game
@@ -1162,6 +1173,15 @@ const Tournament: React.FC<TournamentProps> = ({
                                                                     Play
                                                                 </button>
                                                             )}
+                                                            {isHost && activeTournament.status !== 'finished' && (
+                                                                <button
+                                                                    onClick={() => handleDeletePairing(pairing)}
+                                                                    className="text-xs p-1 bg-red-900/30 hover:bg-red-600/50 text-red-400 rounded transition-colors ml-1"
+                                                                    title="Delete Pairing"
+                                                                >
+                                                                    ✕
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1269,6 +1289,15 @@ const Tournament: React.FC<TournamentProps> = ({
                                                         <span className="text-gray-500">vs</span>
                                                         <span className={`${p.black === myPlayerId ? 'text-blue-400 font-bold' : ''}`}>{getPlayerName(p.black)}</span>
                                                         <span className="text-xs text-gray-400 ml-auto">{p.result || '...'}</span>
+                                                        {isHost && parseInt(roundNum) === currentRound && activeTournament.status !== 'finished' && (
+                                                            <button
+                                                                onClick={() => handleDeletePairing(p)}
+                                                                className="text-[10px] p-0.5 bg-red-900/30 hover:bg-red-600/50 text-red-400 rounded transition-colors"
+                                                                title="Delete Pairing"
+                                                            >
+                                                                ✕
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 ))}
                                             </div>

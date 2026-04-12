@@ -171,6 +171,45 @@ export const updatePairing = async (
     await db.ref(`tournaments/${tournamentId}/rounds/${round}/pairings/${pairingId}`).update(updates);
 };
 
+// Delete a pairing and reverse score changes if finished
+export const deletePairing = async (
+    tournamentId: string,
+    round: number,
+    pairingId: string
+): Promise<void> => {
+    const snap = await db.ref(`tournaments/${tournamentId}/rounds/${round}/pairings/${pairingId}`).once('value');
+    const pairing: TournamentPairing = snap.val();
+    if (!pairing) return;
+
+    const updates: Record<string, any> = {};
+    updates[`tournaments/${tournamentId}/rounds/${round}/pairings/${pairingId}`] = null;
+
+    if (pairing.status === 'finished' && pairing.result) {
+        const tSnap = await db.ref(`tournaments/${tournamentId}/players`).once('value');
+        const players = tSnap.val() || {};
+
+        if (pairing.result === '1-0') {
+            if (players[pairing.white]) {
+                updates[`tournaments/${tournamentId}/players/${pairing.white}/score`] = Math.max(0, (players[pairing.white].score || 0) - 1);
+            }
+        } else if (pairing.result === '0-1') {
+            if (pairing.black !== 'BYE' && players[pairing.black]) {
+                updates[`tournaments/${tournamentId}/players/${pairing.black}/score`] = Math.max(0, (players[pairing.black].score || 0) - 1);
+            }
+        } else if (pairing.result === '0.5-0.5') {
+            if (players[pairing.white]) {
+                updates[`tournaments/${tournamentId}/players/${pairing.white}/score`] = Math.max(0, (players[pairing.white].score || 0) - 0.5);
+            }
+            if (pairing.black !== 'BYE' && players[pairing.black]) {
+                updates[`tournaments/${tournamentId}/players/${pairing.black}/score`] = Math.max(0, (players[pairing.black].score || 0) - 0.5);
+            }
+        }
+    }
+
+    await db.ref().update(updates);
+    await recalculateTiebreaks(tournamentId);
+};
+
 // Update player score
 export const updatePlayerScore = async (
     tournamentId: string,
