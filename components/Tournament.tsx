@@ -242,8 +242,8 @@ const Tournament: React.FC<TournamentProps> = ({
         // Literal interpretation: "no players in it"
         // But practically, many hosts participate. We'll allow deletion if no OTHER players are present.
         const otherPlayers = players.filter(p => p.uid !== userId);
-        if (otherPlayers.length > 0) {
-            setError('Cannot delete tournament while other players are joined');
+        if (otherPlayers.length > 0 && activeTournament.status !== 'lobby') {
+            setError('Cannot delete tournament while other players are joined and the tournament has started');
             return;
         }
 
@@ -958,7 +958,7 @@ const Tournament: React.FC<TournamentProps> = ({
                             </div>
                         </div>
                         <div className="flex gap-2">
-                            {isHost && activeTournament.status === 'lobby' && players.filter(p => p.uid !== userId).length === 0 && (
+                            {isHost && (activeTournament.status === 'lobby' || players.filter(p => p.uid !== userId).length === 0) && (
                                 <button
                                     onClick={handleDeleteTournament}
                                     className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-semibold transition-colors text-sm"
