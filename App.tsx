@@ -130,15 +130,30 @@ const App: React.FC = () => {
         };
     }, []);
 
+    const showInstallInstructions = () => {
+        alert('To install the app:\n\n' +
+            '• iOS (Safari): Tap the Share button (square with arrow pointing up) and select "Add to Home Screen".\n\n' +
+            '• Android (Chrome): Tap the 3-dots menu and select "Add to Home screen". Then click "Install".\n\n' +
+            '• Desktop (Chrome): Tap the 3 dots menu in the top right and select: "Cast, save, and share" then click "Install page as app" and then "Install". You can also click the "Install app" button in the adress bar');
+    };
     const handleInstallClick = async () => {
         if (deferredPrompt) {
-            deferredPrompt.prompt();
-            const { outcome } = await deferredPrompt.userChoice;
-            if (outcome === 'accepted') {
-                setDeferredPrompt(null);
+            try {
+                // Show the native browser install prompt
+                await deferredPrompt.prompt();
+
+                // Wait for the user to respond to the prompt
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    setDeferredPrompt(null);
+                }
+            } catch (err) {
+                console.error("Install prompt failed to trigger:", err);
+                showInstallInstructions();
             }
         } else {
-            alert('To install this app on your device:\n\niOS (Safari): Tap the share button (square with arrow pointing up) and select "Add to Home Screen".\n\nAndroid (Chrome): Tap the 3 dots menu and select "Add to Home screen". Then click "Install".\n\nDesktop (Chrome): Tap the 3 dots menu in the top right and select: "Cast, save, and share" then click "Install page as app" and then "Install"');
+            // Fallback for browsers that don't support beforeinstallprompt (like Safari)
+            showInstallInstructions();
         }
     };
     const [rejoinCountdown, setRejoinCountdown] = useState<number | null>(null);
