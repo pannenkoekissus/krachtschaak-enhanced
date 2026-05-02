@@ -1258,6 +1258,7 @@ const App: React.FC = () => {
 
     //spectate functie
     const handleOnlineSpectate = useCallback((id: string) => {
+        console.log(id);
         setGameId(id);
         const ref = db.ref(`games/${id}`);
         setGameRef(ref);
@@ -1275,6 +1276,7 @@ const App: React.FC = () => {
     }, []);
 
     const handleOnlineGameStart = useCallback((id: string, color: Color) => {
+        console.log(id);
         setMyOnlineColor(color);
         setGameId(id);
         const ref = db.ref(`games/${id}`);
