@@ -104,7 +104,6 @@ const App: React.FC = () => {
 
     useEffect(() => {
         const handler = (e: any) => {
-            e.preventDefault();
             setDeferredPrompt(e);
         };
         window.addEventListener('beforeinstallprompt', handler);
