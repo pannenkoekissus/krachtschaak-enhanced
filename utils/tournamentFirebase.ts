@@ -23,7 +23,10 @@ export const createTournament = async (
     hostParticipates: boolean = true,
     visualSettings?: { showPowerPieces: boolean, showPowerRings: boolean, showOriginalType: boolean },
     isPrivate: boolean = false,
-    isRated: boolean = true
+    isRated: boolean = true,
+    flags?: string[],
+    expectedStartDate?: number,
+    timezone?: string
 ): Promise<string> => {
     const id = generateTournamentId();
     const players: Record<string, TournamentPlayer> = {};
@@ -58,7 +61,10 @@ export const createTournament = async (
         isRated,
         showPowerPieces: visualSettings?.showPowerPieces ?? true,
         showPowerRings: visualSettings?.showPowerRings ?? true,
-        showOriginalType: visualSettings?.showOriginalType ?? true
+        showOriginalType: visualSettings?.showOriginalType ?? true,
+        flags: flags || [],
+        expectedStartDate,
+        timezone
     };
 
     await db.ref(`tournaments/${id}`).set(tournament);

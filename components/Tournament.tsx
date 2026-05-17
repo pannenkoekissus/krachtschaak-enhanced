@@ -55,6 +55,9 @@ const Tournament: React.FC<TournamentProps> = ({
     const [createShowPowerPieces, setCreateShowPowerPieces] = useState(true);
     const [createShowPowerRings, setCreateShowPowerRings] = useState(true);
     const [createShowOriginalType, setCreateShowOriginalType] = useState(true);
+    const [createFlags, setCreateFlags] = useState('');
+    const [createExpectedStartDate, setCreateExpectedStartDate] = useState('');
+    const [createTimezone, setCreateTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
 
     // Join
     const [joinCode, setJoinCode] = useState('');
@@ -169,12 +172,19 @@ const Tournament: React.FC<TournamentProps> = ({
                 ? (baseTime > 0 ? { initialTime: baseTime, increment: inc } : null)
                 : { daysPerMove: days };
             const rounds = parseInt(createRounds) || 3;
+            
+            let expectedStartTs = undefined;
+            if (createExpectedStartDate) {
+                expectedStartTs = new Date(createExpectedStartDate).getTime();
+            }
+            
+            const flagsArray = createFlags.split(',').map(s => s.trim()).filter(s => s);
 
             const id = await createTournament(createName.trim(), userId, displayName, settings, createPairingMode, rounds, hostParticipates, {
                 showPowerPieces: createShowPowerPieces,
                 showPowerRings: createShowPowerRings,
                 showOriginalType: createShowOriginalType
-            }, createIsPrivate, createIsRated);
+            }, createIsPrivate, createIsRated, flagsArray, expectedStartTs, createTimezone);
             onTournamentJoined(id);
             subscribeToTournament(id);
             setView('lobby');
@@ -899,6 +909,37 @@ const Tournament: React.FC<TournamentProps> = ({
                             <label htmlFor="isRatedTournament" className="text-sm font-semibold text-gray-300">
                                 Rated Tournament (updates player ELO/Glicko)
                             </label>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-300 mb-1">Tags / Flags (comma separated)</label>
+                            <input
+                                type="text"
+                                value={createFlags}
+                                onChange={e => setCreateFlags(e.target.value)}
+                                placeholder="e.g. notifications, featured"
+                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-300 mb-1">Expected Start Date & Time (Optional)</label>
+                            <input
+                                type="datetime-local"
+                                value={createExpectedStartDate}
+                                onChange={e => setCreateExpectedStartDate(e.target.value)}
+                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                            />
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-300 mb-1">Timezone</label>
+                            <input
+                                type="text"
+                                value={createTimezone}
+                                onChange={e => setCreateTimezone(e.target.value)}
+                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                            />
                         </div>
 
                         <div className="bg-gray-800 p-3 rounded-lg space-y-2 border border-yellow-900/30">

@@ -253,4 +253,7 @@ export interface TournamentData {
   showPowerPieces?: boolean;
   showPowerRings?: boolean;
   showOriginalType?: boolean;
+  flags?: string[];
+  expectedStartDate?: number;
+  timezone?: string;
 }

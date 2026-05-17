@@ -24,6 +24,10 @@ interface SettingsModalProps {
     setAutoQueen: (val: AutoSetting) => void;
     autoEnPassant: AutoSetting;
     setAutoEnPassant: (val: AutoSetting) => void;
+    notificationsEnabled: boolean;
+    setNotificationsEnabled: (enabled: boolean) => void;
+    notificationFlags: string;
+    setNotificationFlags: (flags: string) => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -47,7 +51,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     autoQueen,
     setAutoQueen,
     autoEnPassant,
-    setAutoEnPassant
+    setAutoEnPassant,
+    notificationsEnabled,
+    setNotificationsEnabled,
+    notificationFlags,
+    setNotificationFlags
 }) => {
     const renderToggle = (label: string, description: string, value: boolean, onChange: (val: boolean) => void) => (
         <div className="flex items-center justify-between py-3 group hover:bg-gray-700/30 px-4 rounded-xl transition-all">
@@ -150,6 +158,26 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             {renderToggle('Daily Confirmation', 'Ask before submitting in Daily games', moveConfirmationEnabled, setMoveConfirmationEnabled)}
                             {renderToggle('Draw Offer', 'Confirm before offering draw', drawConfirmationEnabled, setDrawConfirmationEnabled)}
                             {renderToggle('Resignation', 'Confirm before resigning', resignConfirmationEnabled, setResignConfirmationEnabled)}
+                        </div>
+                    </section>
+
+                    <section>
+                        <SectionHeader title="Notifications" icon="🔔" />
+                        <div className="bg-gray-900/40 rounded-2xl border border-white/5 py-4 px-4 flex flex-col gap-4">
+                            {renderToggle('Enable Notifications', 'Receive notifications for tournaments starting in 1 hour', notificationsEnabled, setNotificationsEnabled)}
+                            {notificationsEnabled && (
+                                <div className="flex flex-col gap-2 transition-all">
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Notify for Flags</label>
+                                    <input 
+                                        type="text" 
+                                        placeholder="e.g. daily, blitz (comma separated)" 
+                                        value={notificationFlags} 
+                                        onChange={(e) => setNotificationFlags(e.target.value)}
+                                        className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-500"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">Receive notifications only for tournaments containing these flags. Leave empty to receive for all.</p>
+                                </div>
+                            )}
                         </div>
                     </section>
                 </div>

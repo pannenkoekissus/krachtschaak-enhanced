@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/local-notifications": "^8.2.0",
     "@capacitor/network": "^8.0.1",
     "@fontsource/inter": "^5.2.8",
     "firebase": "^12.9.0",

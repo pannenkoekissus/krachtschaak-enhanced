@@ -200,6 +200,36 @@ const App: React.FC = () => {
     const [soundsEnabled, _setSoundsEnabled] = useState(() => localStorage.getItem('soundsEnabled') !== 'false');
     const [autoQueen, _setAutoQueen] = useState<AutoSetting>(() => (localStorage.getItem('autoQueen') as AutoSetting) || AutoSetting.Never);
     const [autoEnPassant, _setAutoEnPassant] = useState<AutoSetting>(() => (localStorage.getItem('autoEnPassant') as AutoSetting) || AutoSetting.Never);
+    const [notificationsEnabled, _setNotificationsEnabled] = useState(() => localStorage.getItem('notificationsEnabled') === 'true');
+    const [notificationFlags, _setNotificationFlags] = useState(() => localStorage.getItem('notificationFlags') || '');
+
+    const setNotificationsEnabled = async (enabled: boolean) => {
+        _setNotificationsEnabled(enabled);
+        localStorage.setItem('notificationsEnabled', enabled.toString());
+        if (enabled) {
+            try {
+                if ('Notification' in window) {
+                    if (Notification.permission !== 'granted') {
+                        await Notification.requestPermission();
+                    }
+                }
+                const capLocal = await import('@capacitor/local-notifications').catch(() => null);
+                if (capLocal && capLocal.LocalNotifications) {
+                    const perm = await capLocal.LocalNotifications.checkPermissions();
+                    if (perm.display !== 'granted') {
+                        await capLocal.LocalNotifications.requestPermissions();
+                    }
+                }
+            } catch (e) {
+                console.error('Error requesting notification permission', e);
+            }
+        }
+    };
+
+    const setNotificationFlags = (flags: string) => {
+        _setNotificationFlags(flags);
+        localStorage.setItem('notificationFlags', flags);
+    };
 
 
     const [premoves, setPremoves] = useState<GameState['premoves']>({});
@@ -249,6 +279,80 @@ const App: React.FC = () => {
     const prevStatus = useRef(status);
     const prevLastMove = useRef(lastMove);
     const prevCapturedCounts = useRef({ white: 0, black: 0 });
+
+    useEffect(() => {
+        if (!notificationsEnabled || !isOnline) return;
+
+        const checkTournaments = async () => {
+            try {
+                const snap = await db.ref('tournaments').once('value');
+                const data = snap.val() || {};
+                const activeTournaments: any[] = Object.values(data).filter((t: any) => t.status === 'lobby');
+
+                const now = Date.now();
+                const oneHour = 60 * 60 * 1000;
+                const userFlags = notificationFlags.split(',').map(s => s.trim().toLowerCase()).filter(s => s);
+
+                let notifiedStr = localStorage.getItem('notifiedTournaments');
+                let notified = notifiedStr ? JSON.parse(notifiedStr) : {};
+                let changed = false;
+
+                for (const t of activeTournaments) {
+                    if (t.expectedStartDate && !notified[t.id]) {
+                        const timeUntilStart = t.expectedStartDate - now;
+                        if (timeUntilStart > 0 && timeUntilStart <= oneHour) {
+                            let shouldNotify = true;
+                            if (userFlags.length > 0) {
+                                const tFlags = (t.flags || []).map((f: string) => f.toLowerCase());
+                                shouldNotify = userFlags.some(f => tFlags.includes(f));
+                            }
+
+                            if (shouldNotify) {
+                                notified[t.id] = true;
+                                changed = true;
+
+                                const title = `Tournament Starting Soon!`;
+                                const body = `${t.name} is starting in less than 1 hour.`;
+
+                                if ('Notification' in window && Notification.permission === 'granted') {
+                                    new Notification(title, { body });
+                                }
+
+                                const capLocal = await import('@capacitor/local-notifications').catch(() => null);
+                                if (capLocal && capLocal.LocalNotifications) {
+                                    try {
+                                        await capLocal.LocalNotifications.schedule({
+                                            notifications: [
+                                                {
+                                                    title: title,
+                                                    body: body,
+                                                    id: Math.floor(Math.random() * 1000000),
+                                                    schedule: { at: new Date(Date.now() + 1000) }
+                                                }
+                                            ]
+                                        });
+                                    } catch (e) {
+                                        console.error('Failed to schedule local notification', e);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (changed) {
+                    localStorage.setItem('notifiedTournaments', JSON.stringify(notified));
+                }
+            } catch (err) {
+                console.error("Failed to check tournaments for notifications", err);
+            }
+        };
+
+        checkTournaments();
+        const intervalId = setInterval(checkTournaments, 1000);
+
+        return () => clearInterval(intervalId);
+    }, [notificationsEnabled, notificationFlags, isOnline]);
 
     useEffect(() => {
         // Only play sounds if we are actually in a game screen and not reviewing
@@ -3559,6 +3663,10 @@ const App: React.FC = () => {
                             setAutoQueen={setAutoQueen}
                             autoEnPassant={autoEnPassant}
                             setAutoEnPassant={setAutoEnPassant}
+                            notificationsEnabled={notificationsEnabled}
+                            setNotificationsEnabled={setNotificationsEnabled}
+                            notificationFlags={notificationFlags}
+                            setNotificationFlags={setNotificationFlags}
                         />
                     )}
                 </div>
