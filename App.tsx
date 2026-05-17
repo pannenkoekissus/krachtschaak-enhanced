@@ -299,7 +299,22 @@ const App: React.FC = () => {
 
                 for (const t of activeTournaments) {
                     if (t.expectedStartDate && !notified[t.id]) {
-                        const timeUntilStart = t.expectedStartDate - now;
+                        let timeUntilStart = 0;
+                        if (typeof t.expectedStartDate === 'number') {
+                            timeUntilStart = t.expectedStartDate - now;
+                        } else {
+                            const expectedTs = new Date(t.expectedStartDate).getTime();
+                            const tz = t.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+                            try {
+                                const nowInTzStr = new Date().toLocaleString("en-US", { timeZone: tz, hour12: false });
+                                const nowInTz = new Date(nowInTzStr).getTime();
+                                timeUntilStart = expectedTs - nowInTz;
+                            } catch (e) {
+                                // Fallback if timezone is invalid
+                                timeUntilStart = expectedTs - now;
+                            }
+                        }
+
                         if (timeUntilStart > 0 && timeUntilStart <= oneHour) {
                             let shouldNotify = true;
                             if (userFlags.length > 0) {

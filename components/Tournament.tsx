@@ -173,9 +173,9 @@ const Tournament: React.FC<TournamentProps> = ({
                 : { daysPerMove: days };
             const rounds = parseInt(createRounds) || 3;
             
-            let expectedStartTs = undefined;
+            let expectedStartStr = undefined;
             if (createExpectedStartDate) {
-                expectedStartTs = new Date(createExpectedStartDate).getTime();
+                expectedStartStr = createExpectedStartDate;
             }
             
             const flagsArray = createFlags.split(',').map(s => s.trim()).filter(s => s);
@@ -184,7 +184,7 @@ const Tournament: React.FC<TournamentProps> = ({
                 showPowerPieces: createShowPowerPieces,
                 showPowerRings: createShowPowerRings,
                 showOriginalType: createShowOriginalType
-            }, createIsPrivate, createIsRated, flagsArray, expectedStartTs, createTimezone);
+            }, createIsPrivate, createIsRated, flagsArray, expectedStartStr, createTimezone);
             onTournamentJoined(id);
             subscribeToTournament(id);
             setView('lobby');

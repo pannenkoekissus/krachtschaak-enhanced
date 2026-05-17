@@ -25,7 +25,7 @@ export const createTournament = async (
     isPrivate: boolean = false,
     isRated: boolean = true,
     flags?: string[],
-    expectedStartDate?: number,
+    expectedStartDate?: string,
     timezone?: string
 ): Promise<string> => {
     const id = generateTournamentId();
