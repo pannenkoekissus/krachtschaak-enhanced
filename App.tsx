@@ -161,6 +161,11 @@ const App: React.FC = () => {
     const [gameTournamentRound, setGameTournamentRound] = useState<number | null>(null);
     const [gameTournamentPairingId, setGameTournamentPairingId] = useState<string | null>(null);
     const [reviewingGame, setReviewingGame] = useState<GameState | null>(null);
+    const [reviewingHistoryIndex, setReviewingHistoryIndex] = useState<number | null>(null);
+
+    useEffect(() => {
+        setReviewingHistoryIndex(null);
+    }, [history.length]);
     const [analysisState, setAnalysisState] = useState<GameState | null>(null);
     const [reviewReturnTo, setReviewReturnTo] = useState<{ mode: GameMode, lobbyView: any } | null>(null);
     const [analysisReturnTo, setAnalysisReturnTo] = useState<{ mode: GameMode, lobbyView: any, reviewingGame: GameState | null } | null>(null);
@@ -2288,6 +2293,11 @@ const App: React.FC = () => {
     }, [selectedPiece, board, turn, myOnlineColor, enPassantTarget, status, gameMode, localPromotionState, localAmbiguousEnPassantState]);
 
     const handleSquareClick = useCallback((row: number, col: number) => {
+        if (reviewingHistoryIndex !== null) {
+            setMenuMessage({ text: "You must return to the current position to make a move.", type: "info" });
+            return;
+        }
+
         const isMyTurn = gameMode !== 'online_playing' || turn === myOnlineColor;
 
         if ((status !== 'playing' && gameMode !== 'analysis') || localPromotionState || localAmbiguousEnPassantState) return;
@@ -2779,6 +2789,12 @@ const App: React.FC = () => {
 
     // Drag and Drop handlers
     const handleDragStart = (e: React.DragEvent, row: number, col: number) => {
+        if (reviewingHistoryIndex !== null) {
+            e.preventDefault();
+            setMenuMessage({ text: "You must return to the current position to make a move.", type: "info" });
+            return;
+        }
+
         const piece = board[row][col];
         const color = gameMode === 'online_playing' && myOnlineColor ? myOnlineColor : turn;
         const isMyTurn = gameMode !== 'online_playing' || turn === myOnlineColor;
@@ -2826,6 +2842,70 @@ const App: React.FC = () => {
         setDraggedPiece(null);
         // Don't clear selected piece immediately to allow premove logic to see it
     };
+
+    const isDailyGame = timerSettings && 'daysPerMove' in timerSettings;
+    const currentShowPowerPieces = gameShowPowerPieces !== undefined ? gameShowPowerPieces : showPowerPieces;
+    const currentShowPowerRings = gameShowPowerRings !== undefined ? gameShowPowerRings : showPowerRings;
+    const currentShowOriginalType = gameShowOriginalType !== undefined ? gameShowOriginalType : showOriginalType;
+
+    const isHistoryAllowed = (currentShowPowerPieces && currentShowPowerRings && currentShowOriginalType) || isDailyGame;
+
+    const historyBoards = useMemo(() => {
+        const boards: BoardState[] = [createInitialBoard()];
+        let currentBoard = boards[0];
+        for (const move of moveHistory) {
+            currentBoard = applyMoveToBoard(currentBoard, move);
+            boards.push(currentBoard);
+        }
+        return boards;
+    }, [moveHistory]);
+
+    const canGoBack = isHistoryAllowed && historyBoards.length > 1 && reviewingHistoryIndex !== 0 && (reviewingHistoryIndex === null || reviewingHistoryIndex > 0);
+    const canGoForward = isHistoryAllowed && reviewingHistoryIndex !== null;
+
+    const goBack = useCallback(() => {
+        if (!canGoBack) return;
+        setReviewingHistoryIndex(prev => prev === null ? historyBoards.length - 2 : Math.max(0, prev - 1));
+        setSelectedPiece(null);
+        setValidMoves([]);
+        setDraggedPiece(null);
+    }, [canGoBack, historyBoards.length]);
+
+    const goForward = useCallback(() => {
+        if (!canGoForward) return;
+        setReviewingHistoryIndex(prev => (prev !== null && prev + 1 >= historyBoards.length - 1) ? null : prev! + 1);
+        setSelectedPiece(null);
+        setValidMoves([]);
+        setDraggedPiece(null);
+    }, [canGoForward, historyBoards.length]);
+
+    const goToCurrent = useCallback(() => {
+        setReviewingHistoryIndex(null);
+        setSelectedPiece(null);
+        setValidMoves([]);
+        setDraggedPiece(null);
+    }, []);
+
+    const jumpToHistory = useCallback((index: number) => {
+        if (!isHistoryAllowed) return;
+        if (index >= historyBoards.length - 1) setReviewingHistoryIndex(null);
+        else setReviewingHistoryIndex(index);
+    }, [isHistoryAllowed, historyBoards.length]);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (activeTab === 'chat') return;
+            if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+
+            if (e.key === 'ArrowLeft') {
+                goBack();
+            } else if (e.key === 'ArrowRight') {
+                goForward();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [goBack, goForward, activeTab]);
 
     const isInteractionDisabled = (status !== 'playing' && gameMode !== 'analysis') || !!localPromotionState || !!localAmbiguousEnPassantState || (gameMode === 'online_playing' && turn !== myOnlineColor && !premovesEnabled) || gameMode === 'online_spectating';
 
@@ -2978,6 +3058,9 @@ const App: React.FC = () => {
         const isTopPlayerTurn = turn === (isFlipped ? Color.White : Color.Black);
         const isBottomPlayerTurn = turn === (isFlipped ? Color.Black : Color.White);
 
+        const displayedBoard = reviewingHistoryIndex !== null ? historyBoards[reviewingHistoryIndex] : board;
+        const displayedLastMove = reviewingHistoryIndex !== null ? (reviewingHistoryIndex === 0 ? null : { from: moveHistory[reviewingHistoryIndex - 1].from, to: moveHistory[reviewingHistoryIndex - 1].to }) : lastMove;
+
         const PlayerInfoPanel = ({ name, rating, isDisconnected, isOpponent, countdown, time, isTurn, captured }) => {
             const moveCount = moveHistory.length;
             const elapsed = (isTurn && turnStartTime && !isDailyGame) ? Math.max(0, Date.now() + serverOffset - turnStartTime) / 1000 : 0;
@@ -3045,25 +3128,32 @@ const App: React.FC = () => {
                                 onDismiss={() => setOverlayDismissed(true)}
                             />
                         )}
-                        <Board
-                            board={board} selectedPiece={selectedPiece} validMoves={validMoves}
-                            onSquareClick={handleSquareClick} turn={turn} playerColor={myOnlineColor}
-                            gameMode={gameMode} isInteractionDisabled={isInteractionDisabled}
-                            onPieceDragStart={handleDragStart}
-                            onPieceDragEnd={handleDragEnd}
-                            onSquareDrop={handleDrop}
-                            draggedPiece={draggedPiece}
-                            premove={myOnlineColor ? premoves?.[myOnlineColor] : null}
-                            lastMove={lastMove}
-                            highlightedSquares={highlightedSquares}
-                            arrows={arrows}
-                            onBoardMouseDown={handleBoardMouseDown}
-                            onBoardMouseUp={handleBoardMouseUp}
-                            onBoardContextMenu={handleBoardContextMenu}
-                            showPowerPieces={gameShowPowerPieces !== undefined ? gameShowPowerPieces : showPowerPieces}
-                            showPowerRings={gameShowPowerRings !== undefined ? gameShowPowerRings : showPowerRings}
-                            showOriginalType={gameShowOriginalType !== undefined ? gameShowOriginalType : showOriginalType}
-                        />
+                        <div className="relative">
+                            <Board
+                                board={displayedBoard} selectedPiece={selectedPiece} validMoves={validMoves}
+                                onSquareClick={handleSquareClick} turn={turn} playerColor={myOnlineColor}
+                                gameMode={gameMode} isInteractionDisabled={isInteractionDisabled}
+                                onPieceDragStart={handleDragStart}
+                                onPieceDragEnd={handleDragEnd}
+                                onSquareDrop={handleDrop}
+                                draggedPiece={draggedPiece}
+                                premove={myOnlineColor ? premoves?.[myOnlineColor] : null}
+                                lastMove={displayedLastMove}
+                                highlightedSquares={highlightedSquares}
+                                arrows={arrows}
+                                onBoardMouseDown={handleBoardMouseDown}
+                                onBoardMouseUp={handleBoardMouseUp}
+                                onBoardContextMenu={handleBoardContextMenu}
+                                showPowerPieces={currentShowPowerPieces}
+                                showPowerRings={currentShowPowerRings}
+                                showOriginalType={currentShowOriginalType}
+                            />
+                            {reviewingHistoryIndex !== null && (
+                                <div className="absolute top-0 left-0 w-full h-full pointer-events-none bg-blue-900/10 border-4 border-blue-500/50 rounded-lg flex items-start justify-center">
+                                    <span className="bg-blue-600 text-white font-bold text-sm px-4 py-1 rounded-b-lg shadow-lg">Reviewing Move {reviewingHistoryIndex + 1}</span>
+                                </div>
+                            )}
+                        </div>
                     </div>
                     {/* Bottom Player Info (Mobile) */}
                     <div className="w-full mt-2 md:hidden">
@@ -3192,31 +3282,64 @@ const App: React.FC = () => {
                         )}
 
                         {activeTab === 'moves' && (
-                            <div className="h-64 overflow-y-auto p-2 bg-gray-900 rounded text-sm font-mono" ref={movesContainerRef}>
-                                <table className="w-full text-left">
-                                    <thead>
-                                        <tr className="text-gray-500 border-b border-gray-700">
-                                            <th className="pb-1">#</th>
-                                            <th className="pb-1">White</th>
-                                            <th className="pb-1">Black</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {(() => {
-                                            const rows = [];
-                                            for (let i = 0; i < moveHistory.length; i += 2) {
-                                                rows.push(
-                                                    <tr key={i} className="border-b border-gray-800 last:border-0">
-                                                        <td className="py-1 text-gray-500 w-8">{Math.floor(i / 2) + 1}.</td>
-                                                        <td className="py-1 text-gray-300">{moveHistory[i].notation}</td>
-                                                        <td className="py-1 text-gray-300">{moveHistory[i + 1]?.notation || ''}</td>
-                                                    </tr>
-                                                );
-                                            }
-                                            return rows;
-                                        })()}
-                                    </tbody>
-                                </table>
+                            <div className="h-64 flex flex-col p-2 bg-gray-900 rounded text-sm font-mono" ref={movesContainerRef}>
+                                {isHistoryAllowed && (
+                                    <div className="w-full flex justify-center items-center gap-2 mb-2 bg-gray-800 p-2 rounded-lg flex-shrink-0">
+                                        <button onClick={goBack} disabled={!canGoBack} className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                            &larr; Prev
+                                        </button>
+                                        <button onClick={goToCurrent} disabled={reviewingHistoryIndex === null} className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                            Current
+                                        </button>
+                                        <button onClick={goForward} disabled={!canGoForward} className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                            Next &rarr;
+                                        </button>
+                                    </div>
+                                )}
+                                <div className="flex-grow overflow-y-auto">
+                                    <table className="w-full text-left">
+                                        <thead>
+                                            <tr className="text-gray-500 border-b border-gray-700 sticky top-0 bg-gray-900 z-10">
+                                                <th className="pb-1 w-8">#</th>
+                                                <th className="pb-1">White</th>
+                                                <th className="pb-1">Black</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {(() => {
+                                                const rows = [];
+                                                for (let i = 0; i < moveHistory.length; i += 2) {
+                                                    const isWhiteActive = (reviewingHistoryIndex !== null ? reviewingHistoryIndex : historyBoards.length - 1) === (i + 1);
+                                                    const isBlackActive = moveHistory[i + 1] && (reviewingHistoryIndex !== null ? reviewingHistoryIndex : historyBoards.length - 1) === (i + 2);
+                                                    rows.push(
+                                                        <tr key={i} className="border-b border-gray-800 last:border-0 hover:bg-gray-800">
+                                                            <td className="py-1 text-gray-500">{Math.floor(i / 2) + 1}.</td>
+                                                            <td className="py-1">
+                                                                <button
+                                                                    className={`px-1 rounded text-left ${isWhiteActive ? 'bg-blue-900 text-blue-200 font-bold' : 'text-gray-300 hover:bg-gray-700'}`}
+                                                                    onClick={() => jumpToHistory(i + 1)}
+                                                                >
+                                                                    {moveHistory[i].notation}
+                                                                </button>
+                                                            </td>
+                                                            <td className="py-1">
+                                                                {moveHistory[i + 1] ? (
+                                                                    <button
+                                                                        className={`px-1 rounded text-left ${isBlackActive ? 'bg-blue-900 text-blue-200 font-bold' : 'text-gray-300 hover:bg-gray-700'}`}
+                                                                        onClick={() => jumpToHistory(i + 2)}
+                                                                    >
+                                                                        {moveHistory[i + 1].notation}
+                                                                    </button>
+                                                                ) : ''}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                }
+                                                return rows;
+                                            })()}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -3335,31 +3458,64 @@ const App: React.FC = () => {
                     )}
 
                     {activeTab === 'moves' && (
-                        <div className="flex-grow overflow-y-auto p-2 bg-gray-900 rounded text-sm font-mono border border-gray-700" ref={movesContainerRef}>
-                            <table className="w-full text-left">
-                                <thead>
-                                    <tr className="text-gray-500 border-b border-gray-700 sticky top-0 bg-gray-900">
-                                        <th className="pb-1 w-10">#</th>
-                                        <th className="pb-1">White</th>
-                                        <th className="pb-1">Black</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {(() => {
-                                        const rows = [];
-                                        for (let i = 0; i < moveHistory.length; i += 2) {
-                                            rows.push(
-                                                <tr key={i} className="border-b border-gray-800 last:border-0 hover:bg-gray-800">
-                                                    <td className="py-1 text-gray-500">{Math.floor(i / 2) + 1}.</td>
-                                                    <td className="py-1 text-gray-300">{moveHistory[i].notation}</td>
-                                                    <td className="py-1 text-gray-300">{moveHistory[i + 1]?.notation || ''}</td>
-                                                </tr>
-                                            );
-                                        }
-                                        return rows;
-                                    })()}
-                                </tbody>
-                            </table>
+                        <div className="flex-grow flex flex-col p-2 bg-gray-900 rounded text-sm font-mono border border-gray-700 min-h-0">
+                            {isHistoryAllowed && (
+                                <div className="w-full flex justify-center items-center gap-2 mb-2 bg-gray-800 p-2 rounded-lg flex-shrink-0">
+                                    <button onClick={goBack} disabled={!canGoBack} className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                        &larr; Prev
+                                    </button>
+                                    <button onClick={goToCurrent} disabled={reviewingHistoryIndex === null} className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                        Current
+                                    </button>
+                                    <button onClick={goForward} disabled={!canGoForward} className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                        Next &rarr;
+                                    </button>
+                                </div>
+                            )}
+                            <div className="flex-grow overflow-y-auto" ref={movesContainerRef}>
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="text-gray-500 border-b border-gray-700 sticky top-0 bg-gray-900 z-10">
+                                            <th className="pb-1 w-10">#</th>
+                                            <th className="pb-1">White</th>
+                                            <th className="pb-1">Black</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {(() => {
+                                            const rows = [];
+                                            for (let i = 0; i < moveHistory.length; i += 2) {
+                                                const isWhiteActive = (reviewingHistoryIndex !== null ? reviewingHistoryIndex : historyBoards.length - 1) === (i + 1);
+                                                const isBlackActive = moveHistory[i + 1] && (reviewingHistoryIndex !== null ? reviewingHistoryIndex : historyBoards.length - 1) === (i + 2);
+                                                rows.push(
+                                                    <tr key={i} className="border-b border-gray-800 last:border-0 hover:bg-gray-800">
+                                                        <td className="py-1 text-gray-500">{Math.floor(i / 2) + 1}.</td>
+                                                        <td className="py-1">
+                                                            <button
+                                                                className={`px-1 rounded text-left ${isWhiteActive ? 'bg-blue-900 text-blue-200 font-bold' : 'text-gray-300 hover:bg-gray-700'}`}
+                                                                onClick={() => jumpToHistory(i + 1)}
+                                                            >
+                                                                {moveHistory[i].notation}
+                                                            </button>
+                                                        </td>
+                                                        <td className="py-1">
+                                                            {moveHistory[i + 1] ? (
+                                                                <button
+                                                                    className={`px-1 rounded text-left ${isBlackActive ? 'bg-blue-900 text-blue-200 font-bold' : 'text-gray-300 hover:bg-gray-700'}`}
+                                                                    onClick={() => jumpToHistory(i + 2)}
+                                                                >
+                                                                    {moveHistory[i + 1].notation}
+                                                                </button>
+                                                            ) : ''}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            }
+                                            return rows;
+                                        })()}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     )}
                 </div>
