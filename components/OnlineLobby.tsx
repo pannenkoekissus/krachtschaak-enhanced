@@ -406,6 +406,36 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
     const [isCreatingGame, setIsCreatingGame] = useState(false);
     const [isJoiningGame, setIsJoiningGame] = useState<string | null>(null);
     const [isProcessingChallenge, setIsProcessingChallenge] = useState<string | null>(null);
+    const [notificationsEnabled, _setNotificationsEnabled] = useState(() => localStorage.getItem('notificationsEnabled') === 'true');
+    const [notificationFlags, _setNotificationFlags] = useState(() => localStorage.getItem('notificationFlags') || '');
+
+    const setNotificationsEnabled = async (enabled: boolean) => {
+        _setNotificationsEnabled(enabled);
+        localStorage.setItem('notificationsEnabled', enabled.toString());
+        if (enabled) {
+            try {
+                if ('Notification' in window) {
+                    if (Notification.permission !== 'granted') {
+                        await Notification.requestPermission();
+                    }
+                }
+                const capLocal = await import('@capacitor/local-notifications').catch(() => null);
+                if (capLocal && capLocal.LocalNotifications) {
+                    const perm = await capLocal.LocalNotifications.checkPermissions();
+                    if (perm.display !== 'granted') {
+                        await capLocal.LocalNotifications.requestPermissions();
+                    }
+                }
+            } catch (e) {
+                console.error('Error requesting notification permission', e);
+            }
+        }
+    };
+
+    const setNotificationFlags = (flags: string) => {
+        _setNotificationFlags(flags);
+        localStorage.setItem('notificationFlags', flags);
+    };
 
     // Quick Create Config
     const [isRated, setIsRated] = useState(true);
@@ -750,90 +780,90 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
         if (!myRatings) return;
         if (isProcessingChallenge) return;
         setIsProcessingChallenge(challenge.id);
-        
+
         try {
 
-        // 1. Create the game
-        const newGameRef = db.ref('games').push();
-        const gameId = newGameRef.key;
-        if (!gameId) return;
+            // 1. Create the game
+            const newGameRef = db.ref('games').push();
+            const gameId = newGameRef.key;
+            if (!gameId) return;
 
-        var isCreatorWhite = Math.random() < 0.5;
-        if (challenge.challengeColor.toLowerCase() === 'white') isCreatorWhite = true;
-        if (challenge.challengeColor.toLowerCase() === 'black') isCreatorWhite = false;
-        const myColor = isCreatorWhite ? Color.Black : Color.White;
-        const opponentColor = isCreatorWhite ? Color.White : Color.Black;
+            var isCreatorWhite = Math.random() < 0.5;
+            if (challenge.challengeColor.toLowerCase() === 'white') isCreatorWhite = true;
+            if (challenge.challengeColor.toLowerCase() === 'black') isCreatorWhite = false;
+            const myColor = isCreatorWhite ? Color.Black : Color.White;
+            const opponentColor = isCreatorWhite ? Color.White : Color.Black;
 
-        const initialState = getInitialGameState('online_playing', challenge.timerSettings, true, challenge.isRated);
+            const initialState = getInitialGameState('online_playing', challenge.timerSettings, true, challenge.isRated);
 
-        const myPlayerInfo: PlayerInfo = {
-            uid: userUid,
-            displayName: auth.currentUser?.displayName || 'Guest',
-            disconnectTimestamp: null,
-            ratings: myRatings
-        };
+            const myPlayerInfo: PlayerInfo = {
+                uid: userUid,
+                displayName: auth.currentUser?.displayName || 'Guest',
+                disconnectTimestamp: null,
+                ratings: myRatings
+            };
 
-        // Note: We don't have opponent's full ratings here, just the one sent in challenge.
-        const opponentRatings = { ...myRatings };
-        opponentRatings[challenge.ratingCategory] = challenge.fromRating;
+            // Note: We don't have opponent's full ratings here, just the one sent in challenge.
+            const opponentRatings = { ...myRatings };
+            opponentRatings[challenge.ratingCategory] = challenge.fromRating;
 
-        const opponentPlayerInfo: PlayerInfo = {
-            uid: challenge.fromUid,
-            displayName: challenge.fromName,
-            disconnectTimestamp: null,
-            ratings: opponentRatings
-        };
+            const opponentPlayerInfo: PlayerInfo = {
+                uid: challenge.fromUid,
+                displayName: challenge.fromName,
+                disconnectTimestamp: null,
+                ratings: opponentRatings
+            };
 
-        initialState.players = {
-            [userUid]: myPlayerInfo,
-            [challenge.fromUid]: opponentPlayerInfo
-        };
+            initialState.players = {
+                [userUid]: myPlayerInfo,
+                [challenge.fromUid]: opponentPlayerInfo
+            };
 
-        initialState.playerColors = {
-            white: isCreatorWhite ? challenge.fromUid : userUid,
-            black: isCreatorWhite ? userUid : challenge.fromUid
-        };
+            initialState.playerColors = {
+                white: isCreatorWhite ? challenge.fromUid : userUid,
+                black: isCreatorWhite ? userUid : challenge.fromUid
+            };
 
-        initialState.status = 'playing';
-        if (challenge.timerSettings && 'initialTime' in challenge.timerSettings) {
-            initialState.turnStartTime = window.firebase.database.ServerValue.TIMESTAMP as any;
-        } else if (challenge.timerSettings && 'daysPerMove' in challenge.timerSettings) {
-            initialState.moveDeadline = Date.now() + challenge.timerSettings.daysPerMove * 24 * 60 * 60 * 1000;
-        }
-
-        initialState.initialRatings = {
-            white: initialState.playerColors.white === userUid ? myRatings[challenge.ratingCategory] : challenge.fromRating,
-            black: initialState.playerColors.black === userUid ? myRatings[challenge.ratingCategory] : challenge.fromRating,
-        };
-        initialState.showPowerPieces = challenge.showPowerPieces ?? true;
-        initialState.showPowerRings = challenge.showPowerRings ?? true;
-        initialState.showOriginalType = challenge.showOriginalType ?? true;
-
-        if (challenge.kFen) {
-            const result = fenToBoard(challenge.kFen);
-            if (result && result.board) {
-                initialState.board = result.board;
-                initialState.turn = result.turn || Color.White;
-                initialState.kFen = challenge.kFen;
+            initialState.status = 'playing';
+            if (challenge.timerSettings && 'initialTime' in challenge.timerSettings) {
+                initialState.turnStartTime = window.firebase.database.ServerValue.TIMESTAMP as any;
+            } else if (challenge.timerSettings && 'daysPerMove' in challenge.timerSettings) {
+                initialState.moveDeadline = Date.now() + challenge.timerSettings.daysPerMove * 24 * 60 * 60 * 1000;
             }
-        }
 
-        await newGameRef.set(initialState);
+            initialState.initialRatings = {
+                white: initialState.playerColors.white === userUid ? myRatings[challenge.ratingCategory] : challenge.fromRating,
+                black: initialState.playerColors.black === userUid ? myRatings[challenge.ratingCategory] : challenge.fromRating,
+            };
+            initialState.showPowerPieces = challenge.showPowerPieces ?? true;
+            initialState.showPowerRings = challenge.showPowerRings ?? true;
+            initialState.showOriginalType = challenge.showOriginalType ?? true;
 
-        // 2. Link users to game
-        const updates: any = {};
-        updates[`userGames/${userUid}/${gameId}`] = true;
-        updates[`userGames/${challenge.fromUid}/${gameId}`] = true;
-        // 3. Delete challenge
-        updates[`challenges/${userUid}/${challenge.id}`] = null;
-        // 4. Delete from sender's sentChallenges
-        updates[`sentChallenges/${challenge.fromUid}/${challenge.id}`] = null;
+            if (challenge.kFen) {
+                const result = fenToBoard(challenge.kFen);
+                if (result && result.board) {
+                    initialState.board = result.board;
+                    initialState.turn = result.turn || Color.White;
+                    initialState.kFen = challenge.kFen;
+                }
+            }
 
-        await db.ref().update(updates);
+            await newGameRef.set(initialState);
 
-        // Manual warp because the game starts in 'playing' state, skipping 'waiting'
-        // so the automatic transition logic in useEffect won't catch it.
-        onGameStart(gameId, myColor);
+            // 2. Link users to game
+            const updates: any = {};
+            updates[`userGames/${userUid}/${gameId}`] = true;
+            updates[`userGames/${challenge.fromUid}/${gameId}`] = true;
+            // 3. Delete challenge
+            updates[`challenges/${userUid}/${challenge.id}`] = null;
+            // 4. Delete from sender's sentChallenges
+            updates[`sentChallenges/${challenge.fromUid}/${challenge.id}`] = null;
+
+            await db.ref().update(updates);
+
+            // Manual warp because the game starts in 'playing' state, skipping 'waiting'
+            // so the automatic transition logic in useEffect won't catch it.
+            onGameStart(gameId, myColor);
         } catch (e) {
             console.error("Error accepting challenge:", e);
             setIsProcessingChallenge(null);
@@ -1539,6 +1569,10 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                     setAutoQueen={setAutoQueen}
                     autoEnPassant={autoEnPassant}
                     setAutoEnPassant={setAutoEnPassant}
+                    notificationsEnabled={notificationsEnabled}
+                    setNotificationsEnabled={setNotificationsEnabled}
+                    notificationFlags={notificationFlags}
+                    setNotificationFlags={setNotificationFlags}
                 />
             )}
         </div>
