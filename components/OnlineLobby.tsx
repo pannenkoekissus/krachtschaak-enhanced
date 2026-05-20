@@ -405,6 +405,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
     const [isLobbyLoading, setIsLobbyLoading] = useState(true);
     const [isCreatingGame, setIsCreatingGame] = useState(false);
     const [isJoiningGame, setIsJoiningGame] = useState<string | null>(null);
+    const [isProcessingChallenge, setIsProcessingChallenge] = useState<string | null>(null);
 
     // Quick Create Config
     const [isRated, setIsRated] = useState(true);
@@ -747,6 +748,10 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
 
     const handleAcceptChallenge = async (challenge: IncomingChallenge) => {
         if (!myRatings) return;
+        if (isProcessingChallenge) return;
+        setIsProcessingChallenge(challenge.id);
+        
+        try {
 
         // 1. Create the game
         const newGameRef = db.ref('games').push();
@@ -829,6 +834,10 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
         // Manual warp because the game starts in 'playing' state, skipping 'waiting'
         // so the automatic transition logic in useEffect won't catch it.
         onGameStart(gameId, myColor);
+        } catch (e) {
+            console.error("Error accepting challenge:", e);
+            setIsProcessingChallenge(null);
+        }
     };
 
     const handleDeclineChallenge = async (challengeId: string) => {
@@ -1150,8 +1159,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                                                 )}
                                             </div>
                                             <div className="flex gap-3">
-                                                <button onClick={() => handleAcceptChallenge(c)} className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded font-bold transition-colors">Accept</button>
-                                                <button onClick={() => handleDeclineChallenge(c.id)} className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded font-bold transition-colors">Decline</button>
+                                                <button onClick={() => handleAcceptChallenge(c)} disabled={isProcessingChallenge === c.id} className="bg-green-600 hover:bg-green-500 disabled:bg-gray-500 disabled:cursor-not-allowed text-white px-4 py-2 rounded font-bold transition-colors">{isProcessingChallenge === c.id ? 'Accepting...' : 'Accept'}</button>
+                                                <button onClick={() => handleDeclineChallenge(c.id)} disabled={isProcessingChallenge === c.id} className="bg-gray-600 hover:bg-gray-500 disabled:opacity-50 text-white px-4 py-2 rounded font-bold transition-colors">Decline</button>
                                             </div>
                                         </div>
                                     ))}

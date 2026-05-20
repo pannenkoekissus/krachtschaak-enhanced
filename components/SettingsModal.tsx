@@ -90,11 +90,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                         key={option.val}
                         onClick={() => onChange(option.val)}
-                        className={`flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all ${
-                            value === option.val
-                                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg scale-100'
-                                : 'text-gray-500 hover:text-gray-300'
-                        }`}
+                        className={`flex-1 py-1.5 px-2 rounded-md text-xs font-bold transition-all ${value === option.val
+                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg scale-100'
+                            : 'text-gray-500 hover:text-gray-300'
+                            }`}
                     >
                         {option.label}
                     </button>
@@ -113,7 +112,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[200] p-4 scale-in-center overflow-hidden" onClick={onClose}>
-            <div 
+            <div
                 className="bg-gray-800 border border-gray-700 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.5)] w-full max-w-md max-h-[85vh] overflow-y-auto relative custom-scrollbar flex flex-col ring-1 ring-white/10"
                 onClick={(e) => e.stopPropagation()}
                 style={{
@@ -168,10 +167,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             {notificationsEnabled && (
                                 <div className="flex flex-col gap-2 transition-all">
                                     <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Notify for Flags</label>
-                                    <input 
-                                        type="text" 
-                                        placeholder="e.g. daily, blitz (comma separated)" 
-                                        value={notificationFlags} 
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. daily, blitz (comma separated)"
+                                        value={notificationFlags}
                                         onChange={(e) => setNotificationFlags(e.target.value)}
                                         className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-500"
                                     />
