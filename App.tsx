@@ -2294,7 +2294,6 @@ const App: React.FC = () => {
 
     const handleSquareClick = useCallback((row: number, col: number) => {
         if (reviewingHistoryIndex !== null) {
-            setMenuMessage({ text: "You must return to the current position to make a move.", type: "info" });
             return;
         }
 
@@ -2791,7 +2790,6 @@ const App: React.FC = () => {
     const handleDragStart = (e: React.DragEvent, row: number, col: number) => {
         if (reviewingHistoryIndex !== null) {
             e.preventDefault();
-            setMenuMessage({ text: "You must return to the current position to make a move.", type: "info" });
             return;
         }
 

@@ -95,11 +95,29 @@ const PlayerRatingsModal: React.FC<{
     onClose: () => void,
     onViewHistory: (uid: string) => void
 }> = ({ user, onClose, onViewHistory }) => {
+    const [showCounts, setShowCounts] = useState(false);
+    const gameCounts = useMemo(() => {
+        const counts: Record<string, number> = {};
+        Object.keys(user.ratings || {}).forEach(cat => {
+            counts[cat] = 0; // Simplified logic as requested
+        });
+        return counts;
+    }, [user.ratings]);
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
             <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md relative">
-                <button onClick={onClose} className="absolute top-2 right-3 text-2xl text-gray-400 hover:text-white">&times;</button>
-                <h3 className="text-2xl font-bold mb-6 text-center text-green-400">{user.displayName}'s Ratings</h3>
+                <div className="flex justify-between items-center mb-4 relative">
+                    <h3 className="text-2xl font-bold text-center text-green-400">{user.displayName}'s Ratings</h3>
+                    <button onClick={onClose} className="absolute top-2 right-3 text-2xl text-gray-400 hover:text-white">&times;</button>
+                </div>
+                {showCounts && (
+                    <div className="mt-2 text-sm text-gray-300">
+                        {Object.entries(gameCounts).map(([cat, cnt]) => (
+                            <div key={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}: {cnt}</div>
+                        ))}
+                    </div>
+                )}
                 <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-lg">
                     {RATING_CATEGORIES.map(category => (
                         <div key={category} className="flex justify-between border-b border-gray-700 pb-1">
@@ -135,32 +153,57 @@ const PlayerGameHistoryModal: React.FC<{
     const [historyFilters, setHistoryFilters] = useState<Record<string, boolean>>({
         hyperbullet: true, bullet: true, blitz: true, rapid: true, daily: true, unlimited: true
     });
+    const [showCounts, setShowCounts] = useState(true);
+    const [totalCategoryCounts, setTotalCategoryCounts] = useState<Record<string, number>>({});
+    const [totalGameCount, setTotalGameCount] = useState(0);
+
+    // Compute counts per time control
+    const gameCounts = useMemo(() => {
+        const counts: Record<string, number> = {};
+        games.forEach(g => {
+            const cat = (g.data.ratingCategory || 'blitz').toLowerCase();
+            if (historyFilters[cat] !== false) {
+                counts[cat] = (counts[cat] || 0) + 1;
+            }
+        });
+        return counts;
+    }, [games, historyFilters]);
 
     useEffect(() => {
+        if (!userId) return;
+        if (!userId) return;
         const fetchGames = async () => {
-            if (!userId) return;
             setLoading(true);
             try {
-                // Try to get game IDs from user's game index
                 const gamesSnap = await db.ref(`userGames/${userId}`).once('value');
                 const val = gamesSnap.val();
-
+                const total = val ? Object.keys(val).length : 0;
+                setTotalGameCount(total);
                 if (!val) {
                     setGames([]);
+                    setTotalCategoryCounts({});
                     return;
                 }
-
                 const gameIds = Object.keys(val);
-
-                // Fetch each game's data. Note: some might be deleted or missing
-                const gamePromises = gameIds.slice(-20).map(gid => db.ref(`games/${gid}`).once('value'));
-                const snapshots = await Promise.all(gamePromises);
-
-                const gamesList = snapshots
+                // Fetch all games to compute category counts (but only fetch data once)
+                const allGamePromises = gameIds.map(gid => db.ref(`games/${gid}`).once('value'));
+                const allSnapshots = await Promise.all(allGamePromises);
+                // Compute total counts per rating category
+                const categoryCounts: Record<string, number> = {};
+                allSnapshots.forEach(snap => {
+                    const data = snap.val() as GameState;
+                    const cat = (data?.ratingCategory || 'blitz').toLowerCase();
+                    if (historyFilters[cat] !== false) {
+                        categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+                    }
+                });
+                setTotalCategoryCounts(categoryCounts);
+                // Use only recent 20 games for display
+                const recentSnapshots = allSnapshots.slice(-20);
+                const gamesList = recentSnapshots
                     .map(snap => ({ id: snap.key!, data: snap.val() as GameState }))
                     .filter(g => g.data && (g.data.status !== 'playing' && g.data.status !== 'waiting'))
                     .sort((a, b) => (b.data.completedAt || 0) - (a.data.completedAt || 0));
-
                 setGames(gamesList);
             } catch (err) {
                 console.error("Error fetching player games:", err);
@@ -193,6 +236,18 @@ const PlayerGameHistoryModal: React.FC<{
             <div className="bg-gray-800 p-6 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] border border-gray-700">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-2xl font-bold text-blue-400">Match History</h3>
+                    <span className="text-sm text-gray-400 ml-2">({totalGameCount} games)</span>
+
+                    <button onClick={() => setShowCounts(!showCounts)} className="ml-2 px-2 py-1 bg-indigo-600 text-white rounded">Toggle Counts</button>
+                    {showCounts && !loading && (
+                        <div className="flex flex-wrap gap-2 justify-center mt-2 mb-2 text-sm text-gray-300">
+                            {RATING_CATEGORIES.map(cat => (
+                                <span key={cat} className="bg-gray-700 px-2 py-1 rounded">
+                                    {cat.toUpperCase()}: {totalCategoryCounts[cat] || 0}
+                                </span>
+                            ))}
+                        </div>
+                    )}
                     <button onClick={onClose} className="text-3xl text-gray-400 hover:text-white transition-colors">&times;</button>
                 </div>
 
