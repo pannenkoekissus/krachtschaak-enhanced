@@ -141,77 +141,97 @@ const PlayerRatingsModal: React.FC<{
         </div>
     );
 };
-
 const PlayerGameHistoryModal: React.FC<{
     userId: string;
     onClose: () => void;
     onReview: (game: GameState) => void;
     onAnalyse: (game: GameState) => void;
 }> = ({ userId, onClose, onReview, onAnalyse }) => {
-    const [games, setGames] = useState<{ id: string, data: GameState }[]>([]);
+    const [allGamesMeta, setAllGamesMeta] = useState<{ id: string, ratingCategory: string, status: string, completedAt: number }[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadingGames, setLoadingGames] = useState(false);
+    const [gamesCache, setGamesCache] = useState<Record<string, GameState>>({});
     const [historyFilters, setHistoryFilters] = useState<Record<string, boolean>>({
         hyperbullet: true, bullet: true, blitz: true, rapid: true, daily: true, unlimited: true
     });
     const [showCounts, setShowCounts] = useState(true);
     const [totalCategoryCounts, setTotalCategoryCounts] = useState<Record<string, number>>({});
     const [totalGameCount, setTotalGameCount] = useState(0);
+    const [displayLimit, setDisplayLimit] = useState(20);
 
     // Compute counts per time control
     const gameCounts = useMemo(() => {
         const counts: Record<string, number> = {};
-        games.forEach(g => {
-            const cat = (g.data.ratingCategory || 'blitz').toLowerCase();
-            if (historyFilters[cat] !== false) {
-                counts[cat] = (counts[cat] || 0) + 1;
+        allGamesMeta.forEach(meta => {
+            if (meta.status !== 'playing' && meta.status !== 'waiting') {
+                const cat = meta.ratingCategory.toLowerCase();
+                if (historyFilters[cat] !== false) {
+                    counts[cat] = (counts[cat] || 0) + 1;
+                }
             }
         });
         return counts;
-    }, [games, historyFilters]);
+    }, [allGamesMeta, historyFilters]);
 
     useEffect(() => {
         if (!userId) return;
-        if (!userId) return;
-        const fetchGames = async () => {
+        const fetchMeta = async () => {
             setLoading(true);
             try {
                 const gamesSnap = await db.ref(`userGames/${userId}`).once('value');
                 const val = gamesSnap.val();
-                const total = val ? Object.keys(val).length : 0;
-                setTotalGameCount(total);
                 if (!val) {
-                    setGames([]);
+                    setAllGamesMeta([]);
                     setTotalCategoryCounts({});
+                    setTotalGameCount(0);
                     return;
                 }
                 const gameIds = Object.keys(val);
-                // Fetch all games to compute category counts (but only fetch data once)
-                const allGamePromises = gameIds.map(gid => db.ref(`games/${gid}`).once('value'));
-                const allSnapshots = await Promise.all(allGamePromises);
-                // Compute total counts per rating category
+                setTotalGameCount(gameIds.length);
+
+                // Parallel lightweight fetches for ratingCategory, status, and completedAt
+                const metaPromises = gameIds.map(async (gid) => {
+                    try {
+                        const [catSnap, statusSnap, completedSnap] = await Promise.all([
+                            db.ref(`games/${gid}/ratingCategory`).once('value'),
+                            db.ref(`games/${gid}/status`).once('value'),
+                            db.ref(`games/${gid}/completedAt`).once('value')
+                        ]);
+                        return {
+                            id: gid,
+                            ratingCategory: catSnap.val() as string || 'blitz',
+                            status: statusSnap.val() as string || 'unknown',
+                            completedAt: completedSnap.val() as number || 0
+                        };
+                    } catch (e) {
+                        console.error(`Error fetching meta for game ${gid}:`, e);
+                        return {
+                            id: gid,
+                            ratingCategory: 'blitz',
+                            status: 'unknown',
+                            completedAt: 0
+                        };
+                    }
+                });
+
+                const gamesMeta = await Promise.all(metaPromises);
+                setAllGamesMeta(gamesMeta);
+
                 const categoryCounts: Record<string, number> = {};
-                allSnapshots.forEach(snap => {
-                    const data = snap.val() as GameState;
-                    const cat = (data?.ratingCategory || 'blitz').toLowerCase();
-                    if (historyFilters[cat] !== false) {
+                gamesMeta.forEach(meta => {
+                    if (meta.status !== 'playing' && meta.status !== 'waiting') {
+                        const cat = meta.ratingCategory.toLowerCase();
                         categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
                     }
                 });
                 setTotalCategoryCounts(categoryCounts);
-                // Use only recent 20 games for display
-                const recentSnapshots = allSnapshots.slice(-20);
-                const gamesList = recentSnapshots
-                    .map(snap => ({ id: snap.key!, data: snap.val() as GameState }))
-                    .filter(g => g.data && (g.data.status !== 'playing' && g.data.status !== 'waiting'))
-                    .sort((a, b) => (b.data.completedAt || 0) - (a.data.completedAt || 0));
-                setGames(gamesList);
             } catch (err) {
-                console.error("Error fetching player games:", err);
+                console.error("Error fetching player games metadata:", err);
             } finally {
                 setLoading(false);
             }
         };
-        fetchGames();
+        fetchMeta();
     }, [userId]);
 
     const toggleFilter = (cat: string) => {
@@ -219,17 +239,61 @@ const PlayerGameHistoryModal: React.FC<{
     };
 
     const filteredGames = useMemo(() => {
-        return games.filter(game => {
-            const cat = (game.data.ratingCategory || 'blitz').toLowerCase();
-            return historyFilters[cat] !== false;
-        }).sort((a, b) => {
-            const aIsRealtime = a.data.timerSettings && 'initialTime' in a.data.timerSettings;
-            const bIsRealtime = b.data.timerSettings && 'initialTime' in b.data.timerSettings;
-            if (aIsRealtime && !bIsRealtime) return -1;
-            if (!aIsRealtime && bIsRealtime) return 1;
-            return (b.data.completedAt || 0) - (a.data.completedAt || 0);
-        });
-    }, [games, historyFilters]);
+        return allGamesMeta
+            .filter(meta => {
+                if (meta.status === 'playing' || meta.status === 'waiting') return false;
+                const cat = meta.ratingCategory.toLowerCase();
+                return historyFilters[cat] !== false;
+            })
+            .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
+    }, [allGamesMeta, historyFilters]);
+
+    const visibleMetaSlice = useMemo(() => {
+        return filteredGames.slice(0, displayLimit);
+    }, [filteredGames, displayLimit]);
+
+    useEffect(() => {
+        if (visibleMetaSlice.length === 0) return;
+
+        const fetchFullGames = async () => {
+            const missingIds = visibleMetaSlice.filter(meta => !gamesCache[meta.id]).map(meta => meta.id);
+            if (missingIds.length === 0) return;
+
+            setLoadingGames(true);
+            try {
+                const fetchPromises = missingIds.map(async (gid) => {
+                    const snap = await db.ref(`games/${gid}`).once('value');
+                    return { id: gid, data: snap.val() as GameState };
+                });
+                const fetched = await Promise.all(fetchPromises);
+                
+                setGamesCache(prev => {
+                    const updated = { ...prev };
+                    fetched.forEach(item => {
+                        if (item.data) {
+                            updated[item.id] = item.data;
+                        }
+                    });
+                    return updated;
+                });
+            } catch (err) {
+                console.error("Error fetching full games details:", err);
+            } finally {
+                setLoadingGames(false);
+            }
+        };
+
+        fetchFullGames();
+    }, [visibleMetaSlice]);
+
+    const displayedGames = useMemo(() => {
+        return visibleMetaSlice
+            .map(meta => ({
+                id: meta.id,
+                data: gamesCache[meta.id]
+            }))
+            .filter(g => g.data !== undefined);
+    }, [visibleMetaSlice, gamesCache]);
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4">
@@ -268,17 +332,19 @@ const PlayerGameHistoryModal: React.FC<{
                     ))}
                 </div>
 
-                {loading ? (
-                    <div className="flex-grow flex items-center justify-center py-12">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400"></div>
-                    </div>
-                ) : filteredGames.length === 0 ? (
+                {loading && <div className="flex items-center justify-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400"></div></div>}
+
+                {!loading && filteredGames.length === 0 ? (
                     <div className="flex-grow flex items-center justify-center py-12 text-gray-500 italic">
                         No games found with these filters.
                     </div>
+                ) : !loading && displayedGames.length === 0 && loadingGames ? (
+                    <div className="flex-grow flex items-center justify-center py-12">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400"></div>
+                    </div>
                 ) : (
                     <div className="overflow-y-auto pr-2 space-y-3">
-                        {filteredGames.map(game => {
+                        {displayedGames.map(game => {
                             const whitePlayer = game.data.players && game.data.playerColors?.white ? game.data.players[game.data.playerColors.white] : null;
                             const blackPlayer = game.data.players && game.data.playerColors?.black ? game.data.players[game.data.playerColors.black] : null;
 
@@ -328,6 +394,15 @@ const PlayerGameHistoryModal: React.FC<{
                                 </div>
                             );
                         })}
+                        {filteredGames.length > displayLimit && (
+                            <button
+                                onClick={() => setDisplayLimit(prev => prev + 20)}
+                                disabled={loadingGames}
+                                className="mt-4 w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold transition-colors disabled:opacity-50"
+                            >
+                                {loadingGames ? 'Loading...' : `Load More (${filteredGames.length - displayLimit} remaining)`}
+                            </button>
+                        )}
                     </div>
                 )}
             </div>
@@ -523,9 +598,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
         daily: true,
         unlimited: true
     });
-    const toggleFilter = (category: string) => {
-        setFilters(prev => ({ ...prev, [category]: !prev[category] }));
-    };
+    const toggleFilter = (category: string) => setFilters(prev => ({ ...prev, [category]: !prev[category] }));
+    const [displayLimit, setDisplayLimit] = useState(20);
 
     //spectate effect
 
@@ -1416,7 +1490,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                     </div>
                 )}
                 {currentLobbyTab === 'finished_games' && (
-                    <div className="w-full max-w-3xl p-4 border border-gray-600 rounded-lg flex flex-col gap-4">
+                    <div className="w-full max-w-4xl p-4 border border-gray-600 rounded-lg flex flex-col gap-4">
                         <h3 className="text-xl font-semibold text-center mb-0">Game History</h3>
 
                         {/* History Filter Buttons */}
@@ -1436,8 +1510,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                             ))}
                         </div>
 
-                        {filteredMyFinishedGames.length === 0 ? <p className="text-gray-400 text-center py-4">No completed games found with these filters.</p> : null}
-                        <div className="flex-grow overflow-y-auto max-h-96 space-y-2 pr-2">{filteredMyFinishedGames.map(({ id, data }) => {
+                        {filteredMyFinishedGames.slice(0, displayLimit).map(({ id, data }) => {
                             const myColor = data.playerColors.white === userUid ? Color.White : Color.Black;
                             const opponentColor = myColor === Color.White ? Color.Black : Color.White;
                             const opponentUid = data.playerColors[opponentColor];
@@ -1453,12 +1526,22 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                                     <p className={`font-bold text-lg ${result.color}`}>{result.text}</p>
                                     <div className="flex gap-2 ml-4">
                                         <button onClick={() => onReview(data)} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded font-semibold transition-colors text-xs">Review</button>
-                                        <button onClick={() => onAnalyse(data)} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded font-semibold transition-colors text-xs">Analyse</button>
+                                        <button onClick={() => { onAnalyse(data); }} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded font-semibold transition-colors text-xs">Analyse</button>
                                     </div>
                                 </div>
                             );
                         })}
-                        </div>
+
+
+                        {filteredMyFinishedGames.length > displayLimit && (
+                            <button
+                                onClick={() => setDisplayLimit(prev => prev + 20)}
+                                className="mt-4 mx-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-semibold transition-colors"
+                            >
+                                Load More ({filteredMyFinishedGames.length - displayLimit} remaining)
+                            </button>
+                        )}
+
                     </div>
                 )}
                 {currentLobbyTab === 'games' && (
