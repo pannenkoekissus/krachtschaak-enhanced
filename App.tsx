@@ -326,8 +326,14 @@ const App: React.FC = () => {
                 let notified = notifiedStr ? JSON.parse(notifiedStr) : {};
                 let changed = false;
 
+                let scheduledStr = localStorage.getItem('scheduledTournaments');
+                let scheduled = scheduledStr ? JSON.parse(scheduledStr) : {};
+                let changedScheduled = false;
+
+                const capLocal = await import('@capacitor/local-notifications').catch(() => null);
+
                 for (const t of activeTournaments) {
-                    if (t.expectedStartDate && !notified[t.id]) {
+                    if (t.expectedStartDate) {
                         let timeUntilStart = 0;
                         if (typeof t.expectedStartDate === 'number') {
                             timeUntilStart = t.expectedStartDate - now;
@@ -344,7 +350,47 @@ const App: React.FC = () => {
                             }
                         }
 
-                        if (timeUntilStart > 0 && timeUntilStart <= oneHour) {
+                        const startTime = now + timeUntilStart;
+                        const notificationTime = startTime - oneHour;
+
+                        // If notification time is in the future, pre-schedule it
+                        if (notificationTime > now) {
+                            if (!scheduled[t.id] || Math.abs(scheduled[t.id] - notificationTime) > 5000) {
+                                let shouldNotify = true;
+                                if (userFlags.length > 0) {
+                                    const tFlags = (t.flags || []).map((f: string) => f.toLowerCase());
+                                    shouldNotify = userFlags.some(f => tFlags.includes(f));
+                                }
+
+                                if (shouldNotify && capLocal && capLocal.LocalNotifications) {
+                                    try {
+                                        const numericId = Math.abs(t.id.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0)) % 1000000;
+                                        
+                                        // Cancel previous one if it exists to avoid duplicates
+                                        await capLocal.LocalNotifications.cancel({
+                                            notifications: [{ id: numericId }]
+                                        }).catch(() => {});
+
+                                        await capLocal.LocalNotifications.schedule({
+                                            notifications: [
+                                                {
+                                                    title: `Tournament Starting Soon!`,
+                                                    body: `${t.name} is starting in less than 1 hour.`,
+                                                    id: numericId,
+                                                    schedule: { at: new Date(notificationTime) }
+                                                }
+                                            ]
+                                        });
+
+                                        scheduled[t.id] = notificationTime;
+                                        changedScheduled = true;
+                                    } catch (e) {
+                                        console.error('Failed to schedule local notification', e);
+                                    }
+                                }
+                            }
+                        } else if (timeUntilStart > 0 && timeUntilStart <= oneHour && !notified[t.id]) {
+                            // Immediately notify if starts in < 1 hour and not notified yet
                             let shouldNotify = true;
                             if (userFlags.length > 0) {
                                 const tFlags = (t.flags || []).map((f: string) => f.toLowerCase());
@@ -362,15 +408,15 @@ const App: React.FC = () => {
                                     new Notification(title, { body });
                                 }
 
-                                const capLocal = await import('@capacitor/local-notifications').catch(() => null);
                                 if (capLocal && capLocal.LocalNotifications) {
                                     try {
+                                        const numericId = Math.abs(t.id.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0)) % 1000000;
                                         await capLocal.LocalNotifications.schedule({
                                             notifications: [
                                                 {
                                                     title: title,
                                                     body: body,
-                                                    id: Math.floor(Math.random() * 1000000),
+                                                    id: numericId,
                                                     schedule: { at: new Date(Date.now() + 1000) }
                                                 }
                                             ]
@@ -384,8 +430,30 @@ const App: React.FC = () => {
                     }
                 }
 
+                // Cleanup scheduled notifications for tournaments that are no longer active/lobby
+                const activeIds = activeTournaments.map(t => t.id);
+                for (const scheduledId of Object.keys(scheduled)) {
+                    if (!activeIds.includes(scheduledId)) {
+                        if (capLocal && capLocal.LocalNotifications) {
+                            try {
+                                const numericId = Math.abs(scheduledId.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0)) % 1000000;
+                                await capLocal.LocalNotifications.cancel({
+                                    notifications: [{ id: numericId }]
+                                }).catch(() => {});
+                            } catch (e) {
+                                console.error('Failed to cancel tournament notification', e);
+                            }
+                        }
+                        delete scheduled[scheduledId];
+                        changedScheduled = true;
+                    }
+                }
+
                 if (changed) {
                     localStorage.setItem('notifiedTournaments', JSON.stringify(notified));
+                }
+                if (changedScheduled) {
+                    localStorage.setItem('scheduledTournaments', JSON.stringify(scheduled));
                 }
             } catch (err) {
                 console.error("Failed to check tournaments for notifications", err);
@@ -691,6 +759,44 @@ const App: React.FC = () => {
             localStorage.setItem('correspondence_turn_states', JSON.stringify(cleanedStates));
         }
     }, [allMyGamesData, currentUser, notifyTurnCorrespondence]);
+
+    // Register Periodic Background Sync and synchronize settings to Service Worker
+    useEffect(() => {
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.ready.then((registration) => {
+                // Post current user info and settings to the Service Worker
+                if (registration.active) {
+                    registration.active.postMessage({
+                        type: 'UPDATE_USER_INFO',
+                        uid: currentUser ? currentUser.uid : null,
+                        notifyTurnCorrespondence: notifyTurnCorrespondence,
+                        notificationsEnabled: notificationsEnabled,
+                        notificationFlags: notificationFlags
+                    });
+                }
+
+                // If user wants notifications, try to register periodic sync
+                const wantsNotifications = notificationsEnabled || notifyTurnCorrespondence;
+                if (wantsNotifications && 'periodicSync' in registration) {
+                    navigator.permissions.query({
+                        name: 'periodic-background-sync' as any
+                    }).then((permissionStatus) => {
+                        if (permissionStatus.state === 'granted') {
+                            (registration as any).periodicSync.register('check-notifications', {
+                                minInterval: 60 * 60 * 1000 // 1 hour minimum
+                            }).catch((err: any) => {
+                                console.error('SW: Periodic sync registration failed:', err);
+                            });
+                        } else {
+                            console.warn('SW: periodic-background-sync permission not granted. Periodic checks will only work when PWA is installed.');
+                        }
+                    }).catch((err) => {
+                        console.error('SW: Error querying periodic-background-sync permission', err);
+                    });
+                }
+            });
+        }
+    }, [currentUser, notifyTurnCorrespondence, notificationsEnabled, notificationFlags]);
 
     // URL Deep Linking for Analysis
     useEffect(() => {
