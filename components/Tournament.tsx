@@ -9,7 +9,7 @@ import {
     startTournament, endTournament, deleteTournament, setPairings, updatePairing, deletePairing, clearAllPairings,
     updatePlayerScore, advanceRound, getTournament,
     listActiveTournaments, listTournamentHistory, generateSwissPairings, recalculateTiebreaks,
-    toggleHostParticipation, listPublicTournamentHistory
+    toggleHostParticipation, listPublicTournamentHistory, updateTournamentDetails
 } from '../utils/tournamentFirebase';
 import { createInitialBoard } from '../utils/game';
 import { getRatingCategory } from '../utils/ratings';
@@ -70,6 +70,22 @@ const Tournament: React.FC<TournamentProps> = ({
     // Manual pairing state
     const [manualWhite, setManualWhite] = useState<string>('');
     const [manualBlack, setManualBlack] = useState<string>('');
+
+    // Editing tournament state
+    const [isEditingSettings, setIsEditingSettings] = useState(false);
+    const [editName, setEditName] = useState('');
+    const [editExpectedStartDate, setEditExpectedStartDate] = useState('');
+    const [editTimezone, setEditTimezone] = useState('');
+    const [editFlags, setEditFlags] = useState('');
+
+    useEffect(() => {
+        if (activeTournament) {
+            setEditName(activeTournament.name || '');
+            setEditExpectedStartDate(activeTournament.expectedStartDate || '');
+            setEditTimezone(activeTournament.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
+            setEditFlags(activeTournament.flags ? activeTournament.flags.join(', ') : '');
+        }
+    }, [activeTournament, isEditingSettings]);
 
     // Load tournaments list
     useEffect(() => {
@@ -172,19 +188,19 @@ const Tournament: React.FC<TournamentProps> = ({
                 ? (baseTime > 0 ? { initialTime: baseTime, increment: inc } : null)
                 : { daysPerMove: days };
             const rounds = parseInt(createRounds) || 3;
-            
+
             let expectedStartStr = undefined;
             if (createExpectedStartDate) {
                 expectedStartStr = createExpectedStartDate;
             }
-            
+
             const flagsArray = createFlags.split(',').map(s => s.trim()).filter(s => s);
 
             const id = await createTournament(createName.trim(), userId, displayName, settings, createPairingMode, rounds, hostParticipates, {
                 showPowerPieces: createShowPowerPieces,
                 showPowerRings: createShowPowerRings,
                 showOriginalType: createShowOriginalType
-            }, createIsPrivate, createIsRated, flagsArray, expectedStartStr, createTimezone);
+            }, createIsPrivate, createIsRated, flagsArray, expectedStartStr || null, createTimezone);
             onTournamentJoined(id);
             subscribeToTournament(id);
             setView('lobby');
@@ -532,6 +548,24 @@ const Tournament: React.FC<TournamentProps> = ({
             } catch (err: any) {
                 setError(err.message);
             }
+        }
+    };
+
+    const handleSaveSettings = async () => {
+        if (!activeTournament || !isHost) return;
+        if (!editName.trim()) { setError('Enter a tournament name'); return; }
+        try {
+            setError(null);
+            const flagsArray = editFlags.split(',').map(s => s.trim()).filter(s => s);
+            await updateTournamentDetails(activeTournament.id, {
+                name: editName.trim(),
+                expectedStartDate: editExpectedStartDate || '',
+                timezone: editTimezone.trim() || '',
+                flags: flagsArray
+            });
+            setIsEditingSettings(false);
+        } catch (err: any) {
+            setError(err.message);
         }
     };
 
@@ -931,7 +965,7 @@ const Tournament: React.FC<TournamentProps> = ({
                                 className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
                             />
                         </div>
-                        
+
                         <div>
                             <label className="block text-sm font-semibold text-gray-300 mb-1">Timezone</label>
                             <input
@@ -983,6 +1017,75 @@ const Tournament: React.FC<TournamentProps> = ({
         return (
             <div className="min-h-screen bg-gray-900 text-white p-4">
                 <div className="max-w-3xl mx-auto">
+                    {/* Edit Settings Modal */}
+                    {isEditingSettings && (
+                        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                            <div className="bg-gray-800 border border-gray-700 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
+                                <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 mb-4">
+                                    ⚙️ Edit Tournament Settings
+                                </h2>
+
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-300 mb-1">Tournament Name</label>
+                                        <input
+                                            type="text"
+                                            value={editName}
+                                            onChange={e => setEditName(e.target.value)}
+                                            className="w-full px-3 py-2 bg-gray-750 border border-gray-650 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-300 mb-1">Expected Start Date & Time</label>
+                                        <input
+                                            type="datetime-local"
+                                            value={editExpectedStartDate}
+                                            onChange={e => setEditExpectedStartDate(e.target.value)}
+                                            className="w-full px-3 py-2 bg-gray-755 border border-gray-650 rounded-lg text-white focus:outline-none focus:border-yellow-500"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-300 mb-1">Timezone</label>
+                                        <input
+                                            type="text"
+                                            value={editTimezone}
+                                            onChange={e => setEditTimezone(e.target.value)}
+                                            className="w-full px-3 py-2 bg-gray-755 border border-gray-650 rounded-lg text-white focus:outline-none focus:border-yellow-500"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-300 mb-1">Tags / Flags (comma separated)</label>
+                                        <input
+                                            type="text"
+                                            value={editFlags}
+                                            onChange={e => setEditFlags(e.target.value)}
+                                            placeholder="e.g. notifications, featured"
+                                            className="w-full px-3 py-2 bg-gray-755 border border-gray-650 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 pt-6">
+                                    <button
+                                        onClick={() => setIsEditingSettings(false)}
+                                        className="flex-1 py-2 bg-gray-700 hover:bg-gray-655 rounded-xl font-bold transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleSaveSettings}
+                                        className="flex-1 py-2 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 rounded-xl font-bold transition-all"
+                                    >
+                                        Save Changes
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Header */}
                     <div className="flex items-center justify-between mb-4">
                         <div>
@@ -997,8 +1100,39 @@ const Tournament: React.FC<TournamentProps> = ({
                                 {' • '}{activeTournament.pairingMode === 'swiss' ? 'Swiss' : 'Manual'}
                                 {' • '}{activeTournament.timerSettings ? `${(activeTournament.timerSettings as any).initialTime / 60}+${(activeTournament.timerSettings as any).increment}` : 'Unlimited'}
                             </div>
+                            {activeTournament.expectedStartDate && (
+                                <div className="text-xs text-gray-300 mt-1 flex items-center gap-1">
+                                    <span>📅 Scheduled:</span>
+                                    <span className="font-semibold text-yellow-400">
+                                        {new Date(activeTournament.expectedStartDate).toLocaleString(undefined, {
+                                            dateStyle: 'medium',
+                                            timeStyle: 'short'
+                                        })}
+                                    </span>
+                                    {activeTournament.timezone && (
+                                        <span className="text-gray-500 font-mono">({activeTournament.timezone})</span>
+                                    )}
+                                </div>
+                            )}
+                            {activeTournament.flags && activeTournament.flags.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                    {activeTournament.flags.map((flag, idx) => (
+                                        <span key={idx} className="bg-gray-800 text-gray-300 border border-gray-700 px-1.5 py-0.5 rounded text-[10px] font-semibold">
+                                            🏷️ {flag}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                         <div className="flex gap-2">
+                            {isHost && activeTournament.status !== 'finished' && (
+                                <button
+                                    onClick={() => setIsEditingSettings(true)}
+                                    className="px-3 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg font-semibold transition-colors text-sm flex items-center gap-1"
+                                >
+                                    ⚙️ Edit
+                                </button>
+                            )}
                             {isHost && (activeTournament.status === 'lobby' || players.filter(p => p.uid !== userId).length === 0) && (
                                 <button
                                     onClick={handleDeleteTournament}

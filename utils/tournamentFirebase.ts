@@ -519,3 +519,16 @@ export const recalculateTiebreaks = async (tournamentId: string): Promise<void> 
 
     await db.ref().update(updates);
 };
+
+// Update tournament details (host only)
+export const updateTournamentDetails = async (
+    tournamentId: string,
+    updates: {
+        name?: string;
+        expectedStartDate?: string;
+        timezone?: string;
+        flags?: string[];
+    }
+): Promise<void> => {
+    await db.ref(`tournaments/${tournamentId}`).update(updates);
+};
