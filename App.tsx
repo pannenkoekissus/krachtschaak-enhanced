@@ -207,6 +207,7 @@ const App: React.FC = () => {
     const [autoEnPassant, _setAutoEnPassant] = useState<AutoSetting>(() => (localStorage.getItem('autoEnPassant') as AutoSetting) || AutoSetting.Never);
     const [notificationsEnabled, _setNotificationsEnabled] = useState(() => localStorage.getItem('notificationsEnabled') === 'true');
     const [notificationFlags, _setNotificationFlags] = useState(() => localStorage.getItem('notificationFlags') || '');
+    const [notifyTurnCorrespondence, _setNotifyTurnCorrespondence] = useState(() => localStorage.getItem('notifyTurnCorrespondence') === 'true');
 
     const setNotificationsEnabled = async (enabled: boolean) => {
         _setNotificationsEnabled(enabled);
@@ -234,6 +235,29 @@ const App: React.FC = () => {
     const setNotificationFlags = (flags: string) => {
         _setNotificationFlags(flags);
         localStorage.setItem('notificationFlags', flags);
+    };
+
+    const setNotifyTurnCorrespondence = async (enabled: boolean) => {
+        _setNotifyTurnCorrespondence(enabled);
+        updateSetting('notifyTurnCorrespondence', enabled);
+        if (enabled) {
+            try {
+                if ('Notification' in window) {
+                    if (Notification.permission !== 'granted') {
+                        await Notification.requestPermission();
+                    }
+                }
+                const capLocal = await import('@capacitor/local-notifications').catch(() => null);
+                if (capLocal && capLocal.LocalNotifications) {
+                    const perm = await capLocal.LocalNotifications.checkPermissions();
+                    if (perm.display !== 'granted') {
+                        await capLocal.LocalNotifications.requestPermissions();
+                    }
+                }
+            } catch (e) {
+                console.error('Error requesting notification permission', e);
+            }
+        }
     };
 
 
@@ -584,10 +608,89 @@ const App: React.FC = () => {
                     if (val.soundsEnabled !== undefined) _setSoundsEnabled(val.soundsEnabled);
                     if (val.autoQueen !== undefined) _setAutoQueen(val.autoQueen);
                     if (val.autoEnPassant !== undefined) _setAutoEnPassant(val.autoEnPassant);
+                    if (val.notifyTurnCorrespondence !== undefined) _setNotifyTurnCorrespondence(val.notifyTurnCorrespondence);
                 }
             });
         }
     }, [currentUser]);
+
+    // Turn change notification for correspondence games
+    useEffect(() => {
+        if (!currentUser || !notifyTurnCorrespondence) return;
+
+        let storedStates: Record<string, boolean> = {};
+        try {
+            const stored = localStorage.getItem('correspondence_turn_states');
+            if (stored) {
+                storedStates = JSON.parse(stored);
+            }
+        } catch (e) {
+            console.error('Error parsing correspondence_turn_states', e);
+        }
+
+        const isFirstLoad = Object.keys(storedStates).length === 0;
+        const newStates: Record<string, boolean> = {};
+        let hasChanges = false;
+
+        Object.entries(allMyGamesData).forEach(([gameId, gameData]) => {
+            const myColor = gameData.playerColors.white === currentUser.uid ? Color.White : Color.Black;
+            const isPlaying = gameData.status === 'playing';
+            const isMyTurn = isPlaying && gameData.turn === myColor;
+            newStates[gameId] = isMyTurn;
+
+            const isCorrespondence = gameData.timerSettings && 'daysPerMove' in gameData.timerSettings;
+
+            if (isCorrespondence && isPlaying) {
+                const wasMyTurn = storedStates[gameId];
+                if (wasMyTurn !== isMyTurn) {
+                    hasChanges = true;
+                    // Trigger notification only if it wasn't the first load, and it transitioned from false to true
+                    if (!isFirstLoad && wasMyTurn === false && isMyTurn === true) {
+                        const opponentColor = myColor === Color.White ? Color.Black : Color.White;
+                        const opponentUid = gameData.playerColors[opponentColor];
+                        const opponentName = opponentUid && gameData.players?.[opponentUid]?.displayName || 'Opponent';
+                        const ratingCat = gameData.ratingCategory || 'Correspondence';
+
+                        const title = `Your turn!`;
+                        const body = `It is your turn against ${opponentName} in a ${ratingCat} game.`;
+
+                        // Send browser notification
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification(title, { body });
+                        }
+
+                        else {// Send Capacitor local notification
+                            import('@capacitor/local-notifications').then((capLocal) => {
+                                if (capLocal && capLocal.LocalNotifications) {
+                                    capLocal.LocalNotifications.schedule({
+                                        notifications: [
+                                            {
+                                                title: title,
+                                                body: body,
+                                                id: Math.floor(Math.random() * 1000000),
+                                                schedule: { at: new Date(Date.now() + 1000) }
+                                            }
+                                        ]
+                                    }).catch(e => console.error('Failed to schedule local notification', e));
+                                }
+                            }).catch(() => { });
+                        }
+                    }
+                }
+            }
+        });
+
+        // Clean up storedStates to only contain current active/waiting games to avoid infinite growth
+        const cleanedStates: Record<string, boolean> = {};
+        Object.keys(allMyGamesData).forEach(gameId => {
+            cleanedStates[gameId] = newStates[gameId];
+        });
+
+        // If this is the first load and we initialized states, or if states changed, save to localStorage
+        if (isFirstLoad || hasChanges || Object.keys(storedStates).length !== Object.keys(cleanedStates).length) {
+            localStorage.setItem('correspondence_turn_states', JSON.stringify(cleanedStates));
+        }
+    }, [allMyGamesData, currentUser, notifyTurnCorrespondence]);
 
     // URL Deep Linking for Analysis
     useEffect(() => {
@@ -3836,6 +3939,8 @@ const App: React.FC = () => {
                             setNotificationsEnabled={setNotificationsEnabled}
                             notificationFlags={notificationFlags}
                             setNotificationFlags={setNotificationFlags}
+                            notifyTurnCorrespondence={notifyTurnCorrespondence}
+                            setNotifyTurnCorrespondence={setNotifyTurnCorrespondence}
                         />
                     )}
                 </div>
@@ -3875,6 +3980,8 @@ const App: React.FC = () => {
                     setAutoQueen={setAutoQueen}
                     autoEnPassant={autoEnPassant}
                     setAutoEnPassant={setAutoEnPassant}
+                    notifyTurnCorrespondence={notifyTurnCorrespondence}
+                    setNotifyTurnCorrespondence={setNotifyTurnCorrespondence}
                     currentLobbyTab={lobbyView}
                     setCurrentLobbyTab={setLobbyView}
                     allMyGames={allMyGamesData}

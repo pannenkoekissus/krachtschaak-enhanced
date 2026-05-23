@@ -39,6 +39,8 @@ interface OnlineLobbyProps {
     setAutoQueen: (val: AutoSetting) => void;
     autoEnPassant: AutoSetting;
     setAutoEnPassant: (val: AutoSetting) => void;
+    notifyTurnCorrespondence: boolean;
+    setNotifyTurnCorrespondence: (enabled: boolean) => void;
     // State props
     currentLobbyTab: LobbyTab;
     setCurrentLobbyTab: (tab: LobbyTab) => void;
@@ -517,6 +519,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
     drawConfirmationEnabled, setDrawConfirmationEnabled, resignConfirmationEnabled, setResignConfirmationEnabled,
     showPowerPieces, setShowPowerPieces, showPowerRings, setShowPowerRings, showOriginalType, setShowOriginalType, soundsEnabled, setSoundsEnabled,
     autoQueen, setAutoQueen, autoEnPassant, setAutoEnPassant,
+    notifyTurnCorrespondence, setNotifyTurnCorrespondence,
     currentLobbyTab, setCurrentLobbyTab, onSpectate, onAnalyse,
     allMyGames, incomingChallenges, sentChallenges,
     pendingChallengeKFen, setPendingChallengeKFen, onViewPositionChallenge
@@ -1711,6 +1714,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                     setNotificationsEnabled={setNotificationsEnabled}
                     notificationFlags={notificationFlags}
                     setNotificationFlags={setNotificationFlags}
+                    notifyTurnCorrespondence={notifyTurnCorrespondence}
+                    setNotifyTurnCorrespondence={setNotifyTurnCorrespondence}
                 />
             )}
         </div>

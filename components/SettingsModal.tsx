@@ -28,6 +28,8 @@ interface SettingsModalProps {
     setNotificationsEnabled: (enabled: boolean) => void;
     notificationFlags: string;
     setNotificationFlags: (flags: string) => void;
+    notifyTurnCorrespondence: boolean;
+    setNotifyTurnCorrespondence: (enabled: boolean) => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -55,7 +57,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     notificationsEnabled,
     setNotificationsEnabled,
     notificationFlags,
-    setNotificationFlags
+    setNotificationFlags,
+    notifyTurnCorrespondence,
+    setNotifyTurnCorrespondence,
 }) => {
     const renderToggle = (label: string, description: string, value: boolean, onChange: (val: boolean) => void) => (
         <div className="flex items-center justify-between py-3 group hover:bg-gray-700/30 px-4 rounded-xl transition-all">
@@ -164,6 +168,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         <SectionHeader title="Notifications" icon="🔔" />
                         <div className="bg-gray-900/40 rounded-2xl border border-white/5 py-4 px-4 flex flex-col gap-4">
                             {renderToggle('Enable Notifications', 'Receive notifications for tournaments starting in 1 hour', notificationsEnabled, setNotificationsEnabled)}
+                            {renderToggle('Notify on Correspondence Turn','Receive notification when it\'s your turn in a correspondence game', notifyTurnCorrespondence, setNotifyTurnCorrespondence)}
                             {notificationsEnabled && (
                                 <div className="flex flex-col gap-2 transition-all">
                                     <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Notify for Flags</label>
