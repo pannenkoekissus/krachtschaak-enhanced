@@ -40,8 +40,8 @@ function setVal(key, val) {
 
 self.addEventListener('message', (event) => {
     if (event.data && event.data.type === 'UPDATE_USER_INFO') {
-        const { uid, notifyTurnCorrespondence, notificationsEnabled, notificationFlags } = event.data;
-        setVal('user_info', { uid, notifyTurnCorrespondence, notificationsEnabled, notificationFlags });
+        const { uid, notifyTurnCorrespondence, notificationsEnabled, notificationFlags, notifyDirectChallenges, notifyDirectTimeControls, notifyOpenChallenges, notifyOpenTimeControls } = event.data;
+        setVal('user_info', { uid, notifyTurnCorrespondence, notificationsEnabled, notificationFlags, notifyDirectChallenges, notifyDirectTimeControls, notifyOpenChallenges, notifyOpenTimeControls });
     }
 });
 
@@ -165,6 +165,110 @@ async function checkNotifications() {
             }
         } catch (e) {
             console.error('SW: Error checking correspondence turns', e);
+        }
+    }
+
+    // 3. Check Direct Challenges
+    if (userInfo.notifyDirectChallenges) {
+        try {
+            const res = await fetch(`${dbUrl}/challenges/${userInfo.uid}.json`);
+            if (res.status === 200) {
+                const challenges = await res.json();
+                if (challenges) {
+                    let notified = await getVal('notified_direct_challenges') || {};
+                    let changed = false;
+                    const userFlags = (userInfo.notifyDirectTimeControls || '').split(',').map(s => s.trim().toLowerCase()).filter(s => s);
+
+                    for (const [id, c] of Object.entries(challenges)) {
+                        if (!notified[id]) {
+                            let ratingCat = 'blitz';
+                            if (c.timerSettings) {
+                                if ('daysPerMove' in c.timerSettings) ratingCat = 'daily';
+                                else {
+                                    const init = c.timerSettings.initialTime;
+                                    if (init < 60) ratingCat = 'hyperbullet';
+                                    else if (init < 180) ratingCat = 'bullet';
+                                    else if (init < 480) ratingCat = 'blitz';
+                                    else ratingCat = 'rapid';
+                                }
+                            } else {
+                                ratingCat = 'unlimited';
+                            }
+
+                            let shouldNotify = true;
+                            if (userFlags.length > 0) {
+                                shouldNotify = userFlags.includes(ratingCat);
+                            }
+
+                            if (shouldNotify) {
+                                notified[id] = true;
+                                changed = true;
+
+                                const challengerName = c.challengerName || 'Someone';
+                                self.registration.showNotification('Direct Challenge Received!', {
+                                    body: `${challengerName} has challenged you to a ${ratingCat} game.`,
+                                    icon: '/icons/icon-192.png',
+                                    badge: '/icons/icon-192.png'
+                                });
+                            }
+                        }
+                    }
+
+                    if (changed) {
+                        await setVal('notified_direct_challenges', notified);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('SW: Error checking direct challenges', e);
+        }
+    }
+
+    // 4. Check Open Challenges
+    if (userInfo.notifyOpenChallenges) {
+        try {
+            const res = await fetch(`${dbUrl}/games.json?orderBy="status"&equalTo="waiting"`);
+            if (res.status === 200) {
+                const games = await res.json();
+                if (games) {
+                    let notified = await getVal('notified_open_challenges') || {};
+                    let changed = false;
+                    const userFlags = (userInfo.notifyOpenTimeControls || '').split(',').map(s => s.trim().toLowerCase()).filter(s => s);
+
+                    for (const [id, gameData] of Object.entries(games)) {
+                        if (!gameData.challengedPlayerInfo && gameData.playerColors && !notified[id]) {
+                            const creatorUid = gameData.playerColors.white || gameData.playerColors.black;
+                            
+                            if (creatorUid && creatorUid !== userInfo.uid) {
+                                const ratingCat = (gameData.ratingCategory || 'blitz').toLowerCase();
+
+                                let shouldNotify = true;
+                                if (userFlags.length > 0) {
+                                    shouldNotify = userFlags.includes(ratingCat);
+                                }
+
+                                if (shouldNotify) {
+                                    notified[id] = true;
+                                    changed = true;
+
+                                    const creatorName = gameData.players?.[creatorUid]?.displayName || 'Someone';
+                                    self.registration.showNotification('New Open Challenge!', {
+                                        body: `${creatorName} is waiting to play a ${ratingCat} game.`,
+                                        icon: '/icons/icon-192.png',
+                                        badge: '/icons/icon-192.png'
+                                    });
+                                }
+                            }
+                        }
+                    }
+
+                    if (changed) {
+                        await setVal('notified_open_challenges', notified);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('SW: Error checking open challenges', e);
         }
     }
 }

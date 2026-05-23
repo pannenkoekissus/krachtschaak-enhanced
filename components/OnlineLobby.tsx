@@ -41,6 +41,14 @@ interface OnlineLobbyProps {
     setAutoEnPassant: (val: AutoSetting) => void;
     notifyTurnCorrespondence: boolean;
     setNotifyTurnCorrespondence: (enabled: boolean) => void;
+    notifyDirectChallenges: boolean;
+    setNotifyDirectChallenges: (enabled: boolean) => void;
+    notifyDirectTimeControls: string;
+    setNotifyDirectTimeControls: (val: string) => void;
+    notifyOpenChallenges: boolean;
+    setNotifyOpenChallenges: (enabled: boolean) => void;
+    notifyOpenTimeControls: string;
+    setNotifyOpenTimeControls: (val: string) => void;
     // State props
     currentLobbyTab: LobbyTab;
     setCurrentLobbyTab: (tab: LobbyTab) => void;
@@ -520,6 +528,10 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
     showPowerPieces, setShowPowerPieces, showPowerRings, setShowPowerRings, showOriginalType, setShowOriginalType, soundsEnabled, setSoundsEnabled,
     autoQueen, setAutoQueen, autoEnPassant, setAutoEnPassant,
     notifyTurnCorrespondence, setNotifyTurnCorrespondence,
+    notifyDirectChallenges, setNotifyDirectChallenges,
+    notifyDirectTimeControls, setNotifyDirectTimeControls,
+    notifyOpenChallenges, setNotifyOpenChallenges,
+    notifyOpenTimeControls, setNotifyOpenTimeControls,
     currentLobbyTab, setCurrentLobbyTab, onSpectate, onAnalyse,
     allMyGames, incomingChallenges, sentChallenges,
     pendingChallengeKFen, setPendingChallengeKFen, onViewPositionChallenge
@@ -1716,6 +1728,14 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                     setNotificationFlags={setNotificationFlags}
                     notifyTurnCorrespondence={notifyTurnCorrespondence}
                     setNotifyTurnCorrespondence={setNotifyTurnCorrespondence}
+                    notifyDirectChallenges={notifyDirectChallenges}
+                    setNotifyDirectChallenges={setNotifyDirectChallenges}
+                    notifyDirectTimeControls={notifyDirectTimeControls}
+                    setNotifyDirectTimeControls={setNotifyDirectTimeControls}
+                    notifyOpenChallenges={notifyOpenChallenges}
+                    setNotifyOpenChallenges={setNotifyOpenChallenges}
+                    notifyOpenTimeControls={notifyOpenTimeControls}
+                    setNotifyOpenTimeControls={setNotifyOpenTimeControls}
                 />
             )}
         </div>

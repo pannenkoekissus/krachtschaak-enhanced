@@ -30,6 +30,14 @@ interface SettingsModalProps {
     setNotificationFlags: (flags: string) => void;
     notifyTurnCorrespondence: boolean;
     setNotifyTurnCorrespondence: (enabled: boolean) => void;
+    notifyDirectChallenges: boolean;
+    setNotifyDirectChallenges: (enabled: boolean) => void;
+    notifyDirectTimeControls: string;
+    setNotifyDirectTimeControls: (val: string) => void;
+    notifyOpenChallenges: boolean;
+    setNotifyOpenChallenges: (enabled: boolean) => void;
+    notifyOpenTimeControls: string;
+    setNotifyOpenTimeControls: (val: string) => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -60,6 +68,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     setNotificationFlags,
     notifyTurnCorrespondence,
     setNotifyTurnCorrespondence,
+    notifyDirectChallenges,
+    setNotifyDirectChallenges,
+    notifyDirectTimeControls,
+    setNotifyDirectTimeControls,
+    notifyOpenChallenges,
+    setNotifyOpenChallenges,
+    notifyOpenTimeControls,
+    setNotifyOpenTimeControls,
 }) => {
     const renderToggle = (label: string, description: string, value: boolean, onChange: (val: boolean) => void) => (
         <div className="flex items-center justify-between py-3 group hover:bg-gray-700/30 px-4 rounded-xl transition-all">
@@ -168,7 +184,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         <SectionHeader title="Notifications" icon="🔔" />
                         <div className="bg-gray-900/40 rounded-2xl border border-white/5 py-4 px-4 flex flex-col gap-4">
                             {renderToggle('Enable Notifications', 'Receive notifications for tournaments starting in 1 hour', notificationsEnabled, setNotificationsEnabled)}
-                            {renderToggle('Notify on Correspondence Turn','Receive notification when it\'s your turn in a correspondence game', notifyTurnCorrespondence, setNotifyTurnCorrespondence)}
                             {notificationsEnabled && (
                                 <div className="flex flex-col gap-2 transition-all">
                                     <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Notify for Flags</label>
@@ -182,6 +197,38 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                     <p className="text-xs text-gray-500 mt-1">Receive notifications only for tournaments containing these flags. Leave empty to receive for all.</p>
                                 </div>
                             )}
+                            {renderToggle('Notify on Correspondence Turn', 'Receive notification when it\'s your turn in a correspondence game', notifyTurnCorrespondence, setNotifyTurnCorrespondence)}
+
+                            {renderToggle('Notify on Direct Challenges', 'Receive notification when someone challenges you directly', notifyDirectChallenges, setNotifyDirectChallenges)}
+                            {notifyDirectChallenges && (
+                                <div className="flex flex-col gap-2 transition-all">
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Direct Challenge Time Controls</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. blitz, bullet, daily (comma separated)"
+                                        value={notifyDirectTimeControls}
+                                        onChange={(e) => setNotifyDirectTimeControls(e.target.value)}
+                                        className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-500"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">Receive notifications only for these time controls. Leave empty to receive for all.</p>
+                                </div>
+                            )}
+
+                            {renderToggle('Notify on Open Challenges', 'Receive notification when someone creates an open lobby game', notifyOpenChallenges, setNotifyOpenChallenges)}
+                            {notifyOpenChallenges && (
+                                <div className="flex flex-col gap-2 transition-all">
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Open Challenge Time Controls</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. blitz, daily, rapid (comma separated)"
+                                        value={notifyOpenTimeControls}
+                                        onChange={(e) => setNotifyOpenTimeControls(e.target.value)}
+                                        className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-500"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">Receive notifications only for these time controls. Leave empty to receive for all.</p>
+                                </div>
+                            )}
+
                         </div>
                     </section>
                 </div>

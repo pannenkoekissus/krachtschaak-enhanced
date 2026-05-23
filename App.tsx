@@ -208,6 +208,10 @@ const App: React.FC = () => {
     const [notificationsEnabled, _setNotificationsEnabled] = useState(() => localStorage.getItem('notificationsEnabled') === 'true');
     const [notificationFlags, _setNotificationFlags] = useState(() => localStorage.getItem('notificationFlags') || '');
     const [notifyTurnCorrespondence, _setNotifyTurnCorrespondence] = useState(() => localStorage.getItem('notifyTurnCorrespondence') === 'true');
+    const [notifyDirectChallenges, _setNotifyDirectChallenges] = useState(() => localStorage.getItem('notifyDirectChallenges') !== 'false');
+    const [notifyDirectTimeControls, _setNotifyDirectTimeControls] = useState(() => localStorage.getItem('notifyDirectTimeControls') || '');
+    const [notifyOpenChallenges, _setNotifyOpenChallenges] = useState(() => localStorage.getItem('notifyOpenChallenges') === 'true');
+    const [notifyOpenTimeControls, _setNotifyOpenTimeControls] = useState(() => localStorage.getItem('notifyOpenTimeControls') || '');
 
     const setNotificationsEnabled = async (enabled: boolean) => {
         _setNotificationsEnabled(enabled);
@@ -258,6 +262,44 @@ const App: React.FC = () => {
                 console.error('Error requesting notification permission', e);
             }
         }
+    };
+
+    const setNotifyDirectChallenges = async (enabled: boolean) => {
+        _setNotifyDirectChallenges(enabled);
+        updateSetting('notifyDirectChallenges', enabled);
+        if (enabled) {
+            try {
+                if ('Notification' in window && Notification.permission !== 'granted') {
+                    await Notification.requestPermission();
+                }
+            } catch (e) {
+                console.error('Error requesting notification permission', e);
+            }
+        }
+    };
+
+    const setNotifyDirectTimeControls = (val: string) => {
+        _setNotifyDirectTimeControls(val);
+        updateSetting('notifyDirectTimeControls', val);
+    };
+
+    const setNotifyOpenChallenges = async (enabled: boolean) => {
+        _setNotifyOpenChallenges(enabled);
+        updateSetting('notifyOpenChallenges', enabled);
+        if (enabled) {
+            try {
+                if ('Notification' in window && Notification.permission !== 'granted') {
+                    await Notification.requestPermission();
+                }
+            } catch (e) {
+                console.error('Error requesting notification permission', e);
+            }
+        }
+    };
+
+    const setNotifyOpenTimeControls = (val: string) => {
+        _setNotifyOpenTimeControls(val);
+        updateSetting('notifyOpenTimeControls', val);
     };
 
 
@@ -365,11 +407,11 @@ const App: React.FC = () => {
                                 if (shouldNotify && capLocal && capLocal.LocalNotifications) {
                                     try {
                                         const numericId = Math.abs(t.id.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0)) % 1000000;
-                                        
+
                                         // Cancel previous one if it exists to avoid duplicates
                                         await capLocal.LocalNotifications.cancel({
                                             notifications: [{ id: numericId }]
-                                        }).catch(() => {});
+                                        }).catch(() => { });
 
                                         await capLocal.LocalNotifications.schedule({
                                             notifications: [
@@ -408,7 +450,7 @@ const App: React.FC = () => {
                                     new Notification(title, { body });
                                 }
 
-                                if (capLocal && capLocal.LocalNotifications) {
+                                else if (capLocal && capLocal.LocalNotifications) {
                                     try {
                                         const numericId = Math.abs(t.id.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0)) % 1000000;
                                         await capLocal.LocalNotifications.schedule({
@@ -439,7 +481,7 @@ const App: React.FC = () => {
                                 const numericId = Math.abs(scheduledId.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0)) % 1000000;
                                 await capLocal.LocalNotifications.cancel({
                                     notifications: [{ id: numericId }]
-                                }).catch(() => {});
+                                }).catch(() => { });
                             } catch (e) {
                                 console.error('Failed to cancel tournament notification', e);
                             }
@@ -677,6 +719,10 @@ const App: React.FC = () => {
                     if (val.autoQueen !== undefined) _setAutoQueen(val.autoQueen);
                     if (val.autoEnPassant !== undefined) _setAutoEnPassant(val.autoEnPassant);
                     if (val.notifyTurnCorrespondence !== undefined) _setNotifyTurnCorrespondence(val.notifyTurnCorrespondence);
+                    if (val.notifyDirectChallenges !== undefined) _setNotifyDirectChallenges(val.notifyDirectChallenges);
+                    if (val.notifyDirectTimeControls !== undefined) _setNotifyDirectTimeControls(val.notifyDirectTimeControls);
+                    if (val.notifyOpenChallenges !== undefined) _setNotifyOpenChallenges(val.notifyOpenChallenges);
+                    if (val.notifyOpenTimeControls !== undefined) _setNotifyOpenTimeControls(val.notifyOpenTimeControls);
                 }
             });
         }
@@ -771,12 +817,16 @@ const App: React.FC = () => {
                         uid: currentUser ? currentUser.uid : null,
                         notifyTurnCorrespondence: notifyTurnCorrespondence,
                         notificationsEnabled: notificationsEnabled,
-                        notificationFlags: notificationFlags
+                        notificationFlags: notificationFlags,
+                        notifyDirectChallenges: notifyDirectChallenges,
+                        notifyDirectTimeControls: notifyDirectTimeControls,
+                        notifyOpenChallenges: notifyOpenChallenges,
+                        notifyOpenTimeControls: notifyOpenTimeControls
                     });
                 }
 
                 // If user wants notifications, try to register periodic sync
-                const wantsNotifications = notificationsEnabled || notifyTurnCorrespondence;
+                const wantsNotifications = notificationsEnabled || notifyTurnCorrespondence || notifyDirectChallenges || notifyOpenChallenges;
                 if (wantsNotifications && 'periodicSync' in registration) {
                     navigator.permissions.query({
                         name: 'periodic-background-sync' as any
@@ -796,7 +846,162 @@ const App: React.FC = () => {
                 }
             });
         }
-    }, [currentUser, notifyTurnCorrespondence, notificationsEnabled, notificationFlags]);
+    }, [currentUser, notifyTurnCorrespondence, notificationsEnabled, notificationFlags, notifyDirectChallenges, notifyDirectTimeControls, notifyOpenChallenges, notifyOpenTimeControls]);
+
+    // Direct challenge notifications
+    const prevDirectChallengesRef = useRef<Record<string, boolean>>({});
+    const isFirstDirectRunRef = useRef(true);
+
+    useEffect(() => {
+        if (!currentUser || !notifyDirectChallenges) {
+            // Keep ref updated
+            const initialMap: Record<string, boolean> = {};
+            incomingChallenges.forEach(c => initialMap[c.id] = true);
+            prevDirectChallengesRef.current = initialMap;
+            return;
+        }
+
+        if (isFirstDirectRunRef.current) {
+            const initialMap: Record<string, boolean> = {};
+            incomingChallenges.forEach(c => initialMap[c.id] = true);
+            prevDirectChallengesRef.current = initialMap;
+            isFirstDirectRunRef.current = false;
+            return;
+        }
+
+        const currentDirectChallenges: Record<string, boolean> = {};
+        const userFlags = notifyDirectTimeControls.split(',').map(s => s.trim().toLowerCase()).filter(s => s);
+
+        incomingChallenges.forEach((challenge) => {
+            currentDirectChallenges[challenge.id] = true;
+
+            const wasDirect = prevDirectChallengesRef.current[challenge.id];
+            if (wasDirect === undefined) {
+                const ratingCat = getRatingCategory(challenge.timerSettings).toLowerCase();
+
+                let shouldNotify = true;
+                if (userFlags.length > 0) {
+                    shouldNotify = userFlags.includes(ratingCat);
+                }
+
+                if (shouldNotify) {
+                    const challengerName = challenge.fromName || 'Someone';
+                    const title = `Direct Challenge Received!`;
+                    const body = `${challengerName} has challenged you to a ${ratingCat} game.`;
+
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        new Notification(title, { body });
+                    }
+                    else {
+                        import('@capacitor/local-notifications').then((capLocal) => {
+                            if (capLocal && capLocal.LocalNotifications) {
+                                capLocal.LocalNotifications.schedule({
+                                    notifications: [
+                                        {
+                                            title: title,
+                                            body: body,
+                                            id: Math.floor(Math.random() * 1000000),
+                                            schedule: { at: new Date(Date.now() + 1000) }
+                                        }
+                                    ]
+                                }).catch(e => console.error('Failed to schedule local notification', e));
+                            }
+                        }).catch(() => { });
+                    }
+                }
+            }
+        });
+
+        prevDirectChallengesRef.current = currentDirectChallenges;
+    }, [incomingChallenges, currentUser, notifyDirectChallenges, notifyDirectTimeControls]);
+
+
+    // Open challenge notifications
+    const prevOpenChallengesRef = useRef<Record<string, boolean>>({});
+    const isFirstOpenRunRef = useRef(true);
+
+    useEffect(() => {
+        if (!currentUser || !notifyOpenChallenges || !isOnline) {
+            prevOpenChallengesRef.current = {};
+            isFirstOpenRunRef.current = true;
+            return;
+        }
+
+        const gamesRef = db.ref('games');
+        const listener = (snapshot: any) => {
+            const gamesData = snapshot.val() || {};
+            const currentOpenChallenges: Record<string, boolean> = {};
+            const userFlags = notifyOpenTimeControls.split(',').map(s => s.trim().toLowerCase()).filter(s => s);
+
+            if (isFirstOpenRunRef.current) {
+                Object.entries(gamesData).forEach(([gameId, val]) => {
+                    const gameData = val as any;
+                    if (gameData && gameData.status === 'waiting' && !gameData.challengedPlayerInfo && gameData.playerColors) {
+                        const creatorUid = gameData.playerColors.white || gameData.playerColors.black;
+                        if (creatorUid && creatorUid !== currentUser.uid) {
+                            currentOpenChallenges[gameId] = true;
+                        }
+                    }
+                });
+                prevOpenChallengesRef.current = currentOpenChallenges;
+                isFirstOpenRunRef.current = false;
+                return;
+            }
+
+            Object.entries(gamesData).forEach(([gameId, val]) => {
+                const gameData = val as any;
+                if (gameData && gameData.status === 'waiting' && !gameData.challengedPlayerInfo && gameData.playerColors) {
+                    const creatorUid = gameData.playerColors.white || gameData.playerColors.black;
+
+                    if (creatorUid && creatorUid !== currentUser.uid) {
+                        currentOpenChallenges[gameId] = true;
+
+                        const wasOpen = prevOpenChallengesRef.current[gameId];
+                        if (wasOpen === undefined) {
+                            const ratingCat = gameData.ratingCategory || 'blitz';
+
+                            let shouldNotify = true;
+                            if (userFlags.length > 0) {
+                                shouldNotify = userFlags.includes(ratingCat.toLowerCase());
+                            }
+
+                            if (shouldNotify) {
+                                const creatorName = gameData.players?.[creatorUid]?.displayName || 'Someone';
+                                const title = `New Open Challenge!`;
+                                const body = `${creatorName} is waiting to play a ${ratingCat} game.`;
+
+                                if ('Notification' in window && Notification.permission === 'granted') {
+                                    new Notification(title, { body });
+                                }
+
+                                import('@capacitor/local-notifications').then((capLocal) => {
+                                    if (capLocal && capLocal.LocalNotifications) {
+                                        capLocal.LocalNotifications.schedule({
+                                            notifications: [
+                                                {
+                                                    title: title,
+                                                    body: body,
+                                                    id: Math.floor(Math.random() * 1000000),
+                                                    schedule: { at: new Date(Date.now() + 1000) }
+                                                }
+                                            ]
+                                        }).catch(e => console.error('Failed to schedule local notification', e));
+                                    }
+                                }).catch(() => { });
+                            }
+                        }
+                    }
+                }
+            });
+
+            prevOpenChallengesRef.current = currentOpenChallenges;
+        };
+
+        gamesRef.on('value', listener);
+        return () => {
+            gamesRef.off('value', listener);
+        };
+    }, [currentUser, notifyOpenChallenges, notifyOpenTimeControls, isOnline]);
 
     // URL Deep Linking for Analysis
     useEffect(() => {
@@ -4047,6 +4252,14 @@ const App: React.FC = () => {
                             setNotificationFlags={setNotificationFlags}
                             notifyTurnCorrespondence={notifyTurnCorrespondence}
                             setNotifyTurnCorrespondence={setNotifyTurnCorrespondence}
+                            notifyDirectChallenges={notifyDirectChallenges}
+                            setNotifyDirectChallenges={setNotifyDirectChallenges}
+                            notifyDirectTimeControls={notifyDirectTimeControls}
+                            setNotifyDirectTimeControls={setNotifyDirectTimeControls}
+                            notifyOpenChallenges={notifyOpenChallenges}
+                            setNotifyOpenChallenges={setNotifyOpenChallenges}
+                            notifyOpenTimeControls={notifyOpenTimeControls}
+                            setNotifyOpenTimeControls={setNotifyOpenTimeControls}
                         />
                     )}
                 </div>
@@ -4088,6 +4301,14 @@ const App: React.FC = () => {
                     setAutoEnPassant={setAutoEnPassant}
                     notifyTurnCorrespondence={notifyTurnCorrespondence}
                     setNotifyTurnCorrespondence={setNotifyTurnCorrespondence}
+                    notifyDirectChallenges={notifyDirectChallenges}
+                    setNotifyDirectChallenges={setNotifyDirectChallenges}
+                    notifyDirectTimeControls={notifyDirectTimeControls}
+                    setNotifyDirectTimeControls={setNotifyDirectTimeControls}
+                    notifyOpenChallenges={notifyOpenChallenges}
+                    setNotifyOpenChallenges={setNotifyOpenChallenges}
+                    notifyOpenTimeControls={notifyOpenTimeControls}
+                    setNotifyOpenTimeControls={setNotifyOpenTimeControls}
                     currentLobbyTab={lobbyView}
                     setCurrentLobbyTab={setLobbyView}
                     allMyGames={allMyGamesData}
