@@ -21,6 +21,7 @@ capacitor*
 assets
 firebase.json
 database.rules.json
+database.json
 .firebaserc
 
 # Editor directories and files

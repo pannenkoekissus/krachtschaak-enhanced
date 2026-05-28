@@ -747,7 +747,7 @@ const App: React.FC = () => {
         let hasChanges = false;
 
         Object.entries(allMyGamesData).forEach(([gameId, gameData]) => {
-            const myColor = gameData.playerColors.white === currentUser.uid ? Color.White : Color.Black;
+            const myColor = gameData.playerColors?.white === currentUser.uid ? Color.White : Color.Black;
             const isPlaying = gameData.status === 'playing';
             const isMyTurn = isPlaying && gameData.turn === myColor;
             newStates[gameId] = isMyTurn;
@@ -761,7 +761,7 @@ const App: React.FC = () => {
                     // Trigger notification only if it wasn't the first load, and it transitioned from false to true
                     if (!isFirstLoad && wasMyTurn === false && isMyTurn === true) {
                         const opponentColor = myColor === Color.White ? Color.Black : Color.White;
-                        const opponentUid = gameData.playerColors[opponentColor];
+                        const opponentUid = gameData.playerColors?.[opponentColor];
                         const opponentName = opponentUid && gameData.players?.[opponentUid]?.displayName || 'Opponent';
                         const ratingCat = gameData.ratingCategory || 'Correspondence';
 
@@ -1825,6 +1825,7 @@ const App: React.FC = () => {
         setIsForcePowerMode(false);
         setDraggedPiece(null);
         setActiveTab('controls');
+        setReviewingHistoryIndex(null);
     }, []);
 
     const handleOnlineGameStart = useCallback((id: string, color: Color) => {
@@ -1841,7 +1842,7 @@ const App: React.FC = () => {
         setIsForcePowerMode(false);
         setDraggedPiece(null);
         setActiveTab('controls');
-
+        setReviewingHistoryIndex(null);
     }, []);
 
     // Background Global Monitor for Low Time "Warping" & Lobby Data Sync
@@ -1889,7 +1890,7 @@ const App: React.FC = () => {
 
                     // WARP LOGIC (if not currently in this game)
                     if (gid !== gameId) {
-                        const myColor = gameData.playerColors.white === currentUser.uid ? Color.White : Color.Black
+                        const myColor = gameData.playerColors?.white === currentUser.uid ? Color.White : Color.Black
 
                         // 2. Warp on Low Time (if playing and it's my turn)
                         if (gameData.status === 'playing' && gameData.turn === myColor) {
@@ -2061,6 +2062,7 @@ const App: React.FC = () => {
         setGameTournamentId(null);
         setGameTournamentRound(null);
         setGameTournamentPairingId(null);
+        setReviewingHistoryIndex(null);
     }, [gameId, myOnlineColor, currentUser, randomizeNextGameColor, gameMode, status, gameRef, timerSettings, ratingCategory, analysisReturnTo, lobbyView, reviewingGame, gameTournamentId]);
 
     const handleStartOnline = () => {
@@ -2101,7 +2103,7 @@ const App: React.FC = () => {
             gameSnapshots.forEach(snap => {
                 const game = snap.val() as GameState;
                 if (game && game.status === 'playing') {
-                    const myColor = game.playerColors.white === currentUser.uid ? Color.White : Color.Black;
+                    const myColor = game.playerColors?.white === currentUser.uid ? Color.White : Color.Black;
 
                     if (game.timerSettings && 'initialTime' in game.timerSettings) {
                         // Priority 1: Any active Real-time game
@@ -2126,7 +2128,7 @@ const App: React.FC = () => {
                 const gameId = activeRealTimeGames[0].id;
                 const gameSnapshot = gameSnapshots.find(s => s.key === gameId)!;
                 const gameData = gameSnapshot.val() as GameState;
-                const myColor = gameData.playerColors.white === currentUser.uid ? Color.White : Color.Black;
+                const myColor = gameData.playerColors?.white === currentUser.uid ? Color.White : Color.Black;
 
                 setLobbyView('current_games');
                 handleOnlineGameStart(gameId, myColor);
@@ -2139,7 +2141,7 @@ const App: React.FC = () => {
                 const gameId = activeCorrespondenceGames[0].id;
                 const gameSnapshot = gameSnapshots.find(s => s.key === gameId)!;
                 const gameData = gameSnapshot.val() as GameState;
-                const myColor = gameData.playerColors.white === currentUser.uid ? Color.White : Color.Black;
+                const myColor = gameData.playerColors?.white === currentUser.uid ? Color.White : Color.Black;
 
                 setLobbyView('current_games');
                 handleOnlineGameStart(gameId, myColor);
@@ -2179,7 +2181,7 @@ const App: React.FC = () => {
 
                 if (rawState.nextGameId) {
                     if (gameRef) gameRef.off('value', onGameUpdate);
-                    const myNewColor = rawState.playerColors.white === currentUser.uid ? Color.Black : Color.White;
+                    const myNewColor = rawState.playerColors?.white === currentUser.uid ? Color.Black : Color.White;
                     handleOnlineGameStart(rawState.nextGameId, myNewColor);
                     return;
                 }

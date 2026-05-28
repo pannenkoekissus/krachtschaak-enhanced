@@ -772,7 +772,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
 
         Object.entries(allMyGames).forEach(([gameId, gameData]) => {
             const data = gameData as GameState;
-            const myColor = data.playerColors.white === userUid ? Color.White : Color.Black;
+            const myColor = data.playerColors?.white === userUid ? Color.White : Color.Black;
 
             if (finishedStatuses.includes(data.status)) {
                 finishedGames.push({ id: gameId, data: data });
@@ -1109,7 +1109,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
 
         db.ref(`games/${gameToJoin.gameId}`).transaction(gameData => {
             if (gameData?.status === 'waiting') {
-                let joinedColor: Color | null = !gameData.playerColors.white ? Color.White : !gameData.playerColors.black ? Color.Black : null;
+                let joinedColor: Color | null = !gameData.playerColors?.white ? Color.White : !gameData.playerColors?.black ? Color.Black : null;
                 if (joinedColor) {
                     const playerInfo: PlayerInfo = { uid: userUid, displayName: displayName, disconnectTimestamp: null, ratings: myRatings };
                     gameData.players[userUid] = playerInfo;
@@ -1137,7 +1137,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                 setError(error ? 'Error joining game.' : 'Game no longer available.');
             } else {
                 const finalGameState = snapshot.val();
-                const myColor = finalGameState.playerColors.white === userUid ? Color.White : Color.Black;
+                const myColor = finalGameState.playerColors?.white === userUid ? Color.White : Color.Black;
                 db.ref(`userGames/${userUid}/${gameToJoin.gameId}`).set(true);
                 db.ref(`userGames/${gameToJoin.creatorUid}/${gameToJoin.gameId}`).set(true);
 
@@ -1221,7 +1221,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
     }, [openGames, filters]);
 
     const getGameResult = (game: GameState): { text: string, color: string } => {
-        const myColorName = game.playerColors.white === userUid ? "White" : "Black";
+        const myColorName = game.playerColors?.white === userUid ? "White" : "Black";
 
         if (game.winner) {
             if (game.winner === myColorName) return { text: "Win", color: "text-green-400" };
@@ -1526,7 +1526,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                         </div>
 
                         {filteredMyFinishedGames.slice(0, displayLimit).map(({ id, data }) => {
-                            const myColor = data.playerColors.white === userUid ? Color.White : Color.Black;
+                            const myColor = data.playerColors?.white === userUid ? Color.White : Color.Black;
                             const opponentColor = myColor === Color.White ? Color.Black : Color.White;
                             const opponentUid = data.playerColors[opponentColor];
                             const opponent = opponentUid ? data.players[opponentUid] : null;
