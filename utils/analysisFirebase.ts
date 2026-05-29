@@ -66,8 +66,13 @@ export const saveAnalysis = async (
       updatedAt: Date.now()
     });
     await db.ref(`/analyses/${userId}/${analysisId}`).set(sanitizedData);
-    // Also add to user's analysis list
-    await db.ref(`/userAnalyses/${userId}/${analysisId}`).set(true);
+    // Store only metadata in `/userAnalyses` to save massive bandwidth
+    await db.ref(`/userAnalyses/${userId}/${analysisId}`).set({
+      name: data.name || 'Untitled Analysis',
+      folderId: data.folderId || null,
+      createdAt: data.createdAt || Date.now(),
+      updatedAt: sanitizedData.updatedAt
+    });
   } catch (error) {
     console.error('Error saving analysis:', error);
     throw error;
@@ -112,12 +117,14 @@ export const updateAnalysisNode = async (
   lastNodeId: string
 ): Promise<void> => {
   try {
-    // 1. First, save the node data itself and update the timestamp
+    // 1. First, save the node data itself and update the timestamp in both analyses and userAnalyses
     // This ensures that when the parent's children list is updated or lastNodeId is changed,
     // the actual node data is already present in the database.
+    const now = Date.now();
     const updates: any = {
       [`/analyses/${userId}/${analysisId}/nodes/${newNodeId}`]: sanitizeForFirebase(nodeData),
-      [`/analyses/${userId}/${analysisId}/updatedAt`]: Date.now()
+      [`/analyses/${userId}/${analysisId}/updatedAt`]: now,
+      [`/userAnalyses/${userId}/${analysisId}/updatedAt`]: now
     };
     await db.ref().update(updates);
 
@@ -236,11 +243,9 @@ export const getAnalysesByFolder = async (
   folderId: string | null
 ): Promise<Record<string, SavedAnalysis>> => {
   try {
-    const snapshot = await db.ref(`/analyses/${userId}`).once('value');
-    const analyses = snapshot.val() || {};
-
+    const allAnalyses = await getAllAnalyses(userId);
     const filtered: Record<string, SavedAnalysis> = {};
-    Object.entries(analyses).forEach(([id, analysis]: [string, any]) => {
+    Object.entries(allAnalyses).forEach(([id, analysis]: [string, any]) => {
       if (analysis.folderId === folderId) {
         filtered[id] = analysis;
       }
@@ -253,13 +258,46 @@ export const getAnalysesByFolder = async (
   }
 };
 
-// Get all analyses for user
+// Get all analyses for user (loads only metadata for extreme bandwidth efficiency)
 export const getAllAnalyses = async (
   userId: string
 ): Promise<Record<string, SavedAnalysis>> => {
   try {
-    const snapshot = await db.ref(`/analyses/${userId}`).once('value');
-    return snapshot.val() || {};
+    const snapshot = await db.ref(`/userAnalyses/${userId}`).once('value');
+    const userAnalysesData = snapshot.val() || {};
+
+    // Dynamic, self-healing migration: If we find old boolean "true" entries or missing "name",
+    // migrate them in the background once by loading full analyses and saving their metadata.
+    const needsMigration = Object.values(userAnalysesData).some(
+      val => val === true || (typeof val === 'object' && val !== null && !('name' in val))
+    );
+
+    if (needsMigration) {
+      console.warn('Performing self-healing migration of user analyses metadata to save bandwidth...');
+      const fullSnapshot = await db.ref(`/analyses/${userId}`).once('value');
+      const fullAnalyses = fullSnapshot.val() || {};
+
+      const batchUpdates: Record<string, any> = {};
+      const migratedList: Record<string, any> = {};
+
+      Object.entries(fullAnalyses).forEach(([analysisId, analysis]: [string, any]) => {
+        const metadata = {
+          name: analysis.name || 'Untitled Analysis',
+          folderId: analysis.folderId || null,
+          createdAt: analysis.createdAt || Date.now(),
+          updatedAt: analysis.updatedAt || Date.now()
+        };
+        batchUpdates[`/userAnalyses/${userId}/${analysisId}`] = metadata;
+        migratedList[analysisId] = metadata;
+      });
+
+      if (Object.keys(batchUpdates).length > 0) {
+        await db.ref().update(batchUpdates);
+      }
+      return migratedList;
+    }
+
+    return userAnalysesData;
   } catch (error) {
     console.error('Error fetching all analyses:', error);
     throw error;
@@ -273,12 +311,12 @@ export const moveAnalysisToFolder = async (
   newFolderId: string | null
 ): Promise<void> => {
   try {
-    const analysis = await loadAnalysis(userId, analysisId);
-    if (!analysis) {
-      throw new Error('Analysis not found');
-    }
-
+    const now = Date.now();
     await db.ref(`/analyses/${userId}/${analysisId}/folderId`).set(newFolderId);
+    await db.ref(`/analyses/${userId}/${analysisId}/updatedAt`).set(now);
+    // Keep user's metadata in sync
+    await db.ref(`/userAnalyses/${userId}/${analysisId}/folderId`).set(newFolderId);
+    await db.ref(`/userAnalyses/${userId}/${analysisId}/updatedAt`).set(now);
   } catch (error) {
     console.error('Error moving analysis:', error);
     throw error;
@@ -307,8 +345,12 @@ export const renameAnalysis = async (
   newName: string
 ): Promise<void> => {
   try {
+    const now = Date.now();
     await db.ref(`/analyses/${userId}/${analysisId}/name`).set(newName);
-    await db.ref(`/analyses/${userId}/${analysisId}/updatedAt`).set(Date.now());
+    await db.ref(`/analyses/${userId}/${analysisId}/updatedAt`).set(now);
+    // Keep user's metadata in sync
+    await db.ref(`/userAnalyses/${userId}/${analysisId}/name`).set(newName);
+    await db.ref(`/userAnalyses/${userId}/${analysisId}/updatedAt`).set(now);
   } catch (error) {
     console.error('Error renaming analysis:', error);
     throw error;
@@ -479,17 +521,11 @@ export const getAnalysesBySharedFolder = async (
   userPermission: 'read' | 'edit'
 ): Promise<Record<string, SavedAnalysis>> => {
   try {
-    const snapshot = await db.ref(`/analyses/${ownerUserId}`).once('value');
-    const analyses = snapshot.val() || {};
-
-    const filtered: Record<string, SavedAnalysis> = {};
-    Object.entries(analyses).forEach(([id, analysis]: [string, any]) => {
-      if (analysis.folderId === folderId) {
-        filtered[id] = analysis;
-      }
-    });
-
-    return filtered;
+    const snapshot = await db.ref(`/analyses/${ownerUserId}`)
+      .orderByChild('folderId')
+      .equalTo(folderId)
+      .once('value');
+    return snapshot.val() || {};
   } catch (error) {
     console.error('Error fetching shared folder analyses:', error);
     throw error;
@@ -522,6 +558,13 @@ export const saveAnalysisToFolder = async (
       updatedAt: Date.now()
     });
     await db.ref(`/analyses/${userId}/${analysisId}`).set(sanitizedData);
+    // Keep metadata in sync as well
+    await db.ref(`/userAnalyses/${userId}/${analysisId}`).set({
+      name: data.name || 'Untitled Analysis',
+      folderId: data.folderId || null,
+      createdAt: data.createdAt || Date.now(),
+      updatedAt: sanitizedData.updatedAt
+    });
   } catch (error) {
     console.error('Error saving analysis:', error);
     throw error;
@@ -624,17 +667,11 @@ export const getAnalysesByPublicFolder = async (
   ownerUserId: string
 ): Promise<Record<string, SavedAnalysis>> => {
   try {
-    const snapshot = await db.ref(`/analyses/${ownerUserId}`).once('value');
-    const analyses = snapshot.val() || {};
-
-    const filtered: Record<string, SavedAnalysis> = {};
-    Object.entries(analyses).forEach(([id, analysis]: [string, any]) => {
-      if (analysis.folderId === folderId) {
-        filtered[id] = analysis;
-      }
-    });
-
-    return filtered;
+    const snapshot = await db.ref(`/analyses/${ownerUserId}`)
+      .orderByChild('folderId')
+      .equalTo(folderId)
+      .once('value');
+    return snapshot.val() || {};
   } catch (error) {
     console.error('Error fetching public folder analyses:', error);
     throw error;

@@ -621,7 +621,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
     useEffect(() => {
         if (currentLobbyTab !== 'games' && currentLobbyTab !== 'live') return;
 
-        const gamesRef = db.ref('games');
+        const queryStatus = currentLobbyTab === 'games' ? 'waiting' : 'playing';
+        const gamesRef = db.ref('games').orderByChild('status').equalTo(queryStatus);
         setIsLobbyLoading(true);
 
         const onLobbyUpdate = (snapshot: any) => {

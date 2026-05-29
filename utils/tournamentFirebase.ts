@@ -286,10 +286,15 @@ export const getTournament = async (tournamentId: string): Promise<TournamentDat
 };
 
 export const listActiveTournaments = async (userId?: string): Promise<TournamentData[]> => {
-    const snap = await db.ref('tournaments').once('value');
-    const data = snap.val() || {};
+    // Only query active status categories (lobby and in_progress) to avoid downloading all finished historical tournaments
+    const lobbySnap = await db.ref('tournaments').orderByChild('status').equalTo('lobby').once('value');
+    const progressSnap = await db.ref('tournaments').orderByChild('status').equalTo('in_progress').once('value');
+    
+    const lobbyData = lobbySnap.val() || {};
+    const progressData = progressSnap.val() || {};
+    const data = { ...lobbyData, ...progressData };
+
     return Object.values(data).filter((t: any) => {
-        if (t.status === 'finished') return false;
         if (!t.isPrivate) return true;
         if (userId && t.hostUid === userId) return true;
         // Also include if I am a player in it
@@ -299,10 +304,10 @@ export const listActiveTournaments = async (userId?: string): Promise<Tournament
 
 // List tournament history for a user (finished tournaments they participated in or hosted)
 export const listTournamentHistory = async (userId: string): Promise<TournamentData[]> => {
-    const snap = await db.ref('tournaments').once('value');
+    // Only query finished tournaments using the database index
+    const snap = await db.ref('tournaments').orderByChild('status').equalTo('finished').once('value');
     const data = snap.val() || {};
     return Object.values(data).filter((t: any) => {
-        if (t.status !== 'finished') return false;
         const isHost = t.hostUid === userId;
         const isPlayer = t.players && Object.values(t.players).some((p: any) => p.uid === userId);
         return isHost || isPlayer;

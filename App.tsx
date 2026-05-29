@@ -356,9 +356,10 @@ const App: React.FC = () => {
 
         const checkTournaments = async () => {
             try {
-                const snap = await db.ref('tournaments').once('value');
+                // Only fetch lobby tournaments (the only ones needing notifications) using the database index
+                const snap = await db.ref('tournaments').orderByChild('status').equalTo('lobby').once('value');
                 const data = snap.val() || {};
-                const activeTournaments: any[] = Object.values(data).filter((t: any) => t.status === 'lobby');
+                const activeTournaments: any[] = Object.values(data);
 
                 const now = Date.now();
                 const oneHour = 60 * 60 * 1000;
@@ -503,7 +504,8 @@ const App: React.FC = () => {
         };
 
         checkTournaments();
-        const intervalId = setInterval(checkTournaments, 1000);
+        // 5 minutes is more than enough granularity for tournament start-time notifications
+        const intervalId = setInterval(checkTournaments, 5 * 60 * 1000);
 
         return () => clearInterval(intervalId);
     }, [notificationsEnabled, notificationFlags, isOnline]);
@@ -927,7 +929,7 @@ const App: React.FC = () => {
             return;
         }
 
-        const gamesRef = db.ref('games');
+        const gamesRef = db.ref('games').orderByChild('status').equalTo('waiting');
         const listener = (snapshot: any) => {
             const gamesData = snapshot.val() || {};
             const currentOpenChallenges: Record<string, boolean> = {};
