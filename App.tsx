@@ -3544,7 +3544,12 @@ const App: React.FC = () => {
                                 onDismiss={() => setOverlayDismissed(true)}
                             />
                         )}
-                        <div className="relative">
+                        <div className="justify-between mt-8">
+                            {reviewingHistoryIndex !== null && (
+                                <div className="absolute top-0 left-0 w-full h-full pointer-events-none bg-blue-900/10 border-4 border-blue-500/50 rounded-lg flex items-start justify-center">
+                                    <span className="bg-blue-600 text-white font-bold text-sm px-4 py-1 rounded-b-lg shadow-lg">Reviewing Move {reviewingHistoryIndex + 1}</span>
+                                </div>
+                            )}
                             <Board
                                 board={displayedBoard} selectedPiece={selectedPiece} validMoves={validMoves}
                                 onSquareClick={handleSquareClick} turn={turn} playerColor={myOnlineColor}
@@ -3564,11 +3569,7 @@ const App: React.FC = () => {
                                 showPowerRings={currentShowPowerRings}
                                 showOriginalType={currentShowOriginalType}
                             />
-                            {reviewingHistoryIndex !== null && (
-                                <div className="absolute top-0 left-0 w-full h-full pointer-events-none bg-blue-900/10 border-4 border-blue-500/50 rounded-lg flex items-start justify-center">
-                                    <span className="bg-blue-600 text-white font-bold text-sm px-4 py-1 rounded-b-lg shadow-lg">Reviewing Move {reviewingHistoryIndex + 1}</span>
-                                </div>
-                            )}
+
                         </div>
                     </div>
                     {/* Bottom Player Info (Mobile) */}
