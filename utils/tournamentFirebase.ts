@@ -44,6 +44,13 @@ export const createTournament = async (
         };
     }
 
+    // Build uid→playerId index for rule validation (allows forfeit score writes by non-host players)
+    const playerUidIndex: Record<string, string> = {};
+    if (hostParticipates) {
+        const hostPlayerId = Object.keys(players)[0];
+        if (hostPlayerId) playerUidIndex[hostUid] = hostPlayerId;
+    }
+
     const tournament: TournamentData = {
         id,
         name,
@@ -64,7 +71,8 @@ export const createTournament = async (
         showOriginalType: visualSettings?.showOriginalType ?? true,
         flags: flags || [],
         expectedStartDate,
-        timezone
+        timezone,
+        playerUidIndex
     };
 
     await db.ref(`tournaments/${id}`).set(tournament);
@@ -89,6 +97,8 @@ export const joinTournament = async (
     };
 
     await db.ref(`tournaments/${tournamentId}/players/${playerId}`).set(player);
+    // Maintain uid→playerId index so rules can validate forfeit writes
+    await db.ref(`tournaments/${tournamentId}/playerUidIndex/${uid}`).set(playerId);
     return playerId;
 };
 
@@ -97,7 +107,12 @@ export const removePlayer = async (
     tournamentId: string,
     playerId: string
 ): Promise<void> => {
+    // Look up uid from the player record before removing
+    const snap = await db.ref(`tournaments/${tournamentId}/players/${playerId}/uid`).once('value');
+    const uid = snap.val();
     await db.ref(`tournaments/${tournamentId}/players/${playerId}`).remove();
+    // Clean up uid index
+    if (uid) await db.ref(`tournaments/${tournamentId}/playerUidIndex/${uid}`).remove();
 };
 
 // Start the tournament (set status to in_progress, create round 1)

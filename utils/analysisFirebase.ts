@@ -153,11 +153,11 @@ export const updateCurrentNodeId = async (
   analysisId: string,
   nodeId: string
 ): Promise<void> => {
-    try {
-        await db.ref(`/analyses/${userId}/${analysisId}/lastNodeId`).set(nodeId);
-    } catch (error) {
-        console.error('Error updating lastNodeId:', error);
-    }
+  try {
+    await db.ref(`/analyses/${userId}/${analysisId}/lastNodeId`).set(nodeId);
+  } catch (error) {
+    console.error('Error updating lastNodeId:', error);
+  }
 };
 
 // Delete analysis from Firebase

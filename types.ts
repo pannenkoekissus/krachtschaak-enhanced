@@ -190,6 +190,8 @@ export interface GameState {
   showPowerRings?: boolean;
   showOriginalType?: boolean;
   kFen?: string;
+  challengeId?: string | null;
+  rematchOf?: string | null;
 }
 
 export interface LobbyGame {
@@ -256,4 +258,6 @@ export interface TournamentData {
   flags?: string[];
   expectedStartDate?: string;
   timezone?: string;
+  // uid → playerId lookup; maintained by join/leave; used by DB rules for forfeit validation
+  playerUidIndex?: Record<string, string>;
 }

@@ -993,6 +993,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                 }
             }
 
+            initialState.challengeId = challenge.id;
+
             await newGameRef.set(initialState);
 
             // 2. Link users to game

@@ -1436,6 +1436,9 @@ const App: React.FC = () => {
                     const updates: any = {};
                     updates[`userRatings/${whiteUid}/ratings/${category}`] = newWhiteRating;
                     updates[`userRatings/${blackUid}/ratings/${category}`] = newBlackRating;
+                    // Record the source game so rules can validate the rating change
+                    updates[`userRatings/${whiteUid}/lastRatingUpdateGame`] = gameId;
+                    updates[`userRatings/${blackUid}/lastRatingUpdateGame`] = gameId;
 
                     // Update the game record with the change
                     if (gameRef) {
@@ -1464,28 +1467,30 @@ const App: React.FC = () => {
                                 status: 'finished'
                             });
 
-                            // Update scores using a transaction for consistency
+                            // Update scores using an atomic update
                             const playersRef = db.ref(`tournaments/${finalState.tournamentId}/players`);
-                            await playersRef.transaction((players) => {
-                                if (!players) return players;
+                            const playersSnap = await playersRef.once('value');
+                            const players = playersSnap.val();
+                            if (players) {
+                                const scoreUpdates: any = {};
                                 if (tournamentResult === '1-0') {
-                                    if (players[pairing.white]) players[pairing.white].score = (players[pairing.white].score || 0) + 1;
+                                    if (players[pairing.white]) scoreUpdates[`tournaments/${finalState.tournamentId}/players/${pairing.white}/score`] = (players[pairing.white].score || 0) + 1;
                                     if (pairing.black !== 'BYE' && players[pairing.black]) {
-                                        players[pairing.black].score = (players[pairing.black].score || 0);
+                                        scoreUpdates[`tournaments/${finalState.tournamentId}/players/${pairing.black}/score`] = (players[pairing.black].score || 0);
                                     }
                                 } else if (tournamentResult === '0-1') {
-                                    if (players[pairing.white]) players[pairing.white].score = (players[pairing.white].score || 0);
+                                    if (players[pairing.white]) scoreUpdates[`tournaments/${finalState.tournamentId}/players/${pairing.white}/score`] = (players[pairing.white].score || 0);
                                     if (pairing.black !== 'BYE' && players[pairing.black]) {
-                                        players[pairing.black].score = (players[pairing.black].score || 0) + 1;
+                                        scoreUpdates[`tournaments/${finalState.tournamentId}/players/${pairing.black}/score`] = (players[pairing.black].score || 0) + 1;
                                     }
                                 } else {
-                                    if (players[pairing.white]) players[pairing.white].score = (players[pairing.white].score || 0) + 0.5;
+                                    if (players[pairing.white]) scoreUpdates[`tournaments/${finalState.tournamentId}/players/${pairing.white}/score`] = (players[pairing.white].score || 0) + 0.5;
                                     if (pairing.black !== 'BYE' && players[pairing.black]) {
-                                        players[pairing.black].score = (players[pairing.black].score || 0) + 0.5;
+                                        scoreUpdates[`tournaments/${finalState.tournamentId}/players/${pairing.black}/score`] = (players[pairing.black].score || 0) + 0.5;
                                     }
                                 }
-                                return players;
-                            });
+                                await db.ref().update(scoreUpdates);
+                            }
 
                             // Important: recalculate tiebreaks to keep standings up to date
                             await recalculateTiebreaks(finalState.tournamentId);
@@ -3058,6 +3063,7 @@ const App: React.FC = () => {
                                 const category = gameData.ratingCategory;
                                 const opponentNewRating = opponentColor === Color.White ? newWhiteRating : newBlackRating;
                                 updates[`userRatings/${opponentUid}/ratings/${category}`] = opponentNewRating;
+                                updates[`userRatings/${opponentUid}/lastRatingUpdateGame`] = gameId;
                             }
                         } else if (gameData.status === 'waiting') {
                             updates[`games/${gameId}`] = null;
@@ -3143,6 +3149,8 @@ const App: React.FC = () => {
         if (newGameState.timerSettings && 'initialTime' in newGameState.timerSettings) {
             newGameState.turnStartTime = window.firebase.database.ServerValue.TIMESTAMP as any;
         }
+
+        newGameState.rematchOf = gameId;
 
         try {
             const newGameRef = db.ref('games').push();
