@@ -447,11 +447,17 @@ const App: React.FC = () => {
                                 const title = `Tournament Starting Soon!`;
                                 const body = `${t.name} is starting in less than 1 hour.`;
 
+                                let webNotificationSuccess = false;
                                 if ('Notification' in window && Notification.permission === 'granted') {
-                                    new Notification(title, { body });
+                                    try {
+                                        new Notification(title, { body });
+                                        webNotificationSuccess = true;
+                                    } catch (e) {
+                                        console.warn('Browser Notification constructor failed, falling back to Capacitor:', e);
+                                    }
                                 }
 
-                                else if (capLocal && capLocal.LocalNotifications) {
+                                if (!webNotificationSuccess && capLocal && capLocal.LocalNotifications) {
                                     try {
                                         const numericId = Math.abs(t.id.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0)) % 1000000;
                                         await capLocal.LocalNotifications.schedule({
@@ -771,11 +777,17 @@ const App: React.FC = () => {
                         const body = `It is your turn against ${opponentName} in a ${ratingCat} game.`;
 
                         // Send browser notification
+                        let webNotificationSuccess = false;
                         if ('Notification' in window && Notification.permission === 'granted') {
-                            new Notification(title, { body });
+                            try {
+                                new Notification(title, { body });
+                                webNotificationSuccess = true;
+                            } catch (e) {
+                                console.warn('Browser Notification constructor failed, falling back to Capacitor:', e);
+                            }
                         }
 
-                        else {// Send Capacitor local notification
+                        if (!webNotificationSuccess) {// Send Capacitor local notification
                             import('@capacitor/local-notifications').then((capLocal) => {
                                 if (capLocal && capLocal.LocalNotifications) {
                                     capLocal.LocalNotifications.schedule({
@@ -891,10 +903,16 @@ const App: React.FC = () => {
                     const title = `Direct Challenge Received!`;
                     const body = `${challengerName} has challenged you to a ${ratingCat} game.`;
 
+                    let webNotificationSuccess = false;
                     if ('Notification' in window && Notification.permission === 'granted') {
-                        new Notification(title, { body });
+                        try {
+                            new Notification(title, { body });
+                            webNotificationSuccess = true;
+                        } catch (e) {
+                            console.warn('Browser Notification constructor failed, falling back to Capacitor:', e);
+                        }
                     }
-                    else {
+                    if (!webNotificationSuccess) {
                         import('@capacitor/local-notifications').then((capLocal) => {
                             if (capLocal && capLocal.LocalNotifications) {
                                 capLocal.LocalNotifications.schedule({
@@ -972,24 +990,32 @@ const App: React.FC = () => {
                                 const title = `New Open Challenge!`;
                                 const body = `${creatorName} is waiting to play a ${ratingCat} game.`;
 
+                                let webNotificationSuccess = false;
                                 if ('Notification' in window && Notification.permission === 'granted') {
-                                    new Notification(title, { body });
+                                    try {
+                                        new Notification(title, { body });
+                                        webNotificationSuccess = true;
+                                    } catch (e) {
+                                        console.warn('Browser Notification constructor failed, falling back to Capacitor:', e);
+                                    }
                                 }
 
-                                import('@capacitor/local-notifications').then((capLocal) => {
-                                    if (capLocal && capLocal.LocalNotifications) {
-                                        capLocal.LocalNotifications.schedule({
-                                            notifications: [
-                                                {
-                                                    title: title,
-                                                    body: body,
-                                                    id: Math.floor(Math.random() * 1000000),
-                                                    schedule: { at: new Date(Date.now() + 1000) }
-                                                }
-                                            ]
-                                        }).catch(e => console.error('Failed to schedule local notification', e));
-                                    }
-                                }).catch(() => { });
+                                if (!webNotificationSuccess) {
+                                    import('@capacitor/local-notifications').then((capLocal) => {
+                                        if (capLocal && capLocal.LocalNotifications) {
+                                            capLocal.LocalNotifications.schedule({
+                                                notifications: [
+                                                    {
+                                                        title: title,
+                                                        body: body,
+                                                        id: Math.floor(Math.random() * 1000000),
+                                                        schedule: { at: new Date(Date.now() + 1000) }
+                                                    }
+                                                ]
+                                            }).catch(e => console.error('Failed to schedule local notification', e));
+                                        }
+                                    }).catch(() => { });
+                                }
                             }
                         }
                     }
