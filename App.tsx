@@ -2839,10 +2839,10 @@ const App: React.FC = () => {
             setPendingCommitState(null);
             setPreCommitState(null);
         } else if (pendingPremove && gameRef && myOnlineColor) {
-            gameRef.child('premoves').child(myOnlineColor).transaction(currentPremoveData => {
-                if (gameRef.child(turn) === myOnlineColor) return;
-                return pendingPremove;
-            });
+            // gameRef.child('premoves').child(myOnlineColor).transaction(currentPremoveData => {
+            // if (gameRef.child(turn) === myOnlineColor) return;
+            // return pendingPremove;
+            // });
             setPendingPremove(null);
         }
         setShowConfirmation(null);
