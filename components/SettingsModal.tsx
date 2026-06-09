@@ -189,7 +189,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                     <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Notify for Flags</label>
                                     <input
                                         type="text"
-                                        placeholder="e.g. daily, blitz (comma separated)"
+                                        placeholder="e.g. daily, blitz, classical (comma separated)"
                                         value={notificationFlags}
                                         onChange={(e) => setNotificationFlags(e.target.value)}
                                         className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-500"
@@ -205,7 +205,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                     <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Direct Challenge Time Controls</label>
                                     <input
                                         type="text"
-                                        placeholder="e.g. blitz, bullet, daily (comma separated)"
+                                        placeholder="e.g. blitz, bullet, classical (comma separated)"
                                         value={notifyDirectTimeControls}
                                         onChange={(e) => setNotifyDirectTimeControls(e.target.value)}
                                         className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-500"
@@ -220,7 +220,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                     <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Open Challenge Time Controls</label>
                                     <input
                                         type="text"
-                                        placeholder="e.g. blitz, daily, rapid (comma separated)"
+                                        placeholder="e.g. blitz, daily, rapid, classical (comma separated)"
                                         value={notifyOpenTimeControls}
                                         onChange={(e) => setNotifyOpenTimeControls(e.target.value)}
                                         className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-500"

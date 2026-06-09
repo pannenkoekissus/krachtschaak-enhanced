@@ -162,7 +162,7 @@ const PlayerGameHistoryModal: React.FC<{
     const [loadingGames, setLoadingGames] = useState(false);
     const [gamesCache, setGamesCache] = useState<Record<string, GameState>>({});
     const [historyFilters, setHistoryFilters] = useState<Record<string, boolean>>({
-        hyperbullet: true, bullet: true, blitz: true, rapid: true, daily: true, unlimited: true
+        hyperbullet: true, bullet: true, blitz: true, rapid: true, classical: true, daily: true, unlimited: true
     });
     const [showCounts, setShowCounts] = useState(true);
     const [totalCategoryCounts, setTotalCategoryCounts] = useState<Record<string, number>>({});
@@ -328,7 +328,7 @@ const PlayerGameHistoryModal: React.FC<{
                 {/* History Filter Buttons */}
                 <div className="flex flex-wrap gap-2 justify-center bg-gray-900/50 p-3 rounded-lg border border-gray-700 mb-4">
                     <span className="text-xs text-gray-400 w-full text-center mb-1 font-medium italic">Filter by time control:</span>
-                    {['hyperbullet', 'bullet', 'blitz', 'rapid', 'daily', 'unlimited'].map((cat) => (
+                    {['hyperbullet', 'bullet', 'blitz', 'rapid', 'classical', 'daily', 'unlimited'].map((cat) => (
                         <button
                             key={cat}
                             onClick={() => toggleFilter(cat)}
@@ -1388,7 +1388,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                         {/* 1. Filter Knoppen */}
                         <div className="flex flex-wrap gap-2 justify-center bg-gray-800/50 p-3 rounded-lg border border-gray-700">
                             <span className="text-sm text-gray-400 w-full text-center mb-1 font-medium">Filter by time control:</span>
-                            {['hyperbullet', 'bullet', 'blitz', 'rapid', 'daily', 'unlimited'].map((cat) => (
+                            {['hyperbullet', 'bullet', 'blitz', 'rapid', 'classical', 'daily', 'unlimited'].map((cat) => (
                                 <button
                                     key={cat}
                                     onClick={() => toggleFilter(cat)}
@@ -1458,7 +1458,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                         {/* Filter Buttons */}
                         <div className="flex flex-wrap gap-2 justify-center bg-gray-800/50 p-3 rounded-lg border border-gray-700">
                             <span className="text-sm text-gray-400 w-full text-center mb-1 font-medium">Filter by time control:</span>
-                            {['hyperbullet', 'bullet', 'blitz', 'rapid', 'daily', 'unlimited'].map((cat) => (
+                            {['hyperbullet', 'bullet', 'blitz', 'rapid', 'classical', 'daily', 'unlimited'].map((cat) => (
                                 <button
                                     key={cat}
                                     onClick={() => toggleFilter(cat)}
@@ -1514,7 +1514,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                         {/* History Filter Buttons */}
                         <div className="flex flex-wrap gap-2 justify-center bg-gray-800/50 p-3 rounded-lg border border-gray-700">
                             <span className="text-sm text-gray-400 w-full text-center mb-1 font-medium">Filter by time control:</span>
-                            {['hyperbullet', 'bullet', 'blitz', 'rapid', 'daily', 'unlimited'].map((cat) => (
+                            {['hyperbullet', 'bullet', 'blitz', 'rapid', 'classical', 'daily', 'unlimited'].map((cat) => (
                                 <button
                                     key={cat}
                                     onClick={() => toggleFilter(cat)}
@@ -1616,7 +1616,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                             {/* Filter Buttons */}
                             <div className="flex flex-wrap gap-2 justify-center bg-gray-800/50 p-3 rounded-lg border border-gray-700 mb-4">
                                 <span className="text-sm text-gray-400 w-full text-center mb-1 font-medium italic">Filter open games:</span>
-                                {['hyperbullet', 'bullet', 'blitz', 'rapid', 'daily', 'unlimited'].map((cat) => (
+                                {['hyperbullet', 'bullet', 'blitz', 'rapid', 'classical', 'daily', 'unlimited'].map((cat) => (
                                     <button
                                         key={cat}
                                         onClick={() => toggleFilter(cat)}
