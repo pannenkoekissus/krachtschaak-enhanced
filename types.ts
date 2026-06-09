@@ -183,6 +183,7 @@ export interface GameState {
   premoves?: { [color in Color]?: { from: Position, to: Position, isForcePower: boolean } | null };
   moveHistory?: Move[];
   chat?: ChatMessage[];
+  spectatorChat?: ChatMessage[];
   tournamentId?: string | null;
   tournamentRound?: number | null;
   tournamentPairingId?: string | null;

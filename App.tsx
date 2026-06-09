@@ -188,6 +188,8 @@ const App: React.FC = () => {
     const [moveHistory, setMoveHistory] = useState<Move[]>([]);
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [chatInput, setChatInput] = useState("");
+    const [spectatorChatMessages, setSpectatorChatMessages] = useState<ChatMessage[]>([]);
+    const [spectatorChatInput, setSpectatorChatInput] = useState("");
     const [activeTab, setActiveTab] = useState<'controls' | 'chat' | 'moves'>('controls');
     const hasPlayedLowTimeSoundRef = useRef(false);
 
@@ -1270,6 +1272,7 @@ const App: React.FC = () => {
         setLastMove(state.lastMove || null);
         setMoveHistory(state.moveHistory || []);
         setChatMessages(state.chat || []);
+        setSpectatorChatMessages(state.spectatorChat || []);
         setGameTournamentId(state.tournamentId || null);
         setGameTournamentRound(state.tournamentRound ?? null);
         setGameTournamentPairingId(state.tournamentPairingId || null);
@@ -1840,6 +1843,7 @@ const App: React.FC = () => {
             setHighlightedSquares([]);
             setArrows([]);
             setChatMessages([]);
+            setSpectatorChatMessages([]);
             setMoveHistory([]);
         }
         return initialGameState;
@@ -2096,6 +2100,7 @@ const App: React.FC = () => {
         setShowLocalSetup(false);
         randomizeNextGameColor();
         setChatMessages([]);
+        setSpectatorChatMessages([]);
         setGameTournamentId(null);
         setGameTournamentRound(null);
         setGameTournamentPairingId(null);
@@ -2208,9 +2213,9 @@ const App: React.FC = () => {
         if (!gameRef || !currentUser) return;
 
         const playerInGameRef = gameRef.child(`players/${currentUser.uid}`);
-        playerInGameRef.update({ disconnectTimestamp: null });
+        if (gameMode !== "online_spectating") playerInGameRef.update({ disconnectTimestamp: null });
         const onDisconnectRef = playerInGameRef.child('disconnectTimestamp').onDisconnect();
-        onDisconnectRef.set(window.firebase.database.ServerValue.TIMESTAMP);
+        if (gameMode !== "online_spectating") onDisconnectRef.set(window.firebase.database.ServerValue.TIMESTAMP);
 
         const onGameUpdate = (snapshot: any) => {
             if (snapshot.exists()) {
@@ -2443,6 +2448,26 @@ const App: React.FC = () => {
             setChatInput("");
         } catch (error) {
             console.error("Error sending message:", error);
+        }
+    };
+
+    const handleSendSpectatorChat = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!spectatorChatInput.trim() || !gameRef || !currentUser) return;
+
+        const newMessage: ChatMessage = {
+            sender: currentUser.displayName || 'Guest',
+            text: spectatorChatInput.trim(),
+            timestamp: Date.now(),
+            uid: currentUser.uid
+        };
+
+        try {
+            const newSpectatorChat = [...spectatorChatMessages, newMessage];
+            await gameRef.update({ spectatorChat: newSpectatorChat });
+            setSpectatorChatInput("");
+        } catch (error) {
+            console.error("Error sending spectator message:", error);
         }
     };
 
@@ -3633,7 +3658,7 @@ const App: React.FC = () => {
                         <div className="flex mb-2 border-b border-gray-600">
                             <button onClick={() => setActiveTab('controls')} className={`flex-1 py-2 text-sm font-semibold ${activeTab === 'controls' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400'}`}>Actions</button>
                             <button onClick={() => setActiveTab('chat')} className={`flex-1 py-2 text-sm font-semibold relative ${activeTab === 'chat' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400'}`}>
-                                Chat {unreadChatCount > 0 && <span className="absolute -top-1 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">{unreadChatCount}</span>}
+                                {gameMode === 'online_spectating' ? 'Spec Chat' : 'Chat'} {unreadChatCount > 0 && <span className="absolute -top-1 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">{unreadChatCount}</span>}
                             </button>
                             <button onClick={() => setActiveTab('moves')} className={`flex-1 py-2 text-sm font-semibold ${activeTab === 'moves' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400'}`}>Moves</button>
                         </div>
@@ -3720,8 +3745,8 @@ const App: React.FC = () => {
                         {activeTab === 'chat' && (
                             <div className="flex flex-col h-64">
                                 <div ref={chatContainerRef} className="flex-grow min-h-0 overflow-y-auto mb-2 space-y-2 p-2 bg-gray-900 rounded">
-                                    {chatMessages.length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
-                                    {chatMessages.map((msg, i) => {
+                                    {(gameMode === 'online_spectating' ? spectatorChatMessages : chatMessages).length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
+                                    {(gameMode === 'online_spectating' ? spectatorChatMessages : chatMessages).map((msg, i) => {
                                         const isMe = currentUser && msg.uid === currentUser.uid;
                                         return (
                                             <div key={i} className={`text-sm ${isMe ? 'text-right' : ''}`}>
@@ -3731,13 +3756,13 @@ const App: React.FC = () => {
                                         );
                                     })}
                                 </div>
-                                <form onSubmit={handleSendChat} className="flex gap-2 mt-auto flex-shrink-0">
+                                <form onSubmit={gameMode === 'online_spectating' ? handleSendSpectatorChat : handleSendChat} className="flex gap-2 mt-auto flex-shrink-0">
                                     <input
                                         type="text"
-                                        value={chatInput}
-                                        onChange={e => setChatInput(e.target.value)}
+                                        value={gameMode === 'online_spectating' ? spectatorChatInput : chatInput}
+                                        onChange={e => gameMode === 'online_spectating' ? setSpectatorChatInput(e.target.value) : setChatInput(e.target.value)}
                                         maxLength={100}
-                                        placeholder="Type a message (max 100 chars)..."
+                                        placeholder={gameMode === 'online_spectating' ? "Type a spectator message..." : "Type a message (max 100 chars)..."}
                                         className="flex-grow p-2 bg-gray-700 rounded border border-gray-600 text-white text-sm"
                                     />
                                     <button type="submit" className="px-3 py-2 bg-blue-600 rounded hover:bg-blue-500 font-bold text-sm">Send</button>
@@ -3814,7 +3839,7 @@ const App: React.FC = () => {
                     <div className="flex mb-4 border-b border-gray-600">
                         <button type="button" onClick={() => setActiveTab('controls')} className={`flex-1 py-2 font-semibold ${activeTab === 'controls' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}>Game</button>
                         <button type="button" onClick={() => setActiveTab('chat')} className={`flex-1 py-2 font-semibold relative ${activeTab === 'chat' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}>
-                            Chat {unreadChatCount > 0 && <span className="absolute top-1 right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">{unreadChatCount}</span>}
+                            {gameMode === 'online_spectating' ? 'Spec Chat' : 'Chat'} {unreadChatCount > 0 && <span className="absolute top-1 right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">{unreadChatCount}</span>}
                         </button>
                         <button type="button" onClick={() => setActiveTab('moves')} className={`flex-1 py-2 font-semibold ${activeTab === 'moves' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}>Moves</button>
                     </div>
@@ -3896,8 +3921,8 @@ const App: React.FC = () => {
                     {activeTab === 'chat' && (
                         <div className="flex-grow flex flex-col min-h-0">
                             <div ref={chatContainerRef} className="flex-grow min-h-0 overflow-y-auto mb-2 space-y-2 p-2 bg-gray-900 rounded border border-gray-700">
-                                {chatMessages.length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
-                                {chatMessages.map((msg, i) => {
+                                {(gameMode === 'online_spectating' ? spectatorChatMessages : chatMessages).length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
+                                {(gameMode === 'online_spectating' ? spectatorChatMessages : chatMessages).map((msg, i) => {
                                     const isMe = currentUser && msg.uid === currentUser.uid;
                                     return (
                                         <div key={i} className={`text-sm ${isMe ? 'text-right' : ''}`}>
@@ -3907,13 +3932,13 @@ const App: React.FC = () => {
                                     );
                                 })}
                             </div>
-                            <form onSubmit={handleSendChat} className="flex gap-2 mt-auto flex-shrink-0">
+                            <form onSubmit={gameMode === 'online_spectating' ? handleSendSpectatorChat : handleSendChat} className="flex gap-2 mt-auto flex-shrink-0">
                                 <input
                                     type="text"
-                                    value={chatInput}
-                                    onChange={e => setChatInput(e.target.value)}
+                                    value={gameMode === 'online_spectating' ? spectatorChatInput : chatInput}
+                                    onChange={e => gameMode === 'online_spectating' ? setSpectatorChatInput(e.target.value) : setChatInput(e.target.value)}
                                     maxLength={100}
-                                    placeholder="Type a message (max 100 chars)..."
+                                    placeholder={gameMode === 'online_spectating' ? "Type a spectator message..." : "Type a message (max 100 chars)..."}
                                     className="flex-grow p-2 bg-gray-700 rounded border border-gray-600 text-white text-sm focus:outline-none focus:border-green-500"
                                 />
                                 <button type="submit" className="px-3 py-2 bg-blue-600 rounded hover:bg-blue-500 font-bold text-sm">Send</button>
