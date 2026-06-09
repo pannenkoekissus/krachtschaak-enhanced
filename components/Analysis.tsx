@@ -111,9 +111,32 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
     // If we have move history, the root should be the STARTING position (before any moves),
     // not the final board position passed in initialState.
     const hasMoveHistory = initialState?.moveHistory && initialState.moveHistory.length > 0;
+
+    const rootBoardAndTurn = useMemo(() => {
+        if (hasMoveHistory) {
+            if (initialState?.kFen) {
+                const result = fenToBoard(initialState.kFen);
+                if (result && result.board) {
+                    return {
+                        board: result.board,
+                        turn: result.turn || Color.White
+                    };
+                }
+            }
+            return {
+                board: createInitialBoard(),
+                turn: Color.White
+            };
+        }
+        return {
+            board: sanitizeBoard(initialState?.board || createInitialBoard()),
+            turn: initialState?.turn || Color.White
+        };
+    }, [hasMoveHistory, initialState?.board, initialState?.turn, initialState?.kFen]);
+
     const initialRootState: GameState = {
-        board: hasMoveHistory ? createInitialBoard() : sanitizeBoard(initialState?.board || createInitialBoard()),
-        turn: hasMoveHistory ? Color.White : (initialState?.turn || Color.White),
+        board: rootBoardAndTurn.board,
+        turn: rootBoardAndTurn.turn,
         status: 'playing',
         winner: null,
         promotionData: null,
@@ -135,7 +158,8 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         rematchOffer: null,
         nextGameId: null,
         ratingChange: initialState?.ratingChange || null,
-        moveHistory: []
+        moveHistory: [],
+        kFen: initialState?.kFen
     };
 
     // Build initial tree if move history exists
@@ -165,7 +189,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
                 // Safety check for board integrity
                 if (!currentBoard || !Array.isArray(currentBoard)) {
-                    currentBoard = createInitialBoard();
+                    currentBoard = initialRootState.board;
                 }
 
                 const nextBoard = applyMoveToBoard(currentBoard, move);

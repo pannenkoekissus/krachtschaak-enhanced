@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { GameState, Color, BoardState, Piece, Move, Position } from '../types';
 import Board from './Board';
 import PieceComponent from './Piece';
-import { createInitialBoard, applyMoveToBoard } from '../utils/game';
+import { createInitialBoard, applyMoveToBoard, fenToBoard } from '../utils/game';
 import KrachtschaakAI from '../engine';
 
 interface GameReviewProps {
@@ -84,6 +84,12 @@ const GameReview: React.FC<GameReviewProps> = ({ game, onBack, onAnalyze }) => {
         // Reconstruct the game history
         const history: BoardState[] = [];
         let currentBoard = createInitialBoard();
+        if (game.kFen) {
+            const result = fenToBoard(game.kFen);
+            if (result && result.board) {
+                currentBoard = result.board;
+            }
+        }
         history.push(currentBoard);
 
         const gameMoves = game.moveHistory || [];
@@ -118,7 +124,14 @@ const GameReview: React.FC<GameReviewProps> = ({ game, onBack, onAnalyze }) => {
     const blackPlayer = playerColors.black ? sanitizedPlayers[playerColors.black] : null;
 
     // The board to display is at index + 1 because boards[0] is initial state
-    const displayBoard = boards.length > 0 ? boards[currentMoveIndex + 1] : createInitialBoard();
+    const getInitialReviewBoard = () => {
+        if (game.kFen) {
+            const result = fenToBoard(game.kFen);
+            if (result && result.board) return result.board;
+        }
+        return createInitialBoard();
+    };
+    const displayBoard = boards.length > 0 ? boards[currentMoveIndex + 1] : getInitialReviewBoard();
     const lastMove = currentMoveIndex >= 0 ? moves[currentMoveIndex] : null;
 
     const stopWorker = () => {

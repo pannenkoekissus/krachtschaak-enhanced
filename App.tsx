@@ -81,6 +81,7 @@ const App: React.FC = () => {
     const [lastEditedBoard, setLastEditedBoard] = useState<BoardState | null>(null);
     const [lastEditedTurn, setLastEditedTurn] = useState<Color>(Color.White);
     const [showSettings, setShowSettings] = useState(false);
+    const [gameKFen, setGameKFen] = useState<string | null>(null);
 
     // Online state
     const [gameId, setGameId] = useState<string | null>(null);
@@ -1159,7 +1160,8 @@ const App: React.FC = () => {
         tournamentPairingId: gameTournamentPairingId,
         showPowerPieces: gameShowPowerPieces,
         showPowerRings: gameShowPowerRings,
-        showOriginalType: gameShowOriginalType
+        showOriginalType: gameShowOriginalType,
+        kFen: gameKFen || undefined
     }), [
         board, turn, status, winner, promotionData, capturedPieces,
         enPassantTarget, halfmoveClock, positionHistory,
@@ -1167,7 +1169,7 @@ const App: React.FC = () => {
         isRated, rematchOffer, nextGameId, ratingChange, challengedPlayerInfo, turnStartTime, premoves, lastMove, playersLeft,
         completedAt, moveHistory, chatMessages,
         gameTournamentId, gameTournamentRound, gameTournamentPairingId,
-        gameShowPowerPieces, gameShowPowerRings, gameShowOriginalType
+        gameShowPowerPieces, gameShowPowerRings, gameShowOriginalType, gameKFen
     ]);
 
     useEffect(() => {
@@ -1274,6 +1276,7 @@ const App: React.FC = () => {
         setGameShowPowerPieces(state.showPowerPieces);
         setGameShowPowerRings(state.showPowerRings);
         setGameShowOriginalType(state.showOriginalType);
+        setGameKFen(state.kFen || null);
 
         // This is a transient UI state and should be reset whenever the game state is loaded.
         setDraggedPiece(null);
@@ -1647,7 +1650,8 @@ const App: React.FC = () => {
             tournamentPairingId,
             showPowerPieces: showPowerPieces ?? true,
             showPowerRings: showPowerRings ?? true,
-            showOriginalType: showOriginalType ?? true
+            showOriginalType: showOriginalType ?? true,
+            kFen: baseState.kFen
         };
 
         if (newStatus !== 'playing') {
@@ -2839,6 +2843,7 @@ const App: React.FC = () => {
             setPendingCommitState(null);
             setPreCommitState(null);
         } else if (pendingPremove && gameRef && myOnlineColor) {
+            // Premove is now local and will not be uploaded to the server to avoid race conditions
             // gameRef.child('premoves').child(myOnlineColor).transaction(currentPremoveData => {
             // if (gameRef.child(turn) === myOnlineColor) return;
             // return pendingPremove;
@@ -3301,14 +3306,21 @@ const App: React.FC = () => {
     const isHistoryAllowed = (currentShowPowerPieces && currentShowPowerRings && currentShowOriginalType) || isDailyGame;
 
     const historyBoards = useMemo(() => {
-        const boards: BoardState[] = [createInitialBoard()];
+        let initialBoard = createInitialBoard();
+        if (gameKFen) {
+            const result = fenToBoard(gameKFen);
+            if (result && result.board) {
+                initialBoard = result.board;
+            }
+        }
+        const boards: BoardState[] = [initialBoard];
         let currentBoard = boards[0];
         for (const move of moveHistory) {
             currentBoard = applyMoveToBoard(currentBoard, move);
             boards.push(currentBoard);
         }
         return boards;
-    }, [moveHistory]);
+    }, [moveHistory, gameKFen]);
 
     const canGoBack = isHistoryAllowed && historyBoards.length > 1 && reviewingHistoryIndex !== 0 && (reviewingHistoryIndex === null || reviewingHistoryIndex > 0);
     const canGoForward = isHistoryAllowed && reviewingHistoryIndex !== null;
@@ -3413,7 +3425,8 @@ const App: React.FC = () => {
             rematchOffer: null,
             nextGameId: null,
             ratingChange: null,
-            moveHistory: []
+            moveHistory: [],
+            kFen: boardToKrachtschaakFen({ board: editedBoard, turn: startingTurn })
         };
         setAnalysisReturnTo({ mode: gameMode, lobbyView: lobbyView, reviewingGame: null });
         setAnalysisState(initialState);
