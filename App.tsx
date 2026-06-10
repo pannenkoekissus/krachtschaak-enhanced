@@ -363,6 +363,12 @@ const App: React.FC = () => {
     const prevLastMove = useRef(lastMove);
     const prevCapturedCounts = useRef({ white: 0, black: 0 });
 
+    // True only when the user is spectating a game they are NOT a participant in.
+    const shouldShowSpectatorChat = useMemo(() =>
+        gameMode === 'online_spectating' &&
+        !(currentUser && (currentUser.uid === playerColors.white || currentUser.uid === playerColors.black)),
+        [gameMode, currentUser, playerColors]);
+
     useEffect(() => {
         if (!notificationsEnabled || !isOnline) return;
 
@@ -651,12 +657,12 @@ const App: React.FC = () => {
             msg.uid !== currentUser.uid && msg.timestamp > lastRead
         ).length;
 
-        const unreadSpecMsgs = spectatorChatMessages.filter(msg =>
+        const unreadSpecMsgs = shouldShowSpectatorChat ? spectatorChatMessages.filter(msg =>
             msg.uid !== currentUser.uid && msg.timestamp > lastRead
-        ).length;
+        ).length : 0;
 
         return unreadPlayerMsgs + unreadSpecMsgs;
-    }, [chatMessages, spectatorChatMessages, players, currentUser, activeTab, gameMode, localLastReadChatTimestamp]);
+    }, [chatMessages, spectatorChatMessages, players, currentUser, activeTab, gameMode, localLastReadChatTimestamp, shouldShowSpectatorChat]);
 
 
     const randomizeNextGameColor = useCallback(() => {
@@ -2473,7 +2479,7 @@ const App: React.FC = () => {
 
     const handleSendSpectatorChat = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!spectatorChatInput.trim() || !gameRef || !currentUser) return;
+        if (!spectatorChatInput.trim() || !gameRef || !currentUser || !shouldShowSpectatorChat) return;
 
         const newMessage: ChatMessage = {
             sender: currentUser.displayName || 'Guest',
@@ -3678,7 +3684,7 @@ const App: React.FC = () => {
                         <div className="flex mb-2 border-b border-gray-600">
                             <button onClick={() => setActiveTab('controls')} className={`flex-1 py-2 text-sm font-semibold ${activeTab === 'controls' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400'}`}>Actions</button>
                             <button onClick={() => setActiveTab('chat')} className={`flex-1 py-2 text-sm font-semibold relative ${activeTab === 'chat' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400'}`}>
-                                {gameMode === 'online_spectating' ? 'Spec Chat' : 'Chat'} {unreadChatCount > 0 && <span className="absolute -top-1 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">{unreadChatCount}</span>}
+                                {shouldShowSpectatorChat ? 'Spec Chat' : 'Chat'} {unreadChatCount > 0 && <span className="absolute -top-1 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">{unreadChatCount}</span>}
                             </button>
                             <button onClick={() => setActiveTab('moves')} className={`flex-1 py-2 text-sm font-semibold ${activeTab === 'moves' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400'}`}>Moves</button>
                         </div>
@@ -3765,27 +3771,27 @@ const App: React.FC = () => {
                         {activeTab === 'chat' && (
                             <div className="flex flex-col h-64">
                                 <div ref={chatContainerRef} className="flex-grow min-h-0 overflow-y-auto mb-2 space-y-2 p-2 bg-gray-900 rounded">
-                                    {(gameMode === 'online_spectating' ? combinedChatMessages : chatMessages).length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
-                                    {(gameMode === 'online_spectating' ? combinedChatMessages : chatMessages).map((msg, i) => {
+                                    {(shouldShowSpectatorChat ? combinedChatMessages : chatMessages).length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
+                                    {(shouldShowSpectatorChat ? combinedChatMessages : chatMessages).map((msg, i) => {
                                         const isMe = currentUser && msg.uid === currentUser.uid;
                                         const isPlayerMsg = (msg as any).type === 'player';
                                         return (
-                                            <div key={i} className={`text-sm ${isMe ? 'text-right' : ''}`}>
-                                                <span className={`font-bold ${isMe ? 'text-blue-400' : isPlayerMsg ? 'text-yellow-400' : 'text-green-400'}`}>
-                                                    {isMe ? '(You)' : isPlayerMsg ? `[Player] ${msg.sender}` : msg.sender}: 
+                                            <div key={i} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                                                <span className={`text-xs ${isPlayerMsg ? 'text-yellow-500' : 'text-green-500'} font-bold`}>{isPlayerMsg ? '[Player]' : ''} {msg.sender}</span>
+                                                <span className={`inline-block px-2 py-1 rounded text-sm ${isMe ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white'}`}>
+                                                    {msg.text}
                                                 </span>
-                                                <span className="text-gray-300 break-words"> {msg.text}</span>
                                             </div>
                                         );
                                     })}
                                 </div>
-                                <form onSubmit={gameMode === 'online_spectating' ? handleSendSpectatorChat : handleSendChat} className="flex gap-2 mt-auto flex-shrink-0">
+                                <form onSubmit={shouldShowSpectatorChat ? handleSendSpectatorChat : handleSendChat} className="flex gap-2 mt-auto flex-shrink-0">
                                     <input
                                         type="text"
-                                        value={gameMode === 'online_spectating' ? spectatorChatInput : chatInput}
-                                        onChange={e => gameMode === 'online_spectating' ? setSpectatorChatInput(e.target.value) : setChatInput(e.target.value)}
+                                        value={shouldShowSpectatorChat ? spectatorChatInput : chatInput}
+                                        onChange={e => shouldShowSpectatorChat ? setSpectatorChatInput(e.target.value) : setChatInput(e.target.value)}
                                         maxLength={100}
-                                        placeholder={gameMode === 'online_spectating' ? "Type a spectator message..." : "Type a message (max 100 chars)..."}
+                                        placeholder={shouldShowSpectatorChat ? "Type a spectator message..." : "Type a message (max 100 chars)..."}
                                         className="flex-grow p-2 bg-gray-700 rounded border border-gray-600 text-white text-sm"
                                     />
                                     <button type="submit" className="px-3 py-2 bg-blue-600 rounded hover:bg-blue-500 font-bold text-sm">Send</button>
@@ -3862,7 +3868,7 @@ const App: React.FC = () => {
                     <div className="flex mb-4 border-b border-gray-600">
                         <button type="button" onClick={() => setActiveTab('controls')} className={`flex-1 py-2 font-semibold ${activeTab === 'controls' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}>Game</button>
                         <button type="button" onClick={() => setActiveTab('chat')} className={`flex-1 py-2 font-semibold relative ${activeTab === 'chat' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}>
-                            {gameMode === 'online_spectating' ? 'Spec Chat' : 'Chat'} {unreadChatCount > 0 && <span className="absolute top-1 right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">{unreadChatCount}</span>}
+                            {shouldShowSpectatorChat ? 'Spec Chat' : 'Chat'} {unreadChatCount > 0 && <span className="absolute top-1 right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">{unreadChatCount}</span>}
                         </button>
                         <button type="button" onClick={() => setActiveTab('moves')} className={`flex-1 py-2 font-semibold ${activeTab === 'moves' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}>Moves</button>
                     </div>
@@ -3944,27 +3950,27 @@ const App: React.FC = () => {
                     {activeTab === 'chat' && (
                         <div className="flex-grow flex flex-col min-h-0">
                             <div ref={chatContainerRef} className="flex-grow min-h-0 overflow-y-auto mb-2 space-y-2 p-2 bg-gray-900 rounded border border-gray-700">
-                                {(gameMode === 'online_spectating' ? combinedChatMessages : chatMessages).length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
-                                {(gameMode === 'online_spectating' ? combinedChatMessages : chatMessages).map((msg, i) => {
+                                {(shouldShowSpectatorChat ? combinedChatMessages : chatMessages).length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
+                                {(shouldShowSpectatorChat ? combinedChatMessages : chatMessages).map((msg, i) => {
                                     const isMe = currentUser && msg.uid === currentUser.uid;
                                     const isPlayerMsg = (msg as any).type === 'player';
                                     return (
-                                        <div key={i} className={`text-sm ${isMe ? 'text-right' : ''}`}>
-                                            <span className={`font-bold ${isMe ? 'text-blue-400' : isPlayerMsg ? 'text-yellow-400' : 'text-green-400'}`}>
-                                                {isMe ? '(You)' : isPlayerMsg ? `[Player] ${msg.sender}` : msg.sender}: 
+                                        <div key={i} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                                            <span className={`text-xs ${isPlayerMsg ? 'text-yellow-500' : 'text-green-500'} font-bold`}>{isPlayerMsg ? '[Player]' : ''} {msg.sender}</span>
+                                            <span className={`inline-block px-2 py-1 rounded text-sm ${isMe ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white'}`}>
+                                                {msg.text}
                                             </span>
-                                            <span className="text-gray-300 break-words"> {msg.text}</span>
                                         </div>
                                     );
                                 })}
                             </div>
-                            <form onSubmit={gameMode === 'online_spectating' ? handleSendSpectatorChat : handleSendChat} className="flex gap-2 mt-auto flex-shrink-0">
+                            <form onSubmit={shouldShowSpectatorChat ? handleSendSpectatorChat : handleSendChat} className="flex gap-2 mt-auto flex-shrink-0">
                                 <input
                                     type="text"
-                                    value={gameMode === 'online_spectating' ? spectatorChatInput : chatInput}
-                                    onChange={e => gameMode === 'online_spectating' ? setSpectatorChatInput(e.target.value) : setChatInput(e.target.value)}
+                                    value={shouldShowSpectatorChat ? spectatorChatInput : chatInput}
+                                    onChange={e => shouldShowSpectatorChat ? setSpectatorChatInput(e.target.value) : setChatInput(e.target.value)}
                                     maxLength={100}
-                                    placeholder={gameMode === 'online_spectating' ? "Type a spectator message..." : "Type a message (max 100 chars)..."}
+                                    placeholder={shouldShowSpectatorChat ? "Type a spectator message..." : "Type a message (max 100 chars)..."}
                                     className="flex-grow p-2 bg-gray-700 rounded border border-gray-600 text-white text-sm focus:outline-none focus:border-green-500"
                                 />
                                 <button type="submit" className="px-3 py-2 bg-blue-600 rounded hover:bg-blue-500 font-bold text-sm">Send</button>
