@@ -190,7 +190,16 @@ const App: React.FC = () => {
     const [chatInput, setChatInput] = useState("");
     const [spectatorChatMessages, setSpectatorChatMessages] = useState<ChatMessage[]>([]);
     const [spectatorChatInput, setSpectatorChatInput] = useState("");
+    const [localLastReadChatTimestamp, setLocalLastReadChatTimestamp] = useState<number>(0);
     const [activeTab, setActiveTab] = useState<'controls' | 'chat' | 'moves'>('controls');
+
+    const combinedChatMessages = useMemo(() => {
+        const combined = [
+            ...chatMessages.map(m => ({ ...m, type: 'player' })),
+            ...spectatorChatMessages.map(m => ({ ...m, type: 'spectator' }))
+        ];
+        return combined.sort((a, b) => a.timestamp - b.timestamp);
+    }, [chatMessages, spectatorChatMessages]);
     const hasPlayedLowTimeSoundRef = useRef(false);
 
     // Local state for online interactions to prevent sending premature game state updates
@@ -601,7 +610,7 @@ const App: React.FC = () => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
-    }, [chatMessages, activeTab]);
+    }, [chatMessages, spectatorChatMessages, activeTab]);
 
     useEffect(() => {
         if (activeTab === 'moves' && movesContainerRef.current) {
@@ -613,30 +622,41 @@ const App: React.FC = () => {
     useEffect(() => {
         if (!currentUser || !gameRef || activeTab !== 'chat') return;
 
-        const myPlayer = players[currentUser.uid];
-        const lastRead = myPlayer?.lastReadChatTimestamp || 0;
-        const lastMessageTimestamp = chatMessages.length > 0 ? chatMessages[chatMessages.length - 1].timestamp : 0;
+        const lastPlayerMsgTime = chatMessages.length > 0 ? chatMessages[chatMessages.length - 1].timestamp : 0;
+        const lastSpecMsgTime = spectatorChatMessages.length > 0 ? spectatorChatMessages[spectatorChatMessages.length - 1].timestamp : 0;
+        const maxMessageTime = Math.max(lastPlayerMsgTime, lastSpecMsgTime);
 
-        // If we are looking at the chat and there are messages we haven't officially "read" yet in the DB
-        if (lastMessageTimestamp > lastRead) {
-            gameRef.child(`players/${currentUser.uid}`).update({
-                lastReadChatTimestamp: window.firebase.database.ServerValue.TIMESTAMP
-            });
+        setLocalLastReadChatTimestamp(Date.now());
+
+        if (gameMode === 'online_playing') {
+            const myPlayer = players[currentUser.uid];
+            const lastRead = myPlayer?.lastReadChatTimestamp || 0;
+            if (maxMessageTime > lastRead) {
+                gameRef.child(`players/${currentUser.uid}`).update({
+                    lastReadChatTimestamp: window.firebase.database.ServerValue.TIMESTAMP
+                });
+            }
         }
-    }, [activeTab, chatMessages, currentUser, gameRef, players]);
+    }, [activeTab, chatMessages, spectatorChatMessages, currentUser, gameRef, players, gameMode]);
 
     const unreadChatCount = useMemo(() => {
         if (!currentUser) return 0;
         // If we're looking at chat, show 0 unread locally
         if (activeTab === 'chat') return 0;
 
-        const myPlayer = players[currentUser.uid];
-        const lastRead = myPlayer?.lastReadChatTimestamp || 0;
+        const lastReadFromDB = gameMode === 'online_playing' ? players[currentUser.uid]?.lastReadChatTimestamp : 0;
+        const lastRead = lastReadFromDB || localLastReadChatTimestamp || 0;
 
-        return chatMessages.filter(msg =>
+        const unreadPlayerMsgs = chatMessages.filter(msg =>
             msg.uid !== currentUser.uid && msg.timestamp > lastRead
         ).length;
-    }, [chatMessages, players, currentUser, activeTab]);
+
+        const unreadSpecMsgs = spectatorChatMessages.filter(msg =>
+            msg.uid !== currentUser.uid && msg.timestamp > lastRead
+        ).length;
+
+        return unreadPlayerMsgs + unreadSpecMsgs;
+    }, [chatMessages, spectatorChatMessages, players, currentUser, activeTab, gameMode, localLastReadChatTimestamp]);
 
 
     const randomizeNextGameColor = useCallback(() => {
@@ -3745,13 +3765,16 @@ const App: React.FC = () => {
                         {activeTab === 'chat' && (
                             <div className="flex flex-col h-64">
                                 <div ref={chatContainerRef} className="flex-grow min-h-0 overflow-y-auto mb-2 space-y-2 p-2 bg-gray-900 rounded">
-                                    {(gameMode === 'online_spectating' ? spectatorChatMessages : chatMessages).length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
-                                    {(gameMode === 'online_spectating' ? spectatorChatMessages : chatMessages).map((msg, i) => {
+                                    {(gameMode === 'online_spectating' ? combinedChatMessages : chatMessages).length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
+                                    {(gameMode === 'online_spectating' ? combinedChatMessages : chatMessages).map((msg, i) => {
                                         const isMe = currentUser && msg.uid === currentUser.uid;
+                                        const isPlayerMsg = (msg as any).type === 'player';
                                         return (
                                             <div key={i} className={`text-sm ${isMe ? 'text-right' : ''}`}>
-                                                <span className={`font-bold ${isMe ? 'text-blue-400' : 'text-green-400'}`}>{isMe ? '(You)' : msg.sender}: </span>
-                                                <span className="text-gray-300 break-words">{msg.text}</span>
+                                                <span className={`font-bold ${isMe ? 'text-blue-400' : isPlayerMsg ? 'text-yellow-400' : 'text-green-400'}`}>
+                                                    {isMe ? '(You)' : isPlayerMsg ? `[Player] ${msg.sender}` : msg.sender}: 
+                                                </span>
+                                                <span className="text-gray-300 break-words"> {msg.text}</span>
                                             </div>
                                         );
                                     })}
@@ -3921,13 +3944,16 @@ const App: React.FC = () => {
                     {activeTab === 'chat' && (
                         <div className="flex-grow flex flex-col min-h-0">
                             <div ref={chatContainerRef} className="flex-grow min-h-0 overflow-y-auto mb-2 space-y-2 p-2 bg-gray-900 rounded border border-gray-700">
-                                {(gameMode === 'online_spectating' ? spectatorChatMessages : chatMessages).length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
-                                {(gameMode === 'online_spectating' ? spectatorChatMessages : chatMessages).map((msg, i) => {
+                                {(gameMode === 'online_spectating' ? combinedChatMessages : chatMessages).length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
+                                {(gameMode === 'online_spectating' ? combinedChatMessages : chatMessages).map((msg, i) => {
                                     const isMe = currentUser && msg.uid === currentUser.uid;
+                                    const isPlayerMsg = (msg as any).type === 'player';
                                     return (
                                         <div key={i} className={`text-sm ${isMe ? 'text-right' : ''}`}>
-                                            <span className={`font-bold ${isMe ? 'text-blue-400' : 'text-green-400'}`}>{isMe ? '(You)' : msg.sender}: </span>
-                                            <span className="text-gray-300 break-words">{msg.text}</span>
+                                            <span className={`font-bold ${isMe ? 'text-blue-400' : isPlayerMsg ? 'text-yellow-400' : 'text-green-400'}`}>
+                                                {isMe ? '(You)' : isPlayerMsg ? `[Player] ${msg.sender}` : msg.sender}: 
+                                            </span>
+                                            <span className="text-gray-300 break-words"> {msg.text}</span>
                                         </div>
                                     );
                                 })}
