@@ -634,11 +634,13 @@ const App: React.FC = () => {
 
         setLocalLastReadChatTimestamp(Date.now());
 
-        if (gameMode === 'online_playing') {
+        if (gameMode === 'online_playing' || gameMode === 'online_spectating') {
             const myPlayer = players[currentUser.uid];
             const lastRead = myPlayer?.lastReadChatTimestamp || 0;
             if (maxMessageTime > lastRead) {
                 gameRef.child(`players/${currentUser.uid}`).update({
+                    uid: currentUser.uid,
+                    displayName: currentUser.displayName || 'Guest',
                     lastReadChatTimestamp: window.firebase.database.ServerValue.TIMESTAMP
                 });
             }
@@ -650,7 +652,7 @@ const App: React.FC = () => {
         // If we're looking at chat, show 0 unread locally
         if (activeTab === 'chat') return 0;
 
-        const lastReadFromDB = gameMode === 'online_playing' ? players[currentUser.uid]?.lastReadChatTimestamp : 0;
+        const lastReadFromDB = (gameMode === 'online_playing' || gameMode === 'online_spectating') ? players[currentUser.uid]?.lastReadChatTimestamp : 0;
         const lastRead = lastReadFromDB || localLastReadChatTimestamp || 0;
 
         const unreadPlayerMsgs = chatMessages.filter(msg =>
