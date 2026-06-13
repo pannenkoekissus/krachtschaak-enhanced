@@ -1676,6 +1676,7 @@ const App: React.FC = () => {
             lastMove: move,
             moveHistory: newMoveHistory,
             chat: baseState.chat,
+            spectatorChat: baseState.spectatorChat,
             tournamentId,
             tournamentRound,
             tournamentPairingId,
