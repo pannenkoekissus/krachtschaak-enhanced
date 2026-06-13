@@ -1185,6 +1185,7 @@ const App: React.FC = () => {
         ambiguousEnPassantData, drawOffer, playerTimes, moveDeadline, timerSettings, ratingCategory, players, playerColors, initialRatings,
         isRated, rematchOffer, nextGameId, ratingChange, challengedPlayerInfo, turnStartTime, premoves, lastMove, playersLeft,
         completedAt, moveHistory, chat: chatMessages,
+        spectatorChat: spectatorChatMessages,
         tournamentId: gameTournamentId,
         tournamentRound: gameTournamentRound,
         tournamentPairingId: gameTournamentPairingId,
@@ -1197,7 +1198,7 @@ const App: React.FC = () => {
         enPassantTarget, halfmoveClock, positionHistory,
         ambiguousEnPassantData, drawOffer, playerTimes, moveDeadline, timerSettings, ratingCategory, players, playerColors, initialRatings,
         isRated, rematchOffer, nextGameId, ratingChange, challengedPlayerInfo, turnStartTime, premoves, lastMove, playersLeft,
-        completedAt, moveHistory, chatMessages,
+        completedAt, moveHistory, chatMessages, spectatorChatMessages,
         gameTournamentId, gameTournamentRound, gameTournamentPairingId,
         gameShowPowerPieces, gameShowPowerRings, gameShowOriginalType, gameKFen
     ]);
