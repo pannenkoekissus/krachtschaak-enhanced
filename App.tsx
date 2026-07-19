@@ -4499,4 +4499,3 @@ const App: React.FC = () => {
 };
 
 export default App;
->>>>>>> parent of 4cdb2af (Clamp ratings to minimum 100: enforce min rating in calculateElo and clamp before DB writes)
