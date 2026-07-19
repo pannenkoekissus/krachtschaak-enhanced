@@ -460,11 +460,7 @@ const Tournament: React.FC<TournamentProps> = ({
         const updates: any = {};
         if (result === '1-0') {
             updates[`tournaments/${activeTournament.id}/players/${pairing.white}/score`] = (tData.players[pairing.white]?.score || 0) + 1;
-            if (pairing.black !== 'BYE') {
-                updates[`tournaments/${activeTournament.id}/players/${pairing.black}/score`] = (tData.players[pairing.black]?.score || 0);
-            }
         } else if (result === '0-1') {
-            updates[`tournaments/${activeTournament.id}/players/${pairing.white}/score`] = (tData.players[pairing.white]?.score || 0);
             if (pairing.black !== 'BYE') {
                 updates[`tournaments/${activeTournament.id}/players/${pairing.black}/score`] = (tData.players[pairing.black]?.score || 0) + 1;
             }
@@ -474,7 +470,9 @@ const Tournament: React.FC<TournamentProps> = ({
                 updates[`tournaments/${activeTournament.id}/players/${pairing.black}/score`] = (tData.players[pairing.black]?.score || 0) + 0.5;
             }
         }
-        await db.ref().update(updates);
+        if (Object.keys(updates).length > 0) {
+            await db.ref().update(updates);
+        }
 
         // Recalculate tiebreaks
         await recalculateTiebreaks(activeTournament.id);

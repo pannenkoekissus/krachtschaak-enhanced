@@ -1527,7 +1527,7 @@ const App: React.FC = () => {
                                 status: 'finished'
                             });
 
-                            // Update scores using an atomic update
+                            // Update scores using an atomic update (only non-zero changes to comply with security rules)
                             const playersRef = db.ref(`tournaments/${finalState.tournamentId}/players`);
                             const playersSnap = await playersRef.once('value');
                             const players = playersSnap.val();
@@ -1535,11 +1535,7 @@ const App: React.FC = () => {
                                 const scoreUpdates: any = {};
                                 if (tournamentResult === '1-0') {
                                     if (players[pairing.white]) scoreUpdates[`tournaments/${finalState.tournamentId}/players/${pairing.white}/score`] = (players[pairing.white].score || 0) + 1;
-                                    if (pairing.black !== 'BYE' && players[pairing.black]) {
-                                        scoreUpdates[`tournaments/${finalState.tournamentId}/players/${pairing.black}/score`] = (players[pairing.black].score || 0);
-                                    }
                                 } else if (tournamentResult === '0-1') {
-                                    if (players[pairing.white]) scoreUpdates[`tournaments/${finalState.tournamentId}/players/${pairing.white}/score`] = (players[pairing.white].score || 0);
                                     if (pairing.black !== 'BYE' && players[pairing.black]) {
                                         scoreUpdates[`tournaments/${finalState.tournamentId}/players/${pairing.black}/score`] = (players[pairing.black].score || 0) + 1;
                                     }
@@ -1549,7 +1545,9 @@ const App: React.FC = () => {
                                         scoreUpdates[`tournaments/${finalState.tournamentId}/players/${pairing.black}/score`] = (players[pairing.black].score || 0) + 0.5;
                                     }
                                 }
-                                await db.ref().update(scoreUpdates);
+                                if (Object.keys(scoreUpdates).length > 0) {
+                                    await db.ref().update(scoreUpdates);
+                                }
                             }
 
                             // Important: recalculate tiebreaks to keep standings up to date
