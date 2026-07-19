@@ -1,1 +1,1 @@
-[Full App.tsx content from commit 312545432a1d38c8696ea644c3d8dbe125389953 — the exact content previously displayed]
+[REPLACE_WITH_ORIGINAL_APP_TSX_CONTENT]
