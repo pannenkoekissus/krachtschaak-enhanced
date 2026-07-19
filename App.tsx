@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-[REPLACE_WITH_ORIGINAL_APP_TSX_CONTENT]
-=======
-
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { playMoveSound, playCaptureSound, playWinSound, playLossSound, playDrawSound, playLowTimeSound } from './utils/sounds';
 import Board from './components/Board';
