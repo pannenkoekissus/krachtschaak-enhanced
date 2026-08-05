@@ -1484,8 +1484,8 @@ const App: React.FC = () => {
                     if (newWinner === 'Black' || newWinner === 'black') whiteScore = 0;
                     const blackScore = 1 - whiteScore;
 
-                    const newWhiteRating = calculateElo(whiteRating, blackRating, whiteScore);
-                    const newBlackRating = calculateElo(blackRating, whiteRating, blackScore);
+                    const newWhiteRating =Math.max(calculateElo(whiteRating, blackRating, whiteScore), 100);
+                    const newBlackRating = Math.nax(calculateElo(blackRating, whiteRating, blackScore), 100);
 
                     const calculatedRatingChange = {
                         white: newWhiteRating - whiteRating,
@@ -3134,8 +3134,8 @@ const App: React.FC = () => {
                                 const blackRating = gameData.initialRatings.black;
                                 const whiteScore = guestColor === Color.White ? 0 : 1;
 
-                                const newWhiteRating = calculateElo(whiteRating, blackRating, whiteScore);
-                                const newBlackRating = calculateElo(blackRating, whiteRating, 1 - whiteScore);
+                                const newWhiteRating = Math.max(calculateElo(whiteRating, blackRating, whiteScore), 100);
+                                const newBlackRating = Math.max(calculateElo(blackRating, whiteRating, 1 - whiteScore), 100);
 
                                 const ratingChange = {
                                     white: newWhiteRating - whiteRating,
