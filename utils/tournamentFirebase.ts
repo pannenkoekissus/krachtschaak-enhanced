@@ -115,6 +115,16 @@ export const removePlayer = async (
     if (uid) await db.ref(`tournaments/${tournamentId}/playerUidIndex/${uid}`).remove();
 };
 
+// Unwithdraw a player from a tournament
+export const unwithdrawPlayer = async (
+    tournamentId: string,
+    playerId: string,
+    uid: string
+): Promise<void> => {
+    await db.ref(`tournaments/${tournamentId}/players/${playerId}`).update({ withdrawn: null });
+    await db.ref(`tournaments/${tournamentId}/playerUidIndex/${uid}`).set(playerId);
+};
+
 // Start the tournament (set status to in_progress, create round 1)
 export const startTournament = async (tournamentId: string): Promise<void> => {
     await db.ref(`tournaments/${tournamentId}`).update({
@@ -356,9 +366,12 @@ export const toggleHostParticipation = async (tournamentId: string, hostUid: str
             sonnebornBerger: 0,
             joinedAt: Date.now()
         });
+    } else if (shouldParticipate && existingPlayer && existingPlayer.withdrawn) {
+        // Unwithdraw host
+        await unwithdrawPlayer(tournamentId, existingPlayer.playerId, hostUid);
     } else if (!shouldParticipate && existingPlayer) {
         // Remove host from players
-        await db.ref(`tournaments/${tournamentId}/players/${existingPlayer.playerId}`).remove();
+        await removePlayer(tournamentId, existingPlayer.playerId);
     }
 };
 

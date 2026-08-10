@@ -9,7 +9,7 @@ import {
     startTournament, endTournament, deleteTournament, setPairings, updatePairing, deletePairing, clearAllPairings,
     updatePlayerScore, advanceRound, getTournament,
     listActiveTournaments, listTournamentHistory, generateSwissPairings, recalculateTiebreaks,
-    toggleHostParticipation, listPublicTournamentHistory, updateTournamentDetails
+    toggleHostParticipation, listPublicTournamentHistory, updateTournamentDetails, unwithdrawPlayer
 } from '../utils/tournamentFirebase';
 import { createInitialBoard } from '../utils/game';
 import { getRatingCategory } from '../utils/ratings';
@@ -219,7 +219,7 @@ const Tournament: React.FC<TournamentProps> = ({
             if (!t) { setError('Tournament not found'); return; }
 
             const isHostOfThis = t.hostUid === userId;
-            const existing = Object.values(t.players || {}).find((p: any) => p.uid === userId);
+            const existing = Object.values(t.players || {}).find((p: any) => p.uid === userId) as TournamentPlayer | undefined;
 
             // Non-host, non-player can enter a started or finished tournament as a spectator
             // We only show an error if it's private and they don't have access (already handled by lists usually)
@@ -546,6 +546,16 @@ const Tournament: React.FC<TournamentProps> = ({
             } catch (err: any) {
                 setError(err.message);
             }
+        }
+    };
+
+    // Self: rejoin tournament after withdrawing
+    const handleRejoin = async () => {
+        if (!activeTournament || !myPlayerId) return;
+        try {
+            await unwithdrawPlayer(activeTournament.id, myPlayerId, userId);
+        } catch (err: any) {
+            setError(err.message);
         }
     };
 
@@ -1145,6 +1155,14 @@ const Tournament: React.FC<TournamentProps> = ({
                                     className="px-4 py-2 bg-red-900/50 hover:bg-red-800/50 text-red-200 border border-red-700/50 rounded-lg font-semibold transition-colors text-sm"
                                 >
                                     Withdraw
+                                </button>
+                            )}
+                            {myPlayerId && activeTournament.status !== 'finished' && players.find(p => p.playerId === myPlayerId)?.withdrawn && (
+                                <button
+                                    onClick={handleRejoin}
+                                    className="px-4 py-2 bg-green-900/50 hover:bg-green-800/50 text-green-200 border border-green-700/50 rounded-lg font-semibold transition-colors text-sm"
+                                >
+                                    Rejoin
                                 </button>
                             )}
                             <button

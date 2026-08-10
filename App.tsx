@@ -1484,8 +1484,8 @@ const App: React.FC = () => {
                     if (newWinner === 'Black' || newWinner === 'black') whiteScore = 0;
                     const blackScore = 1 - whiteScore;
 
-                    const newWhiteRating =Math.max(calculateElo(whiteRating, blackRating, whiteScore), 100);
-                    const newBlackRating = Math.nax(calculateElo(blackRating, whiteRating, blackScore), 100);
+                    const newWhiteRating = Math.max(calculateElo(whiteRating, blackRating, whiteScore), 100);
+                    const newBlackRating = Math.max(calculateElo(blackRating, whiteRating, blackScore), 100);
 
                     const calculatedRatingChange = {
                         white: newWhiteRating - whiteRating,
