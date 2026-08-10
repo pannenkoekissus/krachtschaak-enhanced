@@ -110,7 +110,7 @@ export const removePlayer = async (
     // Look up uid from the player record before removing
     const snap = await db.ref(`tournaments/${tournamentId}/players/${playerId}/uid`).once('value');
     const uid = snap.val();
-    await db.ref(`tournaments/${tournamentId}/players/${playerId}`).remove();
+    await db.ref(`tournaments/${tournamentId}/players/${playerId}`).update({ withdrawn: true });
     // Clean up uid index
     if (uid) await db.ref(`tournaments/${tournamentId}/playerUidIndex/${uid}`).remove();
 };
@@ -392,7 +392,7 @@ export const generateSwissPairings = (
     });
 
     // Sort by score descending, then by join order
-    let available = [...players].sort((a, b) => {
+    let available = [...players].filter(p => !p.withdrawn).sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score;
         return a.joinedAt - b.joinedAt;
     });

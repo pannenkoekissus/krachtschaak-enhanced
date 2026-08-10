@@ -223,6 +223,7 @@ export interface TournamentPlayer {
   buchholz: number;        // tiebreak: sum of opponents' scores
   sonnebornBerger: number; // tiebreak: sum of beaten opponents' scores + 0.5 * drawn opponents' scores
   joinedAt: number;
+  withdrawn?: boolean;
 }
 
 export interface TournamentPairing {

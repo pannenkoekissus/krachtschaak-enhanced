@@ -1139,7 +1139,7 @@ const Tournament: React.FC<TournamentProps> = ({
                                     Delete
                                 </button>
                             )}
-                            {myPlayerId && activeTournament.status !== 'finished' && (
+                            {myPlayerId && activeTournament.status !== 'finished' && !players.find(p => p.playerId === myPlayerId)?.withdrawn && (
                                 <button
                                     onClick={handleWithdraw}
                                     className="px-4 py-2 bg-red-900/50 hover:bg-red-800/50 text-red-200 border border-red-700/50 rounded-lg font-semibold transition-colors text-sm"
@@ -1199,15 +1199,18 @@ const Tournament: React.FC<TournamentProps> = ({
                                     {players.map(p => (
                                         <div key={p.playerId} className="flex items-center justify-between p-2 bg-gray-700 rounded-lg">
                                             <div className="flex items-center gap-2">
-                                                <span className="font-semibold">{p.nickname}</span>
+                                                <span className={`font-semibold ${p.withdrawn ? 'line-through text-gray-400' : ''}`}>{p.nickname}</span>
                                                 {p.uid === activeTournament.hostUid && (
                                                     <span className="text-xs bg-yellow-600 px-2 py-0.5 rounded-full font-bold">HOST</span>
                                                 )}
                                                 {p.uid === userId && (
                                                     <span className="text-xs bg-blue-600 px-2 py-0.5 rounded-full font-bold">YOU</span>
                                                 )}
+                                                {p.withdrawn && (
+                                                    <span className="text-xs bg-red-900/50 text-red-400 border border-red-700/50 px-2 py-0.5 rounded-full font-bold">WITHDRAWN</span>
+                                                )}
                                             </div>
-                                            {isHost && p.uid !== userId && (
+                                            {isHost && p.uid !== userId && !p.withdrawn && (
                                                 <button
                                                     onClick={() => handleRemovePlayer(p.playerId)}
                                                     className="text-xs px-2 py-1 bg-red-700 hover:bg-red-600 rounded font-bold transition-colors"
@@ -1257,11 +1260,12 @@ const Tournament: React.FC<TournamentProps> = ({
                                         </thead>
                                         <tbody>
                                             {sortedPlayers.map((p, i) => (
-                                                <tr key={p.playerId} className={`border-b border-gray-700/50 ${p.uid === userId ? 'bg-blue-900/30' : ''}`}>
+                                                <tr key={p.playerId} className={`border-b border-gray-700/50 ${p.uid === userId ? 'bg-blue-900/30' : ''} ${p.withdrawn ? 'opacity-50' : ''}`}>
                                                     <td className="py-2 px-2 font-bold text-gray-400">{i + 1}</td>
                                                     <td className="py-2 px-2 font-semibold">
-                                                        {p.nickname}
+                                                        <span className={p.withdrawn ? 'line-through text-gray-400' : ''}>{p.nickname}</span>
                                                         {p.uid === activeTournament.hostUid && <span className="ml-1 text-yellow-400 text-xs">👑</span>}
+                                                        {p.withdrawn && <span className="ml-2 text-[10px] text-red-400 uppercase font-bold">Withdrawn</span>}
                                                     </td>
                                                     <td className="py-2 px-2 text-center font-bold text-yellow-400">{p.score}</td>
                                                     <td className="py-2 px-2 text-center text-gray-400">{p.buchholz?.toFixed(1) || '0.0'}</td>
@@ -1412,7 +1416,7 @@ const Tournament: React.FC<TournamentProps> = ({
                                                             <label className="text-[10px] text-gray-400">White</label>
                                                             <select value={manualWhite} onChange={e => setManualWhite(e.target.value)} className="w-full px-2 py-1 bg-gray-600 rounded text-sm">
                                                                 <option value="">Select...</option>
-                                                                {players.map(p => <option key={p.playerId} value={p.playerId}>{p.nickname}</option>)}
+                                                                {players.filter(p => !p.withdrawn).map(p => <option key={p.playerId} value={p.playerId}>{p.nickname}</option>)}
                                                             </select>
                                                         </div>
                                                         <div className="text-gray-500 text-xs pb-1">vs</div>
@@ -1423,7 +1427,7 @@ const Tournament: React.FC<TournamentProps> = ({
                                                                 <option value="BYE">Full BYE (1.0 pt)</option>
                                                                 <option value="HALF_BYE">Half BYE (0.5 pt)</option>
                                                                 <option value="ZERO_BYE">0 point BYE (0.0 pt)</option>
-                                                                {players.filter(p => p.playerId !== manualWhite).map(p => <option key={p.playerId} value={p.playerId}>{p.nickname}</option>)}
+                                                                {players.filter(p => !p.withdrawn && p.playerId !== manualWhite).map(p => <option key={p.playerId} value={p.playerId}>{p.nickname}</option>)}
                                                             </select>
                                                         </div>
                                                         <button
