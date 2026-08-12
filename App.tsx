@@ -4119,6 +4119,14 @@ const App: React.FC = () => {
                     onSpectate={(gameId) => {
                         handleOnlineGameStart(gameId, null);
                     }}
+                    onViewPosition={(kFen) => {
+                        const result = fenToBoard(kFen);
+                        if (result && result.board) {
+                            setLastEditedBoard(result.board);
+                            setLastEditedTurn(result.turn || Color.White);
+                            setGameMode('board_editor');
+                        }
+                    }}
                     onBack={() => setGameMode('menu')}
                 />
             );

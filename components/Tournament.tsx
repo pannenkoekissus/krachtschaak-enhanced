@@ -11,7 +11,8 @@ import {
     listActiveTournaments, listTournamentHistory, generateSwissPairings, recalculateTiebreaks,
     toggleHostParticipation, listPublicTournamentHistory, updateTournamentDetails, unwithdrawPlayer
 } from '../utils/tournamentFirebase';
-import { createInitialBoard } from '../utils/game';
+import { createInitialBoard, fenToBoard } from '../utils/game';
+import Board from './Board';
 import { getRatingCategory } from '../utils/ratings';
 
 interface TournamentProps {
@@ -24,6 +25,7 @@ interface TournamentProps {
     myRatings: any;
     activeTournamentId?: string | null;
     onTournamentJoined: (id: string | null) => void;
+    onViewPosition?: (kFen: string) => void;
 }
 
 type TournamentView = 'list' | 'create' | 'lobby' | 'in_progress' | 'finished';
@@ -31,7 +33,7 @@ type ListTab = 'my_active' | 'active' | 'history' | 'public_history';
 
 const Tournament: React.FC<TournamentProps> = ({
     userId, displayName, onBack, onGameStart, getInitialGameState, myRatings,
-    activeTournamentId, onTournamentJoined, onSpectate
+    activeTournamentId, onTournamentJoined, onSpectate, onViewPosition
 }) => {
     const [view, setView] = useState<TournamentView>('list');
     const [tournaments, setTournaments] = useState<TournamentData[]>([]);
@@ -58,6 +60,7 @@ const Tournament: React.FC<TournamentProps> = ({
     const [createFlags, setCreateFlags] = useState('');
     const [createExpectedStartDate, setCreateExpectedStartDate] = useState('');
     const [createTimezone, setCreateTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    const [createKFen, setCreateKFen] = useState('');
 
     // Join
     const [joinCode, setJoinCode] = useState('');
@@ -77,6 +80,23 @@ const Tournament: React.FC<TournamentProps> = ({
     const [editExpectedStartDate, setEditExpectedStartDate] = useState('');
     const [editTimezone, setEditTimezone] = useState('');
     const [editFlags, setEditFlags] = useState('');
+    const [editKFen, setEditKFen] = useState('');
+
+    // Position preview modal state
+    const [previewKFenModal, setPreviewKFenModal] = useState<{ kFen: string; title: string } | null>(null);
+    const [copiedKFen, setCopiedKFen] = useState(false);
+
+    const isCreateKFenValid = React.useMemo(() => {
+        if (!createKFen.trim()) return true;
+        const res = fenToBoard(createKFen.trim());
+        return !!(res && res.board);
+    }, [createKFen]);
+
+    const isEditKFenValid = React.useMemo(() => {
+        if (!editKFen.trim()) return true;
+        const res = fenToBoard(editKFen.trim());
+        return !!(res && res.board);
+    }, [editKFen]);
 
     useEffect(() => {
         if (activeTournament) {
@@ -84,6 +104,7 @@ const Tournament: React.FC<TournamentProps> = ({
             setEditExpectedStartDate(activeTournament.expectedStartDate || '');
             setEditTimezone(activeTournament.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
             setEditFlags(activeTournament.flags ? activeTournament.flags.join(', ') : '');
+            setEditKFen(activeTournament.kFen || '');
         }
     }, [activeTournament, isEditingSettings]);
 
@@ -178,6 +199,10 @@ const Tournament: React.FC<TournamentProps> = ({
     // Handle create
     const handleCreate = async () => {
         if (!createName.trim()) { setError('Enter a tournament name'); return; }
+        if (createKFen.trim()) {
+            const kRes = fenToBoard(createKFen.trim());
+            if (!kRes || !kRes.board) { setError('Invalid starting K-FEN or FEN format'); return; }
+        }
         try {
             setError(null);
             const baseTime = createTimeControlType === 'realtime' ? (parseFloat(createBaseMinutes) || 0) * 60 : 0;
@@ -200,7 +225,7 @@ const Tournament: React.FC<TournamentProps> = ({
                 showPowerPieces: createShowPowerPieces,
                 showPowerRings: createShowPowerRings,
                 showOriginalType: createShowOriginalType
-            }, createIsPrivate, createIsRated, flagsArray, expectedStartStr || null, createTimezone);
+            }, createIsPrivate, createIsRated, flagsArray, expectedStartStr || null, createTimezone, createKFen.trim() || undefined);
             onTournamentJoined(id);
             subscribeToTournament(id);
             setView('lobby');
@@ -416,6 +441,15 @@ const Tournament: React.FC<TournamentProps> = ({
             initialState.tournamentRound = currentRound;
             initialState.tournamentPairingId = pairing.id;
 
+            if (activeTournament.kFen) {
+                const kRes = fenToBoard(activeTournament.kFen);
+                if (kRes && kRes.board) {
+                    initialState.board = kRes.board;
+                    initialState.turn = kRes.turn || Color.White;
+                    initialState.kFen = activeTournament.kFen;
+                }
+            }
+
             await newGameRef.set(initialState);
             await db.ref(`userGames/${whitePlayer.uid}/${gameId}`).set(true);
             await db.ref(`userGames/${blackPlayer.uid}/${gameId}`).set(true);
@@ -562,6 +596,10 @@ const Tournament: React.FC<TournamentProps> = ({
     const handleSaveSettings = async () => {
         if (!activeTournament || !isHost) return;
         if (!editName.trim()) { setError('Enter a tournament name'); return; }
+        if (editKFen.trim()) {
+            const kRes = fenToBoard(editKFen.trim());
+            if (!kRes || !kRes.board) { setError('Invalid starting K-FEN or FEN format'); return; }
+        }
         try {
             setError(null);
             const flagsArray = editFlags.split(',').map(s => s.trim()).filter(s => s);
@@ -569,12 +607,119 @@ const Tournament: React.FC<TournamentProps> = ({
                 name: editName.trim(),
                 expectedStartDate: editExpectedStartDate || '',
                 timezone: editTimezone.trim() || '',
-                flags: flagsArray
+                flags: flagsArray,
+                kFen: editKFen.trim() || null
             });
             setIsEditingSettings(false);
         } catch (err: any) {
             setError(err.message);
         }
+    };
+
+    const renderPreviewModal = () => {
+        if (!previewKFenModal) return null;
+        const parsed = fenToBoard(previewKFenModal.kFen);
+        const isValid = parsed && parsed.board;
+
+        return (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                <div className="bg-gray-800 border border-purple-700/60 rounded-2xl w-full max-w-lg p-5 shadow-2xl relative flex flex-col items-center">
+                    <button
+                        onClick={() => setPreviewKFenModal(null)}
+                        className="absolute top-3 right-3 text-gray-400 hover:text-white text-xl font-bold p-1"
+                    >
+                        ✕
+                    </button>
+
+                    <h2 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 mb-1 text-center">
+                        🧩 Tournament Starting Position
+                    </h2>
+                    <div className="text-xs text-gray-400 mb-3 text-center font-medium">
+                        {previewKFenModal.title}
+                    </div>
+
+                    {isValid ? (
+                        <div className="w-full flex flex-col items-center">
+                            <div className="mb-2 flex items-center gap-2">
+                                <span className="text-xs text-gray-300 font-semibold">Side to move:</span>
+                                <span className={`text-xs px-2 py-0.5 rounded font-bold uppercase ${parsed.turn === Color.White ? 'bg-gray-100 text-gray-900' : 'bg-gray-900 text-white border border-gray-700'}`}>
+                                    {parsed.turn || 'White'}
+                                </span>
+                            </div>
+
+                            <div className="w-72 h-72 sm:w-80 sm:h-80 my-2 rounded-lg overflow-hidden border-2 border-purple-600/50 shadow-xl">
+                                <Board
+                                    board={parsed.board}
+                                    selectedPiece={null}
+                                    validMoves={[]}
+                                    onSquareClick={() => {}}
+                                    turn={parsed.turn || Color.White}
+                                    playerColor={parsed.turn || Color.White}
+                                    gameMode="analysis"
+                                    isInteractionDisabled={true}
+                                    onPieceDragStart={() => {}}
+                                    onPieceDragEnd={() => {}}
+                                    onSquareDrop={() => {}}
+                                    draggedPiece={null}
+                                    premove={null}
+                                    lastMove={null}
+                                    highlightedSquares={[]}
+                                    arrows={[]}
+                                    onBoardMouseDown={() => {}}
+                                    onBoardMouseUp={() => {}}
+                                    onBoardContextMenu={(e) => e.preventDefault()}
+                                    showPowerPieces={true}
+                                    showPowerRings={true}
+                                    showOriginalType={true}
+                                />
+                            </div>
+
+                            <div className="w-full bg-gray-900/80 p-2.5 rounded-lg border border-gray-700 mt-3">
+                                <div className="text-[10px] uppercase font-bold text-gray-400 mb-1">K-FEN String:</div>
+                                <div className="text-xs font-mono text-purple-300 break-all select-all">{previewKFenModal.kFen}</div>
+                            </div>
+
+                            <div className="flex gap-2 w-full mt-4">
+                                <button
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(previewKFenModal.kFen);
+                                        setCopiedKFen(true);
+                                        setTimeout(() => setCopiedKFen(false), 2000);
+                                    }}
+                                    className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1"
+                                >
+                                    {copiedKFen ? '✓ Copied!' : '📋 Copy K-FEN'}
+                                </button>
+
+                                {onViewPosition && (
+                                    <button
+                                        onClick={() => {
+                                            const kFen = previewKFenModal.kFen;
+                                            setPreviewKFenModal(null);
+                                            onViewPosition(kFen);
+                                        }}
+                                        className="flex-1 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1"
+                                    >
+                                        🎨 Board Editor
+                                    </button>
+                                )}
+
+                                <button
+                                    onClick={() => setPreviewKFenModal(null)}
+                                    className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl text-xs font-bold transition-colors"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="py-8 text-center text-red-400 text-sm">
+                            Invalid position K-FEN data.
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
     };
 
     // Check if all pairings in current round are finished
@@ -636,7 +781,14 @@ const Tournament: React.FC<TournamentProps> = ({
                                                 className="p-3 bg-gray-800 hover:bg-gray-750 rounded-lg border border-gray-700 transition-all cursor-pointer group flex justify-between items-center"
                                             >
                                                 <div>
-                                                    <h3 className="font-bold group-hover:text-blue-400 transition-colors">{t.name}</h3>
+                                                    <h3 className="font-bold group-hover:text-blue-400 transition-colors flex items-center gap-2">
+                                                        {t.name}
+                                                        {t.kFen && (
+                                                            <span className="text-[10px] bg-purple-900/60 text-purple-300 border border-purple-600/50 px-1.5 py-0.5 rounded font-normal">
+                                                                🧩 Custom K-FEN
+                                                            </span>
+                                                        )}
+                                                    </h3>
                                                     <div className="text-xs text-gray-400">
                                                         Round {t.currentRound} of {t.totalRounds} • {timeLabel}
                                                     </div>
@@ -645,6 +797,17 @@ const Tournament: React.FC<TournamentProps> = ({
                                                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${t.status === 'lobby' ? 'bg-green-900 text-green-400' : 'bg-blue-600 text-white'}`}>
                                                         {t.status.replace('_', ' ')}
                                                     </span>
+                                                    {t.kFen && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setPreviewKFenModal({ kFen: t.kFen!, title: t.name });
+                                                            }}
+                                                            className="text-[10px] bg-purple-700 hover:bg-purple-600 text-white px-2 py-0.5 rounded flex items-center gap-1 transition-colors shadow"
+                                                        >
+                                                            👁️ View Position
+                                                        </button>
+                                                    )}
                                                     <div className="text-[10px] font-mono text-gray-500">{t.id}</div>
                                                 </div>
                                             </div>
@@ -757,13 +920,18 @@ const Tournament: React.FC<TournamentProps> = ({
                                                     </div>
                                                     <div className="text-sm text-gray-400 mt-0.5">
                                                         ⏱ {timeLabel} • {t.totalRounds} round{t.totalRounds !== 1 ? 's' : ''}
-                                                    </div>
-                                                    <div className="mt-1 flex gap-2 flex-wrap">
-                                                        <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${t.pairingMode === 'swiss' ? 'bg-blue-900/50 text-blue-400' : 'bg-purple-900/50 text-purple-400'}`}>
-                                                            {t.pairingMode}
-                                                        </span>
-                                                        {t.isPrivate && <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-500">Private</span>}
-                                                        {t.isRated && <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-green-900/50 text-green-500">Rated</span>}
+                                                        <div className="mt-1 flex gap-2 flex-wrap items-center">
+                                                            <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${t.pairingMode === 'swiss' ? 'bg-blue-900/50 text-blue-400' : 'bg-purple-900/50 text-purple-400'}`}>
+                                                                {t.pairingMode}
+                                                            </span>
+                                                            {t.isPrivate && <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-500">Private</span>}
+                                                            {t.isRated && <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-green-900/50 text-green-500">Rated</span>}
+                                                            {t.kFen && (
+                                                                <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-purple-900/70 text-purple-300 border border-purple-500/50 flex items-center gap-1">
+                                                                    🧩 Custom K-FEN
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                     {visualTags.length > 0 && (
                                                         <div className="text-xs text-gray-500 mt-1.5">
@@ -776,6 +944,17 @@ const Tournament: React.FC<TournamentProps> = ({
                                                         }`}>
                                                         {t.status.replace('_', ' ')}
                                                     </span>
+                                                    {t.kFen && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setPreviewKFenModal({ kFen: t.kFen!, title: t.name });
+                                                            }}
+                                                            className="text-xs bg-purple-700 hover:bg-purple-600 text-white px-2.5 py-1 rounded-md flex items-center gap-1 transition-colors shadow"
+                                                        >
+                                                            👁️ View Position
+                                                        </button>
+                                                    )}
                                                     <div className="text-[10px] font-mono text-gray-500">{t.id}</div>
                                                 </div>
                                             </div>
@@ -798,6 +977,7 @@ const Tournament: React.FC<TournamentProps> = ({
                         + Create Tournament
                     </button>
                 </div>
+                {renderPreviewModal()}
             </div>
         );
     }
@@ -984,6 +1164,40 @@ const Tournament: React.FC<TournamentProps> = ({
                             />
                         </div>
 
+                        <div className="p-3 bg-gray-800/80 rounded-lg border border-purple-900/50 space-y-2">
+                            <div className="flex justify-between items-center">
+                                <label className="block text-sm font-semibold text-gray-300">
+                                    🧩 Starting K-FEN / FEN (Optional)
+                                </label>
+                                {createKFen.trim() && (
+                                    <span className={`text-xs font-bold ${isCreateKFenValid ? 'text-green-400' : 'text-red-400'}`}>
+                                        {isCreateKFenValid ? '✓ Valid Position' : '❌ Invalid Format'}
+                                    </span>
+                                )}
+                            </div>
+                            <input
+                                type="text"
+                                value={createKFen}
+                                onChange={e => setCreateKFen(e.target.value)}
+                                placeholder="Paste K-FEN or FEN string or leave blank for default"
+                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-xs placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                            />
+                            <div className="flex justify-between items-center pt-0.5">
+                                <p className="text-[11px] text-gray-400">
+                                    All tournament games will start from this position.
+                                </p>
+                                {createKFen.trim() && isCreateKFenValid && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setPreviewKFenModal({ kFen: createKFen.trim(), title: createName || 'New Tournament' })}
+                                        className="text-xs text-purple-400 hover:text-purple-300 font-bold underline flex items-center gap-1"
+                                    >
+                                        👁️ Preview Board
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
                         <div className="bg-gray-800 p-3 rounded-lg space-y-2 border border-yellow-900/30">
                             <p className="text-xs font-bold text-yellow-500 uppercase mb-2">Visual Settings (Enforced for all games)</p>
                             <div className="flex items-center justify-between">
@@ -1016,6 +1230,7 @@ const Tournament: React.FC<TournamentProps> = ({
                         </div>
                     </div>
                 </div>
+                {renderPreviewModal()}
             </div>
         );
     }
@@ -1074,6 +1289,35 @@ const Tournament: React.FC<TournamentProps> = ({
                                             className="w-full px-3 py-2 bg-gray-755 border border-gray-650 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500"
                                         />
                                     </div>
+
+                                    <div>
+                                        <div className="flex justify-between items-center mb-1">
+                                            <label className="block text-sm font-semibold text-gray-300">
+                                                🧩 Starting K-FEN / FEN (Optional)
+                                            </label>
+                                            {editKFen.trim() && (
+                                                <span className={`text-xs font-bold ${isEditKFenValid ? 'text-green-400' : 'text-red-400'}`}>
+                                                    {isEditKFenValid ? '✓ Valid' : '❌ Invalid'}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <input
+                                            type="text"
+                                            value={editKFen}
+                                            onChange={e => setEditKFen(e.target.value)}
+                                            placeholder="Paste K-FEN or FEN string or leave blank for default"
+                                            className="w-full px-3 py-2 bg-gray-755 border border-gray-650 rounded-lg text-white font-mono text-xs placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                                        />
+                                        {editKFen.trim() && isEditKFenValid && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setPreviewKFenModal({ kFen: editKFen.trim(), title: editName || 'Edit Position' })}
+                                                className="mt-1 text-xs text-purple-400 hover:text-purple-300 font-bold underline flex items-center gap-1"
+                                            >
+                                                👁️ Preview Position
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
 
                                 <div className="flex gap-3 pt-6">
@@ -1129,6 +1373,35 @@ const Tournament: React.FC<TournamentProps> = ({
                                             🏷️ {flag}
                                         </span>
                                     ))}
+                                </div>
+                            )}
+                            {activeTournament.kFen && (
+                                <div className="mt-2.5 p-2.5 bg-purple-950/40 border border-purple-700/50 rounded-lg flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 overflow-hidden">
+                                        <span className="text-base">🧩</span>
+                                        <div>
+                                            <div className="text-xs font-bold text-purple-300">Custom Starting Position (K-FEN):</div>
+                                            <div className="text-xs font-mono text-gray-300 truncate max-w-xs sm:max-w-md">{activeTournament.kFen}</div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(activeTournament.kFen!);
+                                                setCopiedKFen(true);
+                                                setTimeout(() => setCopiedKFen(false), 2000);
+                                            }}
+                                            className="text-xs bg-purple-800 hover:bg-purple-700 text-purple-200 px-2.5 py-1 rounded transition-colors font-medium"
+                                        >
+                                            {copiedKFen ? '✓ Copied' : '📋 Copy K-FEN'}
+                                        </button>
+                                        <button
+                                            onClick={() => setPreviewKFenModal({ kFen: activeTournament.kFen!, title: activeTournament.name })}
+                                            className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-2.5 py-1 rounded font-bold transition-colors shadow flex items-center gap-1"
+                                        >
+                                            👁️ View Position
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -1523,6 +1796,7 @@ const Tournament: React.FC<TournamentProps> = ({
                         </div>
                     )}
                 </div>
+                {renderPreviewModal()}
             </div>
         );
     }

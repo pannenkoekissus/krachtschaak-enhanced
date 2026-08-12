@@ -26,7 +26,8 @@ export const createTournament = async (
     isRated: boolean = true,
     flags?: string[],
     expectedStartDate?: string,
-    timezone?: string
+    timezone?: string,
+    kFen?: string
 ): Promise<string> => {
     const id = generateTournamentId();
     const players: Record<string, TournamentPlayer> = {};
@@ -72,6 +73,7 @@ export const createTournament = async (
         flags: flags || [],
         expectedStartDate,
         timezone,
+        kFen: kFen || undefined,
         playerUidIndex
     };
 
@@ -561,6 +563,7 @@ export const updateTournamentDetails = async (
         expectedStartDate?: string;
         timezone?: string;
         flags?: string[];
+        kFen?: string | null;
     }
 ): Promise<void> => {
     await db.ref(`tournaments/${tournamentId}`).update(updates);
