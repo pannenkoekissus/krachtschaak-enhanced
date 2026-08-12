@@ -447,6 +447,7 @@ const Tournament: React.FC<TournamentProps> = ({
                     initialState.board = kRes.board;
                     initialState.turn = kRes.turn || Color.White;
                     initialState.kFen = activeTournament.kFen;
+                    initialState.isRated = false; // Force non-rated if custom K-FEN
                 }
             }
 

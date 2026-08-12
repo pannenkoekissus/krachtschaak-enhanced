@@ -71,11 +71,12 @@ export const createTournament = async (
         showPowerRings: visualSettings?.showPowerRings ?? true,
         showOriginalType: visualSettings?.showOriginalType ?? true,
         flags: flags || [],
-        expectedStartDate,
-        timezone,
-        kFen: kFen || undefined,
         playerUidIndex
     };
+
+    if (expectedStartDate) tournament.expectedStartDate = expectedStartDate;
+    if (timezone) tournament.timezone = timezone;
+    if (kFen) tournament.kFen = kFen;
 
     await db.ref(`tournaments/${id}`).set(tournament);
     return id;

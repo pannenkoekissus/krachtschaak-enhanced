@@ -990,6 +990,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({
                     initialState.board = result.board;
                     initialState.turn = result.turn || Color.White;
                     initialState.kFen = challenge.kFen;
+                    initialState.isRated = false; // Force non-rated if custom K-FEN
                 }
             }
 
