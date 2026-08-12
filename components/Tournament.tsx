@@ -1538,7 +1538,17 @@ const Tournament: React.FC<TournamentProps> = ({
                         <div className="space-y-4">
                             {/* Standings */}
                             <div className="p-4 bg-gray-800 rounded-xl border border-gray-700">
-                                <h2 className="text-lg font-bold mb-3">📊 Standings</h2>
+                                <div className="flex justify-between items-center mb-3">
+                                    <h2 className="text-lg font-bold">📊 Standings</h2>
+                                    {!myPlayerId && activeTournament.status === 'in_progress' && (
+                                        <button
+                                            onClick={() => joinTournament(activeTournament.id, displayName, userId)}
+                                            className="px-3 py-1 bg-green-600 hover:bg-green-500 text-white rounded font-bold transition-colors shadow flex items-center gap-1 text-sm"
+                                        >
+                                            🎮 Join Late
+                                        </button>
+                                    )}
+                                </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-sm">
                                         <thead>
