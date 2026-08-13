@@ -25,6 +25,7 @@ database.json
 .firebaserc
 
 # Editor directories and files
+.npmrc
 .agent
 tmpclaude*
 .vscode/*
