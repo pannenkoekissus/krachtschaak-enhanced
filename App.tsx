@@ -95,6 +95,7 @@ const App: React.FC = () => {
     const [isRated, setIsRated] = useState<boolean>(true);
     const [rematchOffer, setRematchOffer] = useState<Color | null>(null);
     const [nextGameId, setNextGameId] = useState<string | null>(null);
+    const [gameRematchOf, setGameRematchOf] = useState<string | null>(null);
     const [isForcePowerMode, setIsForcePowerMode] = useState(false);
     const [challengedPlayerInfo, setChallengedPlayerInfo] = useState<{ uid: string; displayName: string } | null>(null);
     const [draggedPiece, setDraggedPiece] = useState<Position | null>(null);
@@ -1185,6 +1186,7 @@ const App: React.FC = () => {
         isRated, rematchOffer, nextGameId, ratingChange, challengedPlayerInfo, turnStartTime, premoves, lastMove, playersLeft,
         completedAt, moveHistory, chat: chatMessages,
         spectatorChat: spectatorChatMessages,
+        rematchOf: gameRematchOf,
         tournamentId: gameTournamentId,
         tournamentRound: gameTournamentRound,
         tournamentPairingId: gameTournamentPairingId,
@@ -1197,7 +1199,7 @@ const App: React.FC = () => {
         enPassantTarget, halfmoveClock, positionHistory,
         ambiguousEnPassantData, drawOffer, playerTimes, moveDeadline, timerSettings, ratingCategory, players, playerColors, initialRatings,
         isRated, rematchOffer, nextGameId, ratingChange, challengedPlayerInfo, turnStartTime, premoves, lastMove, playersLeft,
-        completedAt, moveHistory, chatMessages, spectatorChatMessages,
+        completedAt, moveHistory, chatMessages, spectatorChatMessages, gameRematchOf,
         gameTournamentId, gameTournamentRound, gameTournamentPairingId,
         gameShowPowerPieces, gameShowPowerRings, gameShowOriginalType, gameKFen
     ]);
@@ -1294,6 +1296,7 @@ const App: React.FC = () => {
         setIsRated(typeof state.isRated === 'boolean' ? state.isRated : true);
         setRematchOffer(state.rematchOffer || null);
         setNextGameId(state.nextGameId || null);
+        setGameRematchOf(state.rematchOf || null);
         setRatingChange(state.ratingChange || null);
         setChallengedPlayerInfo(state.challengedPlayerInfo || null);
         setPremoves(state.premoves || {});
@@ -1675,6 +1678,7 @@ const App: React.FC = () => {
             moveHistory: newMoveHistory,
             chat: baseState.chat,
             spectatorChat: baseState.spectatorChat,
+            rematchOf: baseState.rematchOf,
             tournamentId,
             tournamentRound,
             tournamentPairingId,
@@ -1871,6 +1875,7 @@ const App: React.FC = () => {
             setArrows([]);
             setChatMessages([]);
             setSpectatorChatMessages([]);
+            setGameRematchOf(null);
             setMoveHistory([]);
         }
         return initialGameState;
@@ -1889,6 +1894,7 @@ const App: React.FC = () => {
         // Reset states
         setRematchOffer(null);
         setNextGameId(null);
+        setGameRematchOf(null);
         setRatingChange(null);
         setIsForcePowerMode(false);
         setDraggedPiece(null);
@@ -1906,6 +1912,7 @@ const App: React.FC = () => {
 
         setRematchOffer(null);
         setNextGameId(null);
+        setGameRematchOf(null);
         setRatingChange(null);
         setIsForcePowerMode(false);
         setDraggedPiece(null);
@@ -2250,8 +2257,13 @@ const App: React.FC = () => {
 
                 if (rawState.nextGameId) {
                     if (gameRef) gameRef.off('value', onGameUpdate);
-                    const myNewColor = rawState.playerColors?.white === currentUser.uid ? Color.Black : Color.White;
-                    handleOnlineGameStart(rawState.nextGameId, myNewColor);
+                    const isPlayer = currentUser && (rawState.playerColors?.white === currentUser.uid || rawState.playerColors?.black === currentUser.uid);
+                    if (isPlayer) {
+                        const myNewColor = rawState.playerColors?.white === currentUser.uid ? Color.Black : Color.White;
+                        handleOnlineGameStart(rawState.nextGameId, myNewColor);
+                    } else {
+                        handleOnlineSpectate(rawState.nextGameId);
+                    }
                     return;
                 }
 
@@ -3235,6 +3247,10 @@ const App: React.FC = () => {
 
         newGameState.rematchOf = gameId;
 
+        // Preserve chat messages and spectatorChat messages for the rematch
+        newGameState.chat = currentState.chat || [];
+        newGameState.spectatorChat = currentState.spectatorChat || [];
+
         try {
             const newGameRef = db.ref('games').push();
             await newGameRef.set(newGameState);
@@ -4117,7 +4133,7 @@ const App: React.FC = () => {
                         handleOnlineGameStart(gameId, playerColor);
                     }}
                     onSpectate={(gameId) => {
-                        handleOnlineGameStart(gameId, null);
+                        handleOnlineSpectate(gameId);
                     }}
                     onViewPosition={(kFen) => {
                         const result = fenToBoard(kFen);
