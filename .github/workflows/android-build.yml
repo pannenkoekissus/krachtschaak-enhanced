@@ -69,6 +69,9 @@ jobs:
           npm install @capacitor/core @capacitor/cli @capacitor/android
 
       - name: Build Web App
+        env:
+          VITE_RELEASE_TAG: ${{ steps.tag_gen.outputs.new_tag }}
+          VITE_APP_BUILD_TIME: ${{ steps.tag_gen.outputs.new_tag }}
         run: |
           npm run build || (mkdir -p dist && echo "<html><body>Build fallback</body></html>" > dist/index.html)
 

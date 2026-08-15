@@ -38,6 +38,16 @@ interface SettingsModalProps {
     setNotifyOpenChallenges: (enabled: boolean) => void;
     notifyOpenTimeControls: string;
     setNotifyOpenTimeControls: (val: string) => void;
+    autoUpdate?: {
+        currentTag: string;
+        currentBuildTime: string;
+        isChecking: boolean;
+        isNative: boolean;
+        manualCheckStatus: 'idle' | 'checking' | 'latest' | 'available' | 'error';
+        checkForUpdates: (manual?: boolean) => Promise<boolean>;
+        openUpdateModal: () => void;
+        updateAvailable: boolean;
+    };
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -76,6 +86,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     setNotifyOpenChallenges,
     notifyOpenTimeControls,
     setNotifyOpenTimeControls,
+    autoUpdate,
 }) => {
     const renderToggle = (label: string, description: string, value: boolean, onChange: (val: boolean) => void) => (
         <div className="flex items-center justify-between py-3 group hover:bg-gray-700/30 px-4 rounded-xl transition-all">
@@ -231,6 +242,69 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
                         </div>
                     </section>
+
+                    {autoUpdate && autoUpdate.isNative && (
+                        <section>
+                            <SectionHeader title="App Version & Updates" icon="🔄" />
+                            <div className="bg-gray-900/40 rounded-2xl border border-white/5 p-4 flex flex-col gap-3">
+                                <div className="flex items-center justify-between text-xs">
+                                    <span className="font-bold uppercase tracking-wide text-gray-400">Current Build</span>
+                                    <span className="font-mono font-semibold text-green-300 bg-green-950/60 border border-green-800/60 px-2.5 py-1 rounded-full">
+                                        {autoUpdate.currentTag || autoUpdate.currentBuildTime || 'Development Build'}
+                                    </span>
+                                </div>
+
+                                <div className="flex items-center justify-between gap-3 pt-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => autoUpdate.checkForUpdates(true)}
+                                        disabled={autoUpdate.isChecking}
+                                        className="flex-1 py-2.5 px-4 bg-gray-800 hover:bg-gray-700 active:bg-gray-750 text-gray-200 border border-gray-600 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
+                                    >
+                                        {autoUpdate.isChecking ? (
+                                            <>
+                                                <svg className="animate-spin h-3.5 w-3.5 text-green-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                                <span>Checking...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span>🔍</span>
+                                                <span>Check for Updates</span>
+                                            </>
+                                        )}
+                                    </button>
+
+                                    {autoUpdate.updateAvailable && (
+                                        <button
+                                            type="button"
+                                            onClick={autoUpdate.openUpdateModal}
+                                            className="py-2.5 px-4 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 shadow-md animate-pulse"
+                                        >
+                                            <span>🚀</span>
+                                            <span>Update Available</span>
+                                        </button>
+                                    )}
+                                </div>
+
+                                {autoUpdate.manualCheckStatus === 'latest' && (
+                                    <div className="text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-3 py-2 rounded-xl flex items-center gap-2">
+                                        <span>✅</span>
+                                        <span>You are running the latest version of Krachtschaak.</span>
+                                    </div>
+                                )}
+
+                                {autoUpdate.manualCheckStatus === 'error' && (
+                                    <div className="text-xs text-amber-400 bg-amber-950/40 border border-amber-800/40 px-3 py-2 rounded-xl flex items-center gap-2">
+                                        <span>⚠️</span>
+                                        <span>Could not check for updates. Check internet connection.</span>
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+                    )}
                 </div>
 
                 <div className="px-8 pb-8">

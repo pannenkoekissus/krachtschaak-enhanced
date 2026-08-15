@@ -20,6 +20,8 @@ import { updatePairing, updatePlayerScore, recalculateTiebreaks } from './utils/
 import { isFirebaseConfigured, auth, db } from './firebaseConfig';
 import SettingsModal from './components/SettingsModal';
 import useOnlineStatus from './utils/useOnlineStatus';
+import { useAutoUpdate } from './utils/useAutoUpdate';
+import UpdateModal from './components/UpdateModal';
 
 var continueGameClicks = -1;
 const formatTime = (totalSeconds: number | null | undefined): string => {
@@ -53,6 +55,7 @@ const formatTimerSettingText = (settings: TimerSettings) => {
 
 
 const App: React.FC = () => {
+    const autoUpdate = useAutoUpdate();
     const isOnline = isFirebaseConfigured && useOnlineStatus();
     const [board, setBoard] = useState<BoardState>(() => createInitialBoard());
     const [turn, setTurn] = useState<Color>(Color.White);
@@ -4285,7 +4288,7 @@ const App: React.FC = () => {
                         )}
                     </div>
 
-                    <div className="mt-8 flex flex-col items-center gap-3">
+                    <div className="mt-8 flex flex-col items-center gap-3 text-center">
                         <a
                             href="https://gratis-5137332.jouwweb.site/de-officiele-krachtschaak-regels"
                             target="_blank"
@@ -4294,24 +4297,49 @@ const App: React.FC = () => {
                         >
                             How to Play (Official Rules on Official Website in Dutch)
                         </a>
-                        {!((window as any).Capacitor?.isNativePlatform?.()) && !isPwaInstalled && (
-                            <div className="flex flex-col md:flex-row items-center justify-center gap-3">
-                                {!isPwaInstalled && (
+
+                        <div className="flex flex-wrap items-center justify-center gap-3 mt-2">
+                            {/* Native/APK: show version badge + check for updates */}
+                            {autoUpdate.isNative && (
+                                <>
+                                    {autoUpdate.currentTag && (
+                                        <span className="font-mono text-xs bg-gray-900 border border-green-700/60 px-3 py-1 rounded-full text-green-300 font-semibold shadow-sm">
+                                            Version: {autoUpdate.currentTag}
+                                        </span>
+                                    )}
+                                    <button
+                                        onClick={() => autoUpdate.checkForUpdates(true)}
+                                        disabled={autoUpdate.isChecking}
+                                        className="px-4 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-full text-gray-200 text-xs font-bold transition-all shadow-md flex items-center gap-1.5 disabled:opacity-50"
+                                    >
+                                        {autoUpdate.isChecking ? 'Checking...' : '🔍 Check for Updates'}
+                                    </button>
+                                </>
+                            )}
+
+                            {/* Web (not PWA, not native): show Install App + Download APK */}
+                            {!autoUpdate.isNative && !isPwaInstalled && (
+                                <>
                                     <button
                                         onClick={handleInstallClick}
-                                        className="px-5 py-2 bg-green-700/80 hover:bg-green-700 border border-green-600 rounded-full text-green-100 text-sm font-bold flex items-center gap-2 transition-all shadow-lg"
+                                        className="px-4 py-1.5 bg-green-700/80 hover:bg-green-700 border border-green-600 rounded-full text-green-100 text-xs font-bold transition-all shadow-md"
                                     >
                                         Install App (Android, iOS or Desktop)
                                     </button>
-                                )}
-                                <a
-                                    href="https://github.com/pannenkoekissus/krachtschaak-enhanced/releases/latest/download/krachtschaak.apk"
-                                    className="px-5 py-2 bg-green-700/40 hover:bg-green-700/60 border border-green-600/50 rounded-full text-green-300 text-sm font-bold flex items-center gap-2 transition-all"
-                                >
-                                    APK (Advanced Users Only)
-                                </a>
-                            </div>
-                        )}
+                                    <a
+                                        href={autoUpdate.downloadUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-4 py-1.5 bg-gradient-to-r from-green-700 to-emerald-700 hover:from-green-600 hover:to-emerald-600 border border-green-500/60 rounded-full text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
+                                    >
+                                        <span>📱</span>
+                                        <span>Download APK (Android)</span>
+                                    </a>
+                                </>
+                            )}
+
+                            {/* PWA: show nothing */}
+                        </div>
                     </div>
 
                     <div className="mt-4 text-xs text-gray-500">
@@ -4394,6 +4422,7 @@ const App: React.FC = () => {
                             setNotifyOpenChallenges={setNotifyOpenChallenges}
                             notifyOpenTimeControls={notifyOpenTimeControls}
                             setNotifyOpenTimeControls={setNotifyOpenTimeControls}
+                            autoUpdate={autoUpdate}
                         />
                     )}
                 </div>
@@ -4514,6 +4543,16 @@ const App: React.FC = () => {
                     onCancel={() => setShowLogoutWarning(false)}
                     confirmText="OK"
                     cancelText="Close"
+                />
+            )}
+            {autoUpdate.isNative && autoUpdate.updateAvailable && (
+                <UpdateModal
+                    release={autoUpdate.latestRelease}
+                    downloadUrl={autoUpdate.downloadUrl}
+                    currentTag={autoUpdate.currentTag}
+                    onDownload={autoUpdate.triggerDownload}
+                    onDismiss={autoUpdate.dismissUpdate}
+                    downloadTriggered={autoUpdate.downloadTriggered}
                 />
             )}
         </>

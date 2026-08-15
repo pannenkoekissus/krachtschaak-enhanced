@@ -88,7 +88,9 @@ export default defineConfig(({ mode }) => {
     ],
     define: {
       'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      '__APP_BUILD_TIME__': JSON.stringify(process.env.VITE_APP_BUILD_TIME || new Date().toISOString()),
+      '__RELEASE_TAG__': JSON.stringify(process.env.VITE_RELEASE_TAG || '')
     },
     resolve: {
       alias: {

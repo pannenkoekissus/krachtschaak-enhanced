@@ -264,3 +264,8 @@ export interface TournamentData {
   // uid → playerId lookup; maintained by join/leave; used by DB rules for forfeit validation
   playerUidIndex?: Record<string, string>;
 }
+
+declare global {
+  const __APP_BUILD_TIME__: string;
+  const __RELEASE_TAG__: string;
+}
