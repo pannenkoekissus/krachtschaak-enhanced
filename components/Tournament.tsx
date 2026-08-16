@@ -40,6 +40,7 @@ const Tournament: React.FC<TournamentProps> = ({
     const [history, setHistory] = useState<TournamentData[]>([]);
     const [publicHistory, setPublicHistory] = useState<TournamentData[]>([]);
     const [listTab, setListTab] = useState<ListTab>('active');
+    const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -848,6 +849,27 @@ const Tournament: React.FC<TournamentProps> = ({
                             </button>
                         </div>
 
+                        {/* Search Bar for current tab */}
+                        <div className="relative mb-5">
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                placeholder={`Search in ${listTab === 'my_active' ? 'Joined' : listTab === 'active' ? 'Public' : listTab === 'history' ? 'My History' : 'Public History'}...`}
+                                className="w-full pl-9 pr-9 py-2.5 bg-gray-700/80 border border-gray-600 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:border-yellow-500 transition-colors shadow-inner"
+                            />
+                            <span className="absolute left-3 top-3 text-gray-400 text-xs">🔍</span>
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery('')}
+                                    className="absolute right-3 top-2.5 text-gray-400 hover:text-white font-bold text-xs bg-gray-600 hover:bg-gray-500 rounded-full w-5 h-5 flex items-center justify-center transition-colors"
+                                    title="Clear search"
+                                >
+                                    ✕
+                                </button>
+                            )}
+                        </div>
+
                         {listTab === 'active' && (
                             <>
                                 <h2 className="text-lg font-bold mb-3">Join Tournament</h2>
@@ -874,7 +896,7 @@ const Tournament: React.FC<TournamentProps> = ({
                             {loading ? (
                                 <div className="text-center py-8 text-gray-500">Loading...</div>
                             ) : (() => {
-                                let list = [];
+                                let list: TournamentData[] = [];
                                 if (listTab === 'my_active') {
                                     list = tournaments.filter(t => {
                                         const isHost = t.hostUid === userId;
@@ -889,10 +911,24 @@ const Tournament: React.FC<TournamentProps> = ({
                                     list = publicHistory;
                                 }
 
+                                if (searchQuery.trim()) {
+                                    const q = searchQuery.toLowerCase().trim();
+                                    list = list.filter(t =>
+                                        (t.name && t.name.toLowerCase().includes(q)) ||
+                                        (t.id && t.id.toLowerCase().includes(q)) ||
+                                        (t.hostName && t.hostName.toLowerCase().includes(q)) ||
+                                        (t.flags && t.flags.some((f: string) => f.toLowerCase().includes(q)))
+                                    );
+                                }
+
                                 if (list.length === 0) {
+                                    const categoryLabel = listTab === 'my_active' ? 'joined' : listTab === 'active' ? 'public' : listTab === 'history' ? 'my history' : 'public history';
                                     return (
                                         <div className="text-center py-8 text-gray-500 italic">
-                                            No {listTab === 'my_active' ? 'joined' : listTab.replace('_', ' ')} tournaments found.
+                                            {searchQuery.trim()
+                                                ? `No tournaments matching "${searchQuery}" in ${categoryLabel}.`
+                                                : `No ${categoryLabel} tournaments found.`
+                                            }
                                         </div>
                                     );
                                 }
