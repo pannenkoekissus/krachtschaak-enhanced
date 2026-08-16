@@ -372,6 +372,13 @@ const App: React.FC = () => {
         !(currentUser && (currentUser.uid === playerColors.white || currentUser.uid === playerColors.black)),
         [gameMode, currentUser, playerColors]);
 
+    // Show combined (player + spectator) chat when spectating OR when the game is over
+    const isGameFinished = status !== 'playing' && status !== 'waiting' && status !== 'promotion' && status !== 'ambiguous_en_passant';
+    const showCombinedChat = useMemo(() =>
+        shouldShowSpectatorChat ||
+        (isGameFinished && spectatorChatMessages.length > 0 && (gameMode === 'online_playing' || gameMode === 'online_spectating')),
+        [shouldShowSpectatorChat, isGameFinished, spectatorChatMessages.length, gameMode]);
+
     useEffect(() => {
         if (!notificationsEnabled || !isOnline) return;
 
@@ -662,12 +669,12 @@ const App: React.FC = () => {
             msg.uid !== currentUser.uid && msg.timestamp > lastRead
         ).length;
 
-        const unreadSpecMsgs = shouldShowSpectatorChat ? spectatorChatMessages.filter(msg =>
+        const unreadSpecMsgs = showCombinedChat ? spectatorChatMessages.filter(msg =>
             msg.uid !== currentUser.uid && msg.timestamp > lastRead
         ).length : 0;
 
         return unreadPlayerMsgs + unreadSpecMsgs;
-    }, [chatMessages, spectatorChatMessages, players, currentUser, activeTab, gameMode, localLastReadChatTimestamp, shouldShowSpectatorChat]);
+    }, [chatMessages, spectatorChatMessages, players, currentUser, activeTab, gameMode, localLastReadChatTimestamp, showCombinedChat]);
 
 
     const randomizeNextGameColor = useCallback(() => {
@@ -3791,8 +3798,8 @@ const App: React.FC = () => {
                         {activeTab === 'chat' && (
                             <div className="flex flex-col h-64">
                                 <div ref={chatContainerRef} className="flex-grow min-h-0 overflow-y-auto mb-2 space-y-2 p-2 bg-gray-900 rounded">
-                                    {(shouldShowSpectatorChat ? combinedChatMessages : chatMessages).length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
-                                    {(shouldShowSpectatorChat ? combinedChatMessages : chatMessages).map((msg, i) => {
+                                    {(showCombinedChat ? combinedChatMessages : chatMessages).length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
+                                    {(showCombinedChat ? combinedChatMessages : chatMessages).map((msg, i) => {
                                         const isMe = currentUser && msg.uid === currentUser.uid;
                                         const isPlayerMsg = (msg as any).type === 'player';
                                         return (
@@ -3970,8 +3977,8 @@ const App: React.FC = () => {
                     {activeTab === 'chat' && (
                         <div className="flex-grow flex flex-col min-h-0">
                             <div ref={chatContainerRef} className="flex-grow min-h-0 overflow-y-auto mb-2 space-y-2 p-2 bg-gray-900 rounded border border-gray-700">
-                                {(shouldShowSpectatorChat ? combinedChatMessages : chatMessages).length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
-                                {(shouldShowSpectatorChat ? combinedChatMessages : chatMessages).map((msg, i) => {
+                                {(showCombinedChat ? combinedChatMessages : chatMessages).length === 0 && <p className="text-gray-500 text-center text-sm italic mt-20">No messages yet.</p>}
+                                {(showCombinedChat ? combinedChatMessages : chatMessages).map((msg, i) => {
                                     const isMe = currentUser && msg.uid === currentUser.uid;
                                     const isPlayerMsg = (msg as any).type === 'player';
                                     return (
