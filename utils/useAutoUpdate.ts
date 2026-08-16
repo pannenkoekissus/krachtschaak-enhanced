@@ -1,6 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Filesystem, Directory } from '@capacitor/filesystem';
-import { FileOpener } from '@capacitor-community/file-opener';
 
 export interface GitHubReleaseAsset {
   name: string;
@@ -43,6 +41,7 @@ export interface AutoUpdateState {
  */
 export function parseBuildTimestamp(input: string): number {
   if (!input) return 0;
+  // Check tag format: v2026.08.14-092800 or 2026.08.14-092800
   const tagMatch = input.match(/^v?(\d{4})\.(\d{2})\.(\d{2})-(\d{2})(\d{2})(\d{2})$/);
   if (tagMatch) {
     const [, year, month, day, hour, minute, second] = tagMatch;
@@ -67,7 +66,8 @@ function blobToBase64(blob: Blob): Promise<string> {
     const reader = new FileReader();
     reader.onloadend = () => {
       const result = reader.result as string;
-      const base64 = result.includes(',') ? result.split(',')[1] : result;
+      // Strip the "data:...;base64," prefix
+      const base64 = result.split(',')[1];
       resolve(base64);
     };
     reader.onerror = reject;
@@ -140,10 +140,13 @@ export function useAutoUpdate(): AutoUpdateState {
 
         if (appBuildTimestamp > 0 && (releaseTimestamp > 0 || apkAssetTimestamp > 0)) {
           const checkTime = apkAssetTimestamp > 0 ? apkAssetTimestamp : releaseTimestamp;
+          // Release/APK is newer if published at least 3 minutes after app build time
+          // OR if release tag is different and build timestamp is older
           const MIN_TIME_DIFF_MS = 3 * 60 * 1000;
           if (checkTime > appBuildTimestamp + MIN_TIME_DIFF_MS) {
             hasNewerVersion = true;
           } else if (currentTag && releaseData.tag_name && currentTag !== releaseData.tag_name) {
+            // Tag differs and release is not significantly older than app build time
             if (checkTime >= appBuildTimestamp - (10 * 60 * 1000)) {
               hasNewerVersion = true;
             }
@@ -193,56 +196,58 @@ export function useAutoUpdate(): AutoUpdateState {
       // Native: download APK to cache directory, then open with system installer
       try {
         setIsDownloading(true);
-        setDownloadProgress(5);
+        setDownloadProgress(0);
         setError(null);
 
+        // @ts-ignore
+        const capFs: any = await import(/* @vite-ignore */ '@capacitor/filesystem').catch(() => null);
+        // @ts-ignore
+        const capFo: any = await import(/* @vite-ignore */ '@capacitor-community/file-opener').catch(() => null);
+
+        if (!capFs || !capFo) {
+          throw new Error('Native plugins not available');
+        }
+
+        const { Filesystem, Directory } = capFs;
+        const { FileOpener } = capFo;
+
+        // Download APK with progress tracking via fetch + ReadableStream
         const response = await fetch(downloadUrl);
         if (!response.ok) throw new Error(`Download failed: HTTP ${response.status}`);
 
         const contentLength = response.headers.get('content-length');
         const total = contentLength ? parseInt(contentLength, 10) : 0;
+        const reader = response.body?.getReader();
 
-        let base64Data: string;
+        if (!reader) throw new Error('Download stream unavailable');
 
-        if (response.body && typeof response.body.getReader === 'function') {
-          const reader = response.body.getReader();
-          const chunks: Uint8Array[] = [];
-          let received = 0;
+        const chunks: Uint8Array[] = [];
+        let received = 0;
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            if (value) {
-              chunks.push(value);
-              received += value.length;
-              if (total > 0) {
-                setDownloadProgress(Math.min(95, Math.round((received / total) * 100)));
-              } else {
-                setDownloadProgress((prev) => Math.min(90, prev + 5));
-              }
-            }
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          received += value.length;
+          if (total > 0) {
+            setDownloadProgress(Math.round((received / total) * 100));
           }
-
-          const blob = new Blob(chunks, { type: 'application/vnd.android.package-archive' });
-          base64Data = await blobToBase64(blob);
-        } else {
-          setDownloadProgress(50);
-          const blob = await response.blob();
-          base64Data = await blobToBase64(blob);
         }
 
-        setDownloadProgress(95);
+        // Combine chunks into a single Blob and convert to base64
+        const blob = new Blob(chunks, { type: 'application/vnd.android.package-archive' });
+        const base64Data = await blobToBase64(blob);
 
         const fileName = 'krachtschaak-update.apk';
 
-        // Save the downloaded APK into the native app cache directory
+        // Write the APK to the app's cache directory
         await Filesystem.writeFile({
           path: fileName,
           data: base64Data,
           directory: Directory.Cache,
         });
 
-        // Resolve the local file URI for FileOpener
+        // Resolve the native file URI for the file opener
         const fileInfo = await Filesystem.getUri({
           path: fileName,
           directory: Directory.Cache,
@@ -250,7 +255,7 @@ export function useAutoUpdate(): AutoUpdateState {
 
         setDownloadProgress(100);
 
-        // Open the APK with system package installer
+        // Launch the system package installer
         await FileOpener.open({
           filePath: fileInfo.uri,
           contentType: 'application/vnd.android.package-archive',
@@ -258,7 +263,13 @@ export function useAutoUpdate(): AutoUpdateState {
         });
       } catch (err: any) {
         console.error('Native APK download/install failed:', err);
-        setError(err.message || 'Failed to download update in-app');
+        setError(err.message || 'Failed to download update');
+        // Fallback: open URL in system browser
+        try {
+          window.open(downloadUrl, '_system');
+        } catch {
+          window.location.href = downloadUrl;
+        }
       } finally {
         setIsDownloading(false);
       }
