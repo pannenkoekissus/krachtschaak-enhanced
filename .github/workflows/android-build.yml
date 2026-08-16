@@ -97,6 +97,26 @@ jobs:
               }
           }" >> android/app/build.gradle
 
+      - name: Configure APK Install Permissions & FileProvider
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+
+          # Add REQUEST_INSTALL_PACKAGES permission (needed to install downloaded APK updates)
+          sed -i 's|<uses-permission android:name="android.permission.INTERNET" />|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />|' "$MANIFEST"
+
+          # Create file_paths.xml for FileProvider (needed by file-opener plugin)
+          mkdir -p android/app/src/main/res/xml
+          cat > android/app/src/main/res/xml/file_paths.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <paths xmlns:android="http://schemas.android.com/apk/res/android">
+              <cache-path name="cache" path="." />
+              <files-path name="files" path="." />
+          </paths>
+          EOF
+
+          # Add FileProvider to AndroidManifest.xml inside <application> tag
+          sed -i 's|</application>|    <provider\n            android:name="androidx.core.content.FileProvider"\n            android:authorities="${applicationId}.fileprovider"\n            android:exported="false"\n            android:grantUriPermissions="true">\n            <meta-data\n                android:name="android.support.FILE_PROVIDER_PATHS"\n                android:resource="@xml/file_paths" />\n        </provider>\n    </application>|' "$MANIFEST"
+
       - name: Sync Capacitor
         run: npx cap sync android
 

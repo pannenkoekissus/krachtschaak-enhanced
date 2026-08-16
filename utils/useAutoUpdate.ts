@@ -31,6 +31,8 @@ export interface AutoUpdateState {
   dismissUpdate: () => void;
   triggerDownload: () => void;
   downloadTriggered: boolean;
+  isDownloading: boolean;
+  downloadProgress: number;
   openUpdateModal: () => void;
 }
 
@@ -56,6 +58,23 @@ export function parseBuildTimestamp(input: string): number {
   return isNaN(parsed) ? 0 : parsed;
 }
 
+/**
+ * Converts a Blob to a base64 string (without the data URL prefix).
+ */
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      // Strip the "data:...;base64," prefix
+      const base64 = result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 const DEFAULT_APK_DOWNLOAD_URL =
   'https://github.com/pannenkoekissus/krachtschaak-enhanced/releases/latest/download/krachtschaak.apk';
 
@@ -68,6 +87,8 @@ export function useAutoUpdate(): AutoUpdateState {
   const [downloadUrl, setDownloadUrl] = useState(DEFAULT_APK_DOWNLOAD_URL);
   const [error, setError] = useState<string | null>(null);
   const [downloadTriggered, setDownloadTriggered] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
   const [manualCheckStatus, setManualCheckStatus] = useState<ManualCheckStatus>('idle');
 
   const isNative = typeof window !== 'undefined' && Boolean((window as any).Capacitor?.isNativePlatform?.());
@@ -168,23 +189,106 @@ export function useAutoUpdate(): AutoUpdateState {
     setUpdateAvailable(true);
   }, []);
 
-  const triggerDownload = useCallback(() => {
+  const triggerDownload = useCallback(async () => {
     setDownloadTriggered(true);
-    if (typeof window !== 'undefined') {
+
+    if (isNative) {
+      // Native: download APK to cache directory, then open with system installer
       try {
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        a.download = 'krachtschaak.apk';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      } catch {
-        window.open(downloadUrl, '_system') || (window.location.href = downloadUrl);
+        setIsDownloading(true);
+        setDownloadProgress(0);
+        setError(null);
+
+        const capFs = await import('@capacitor/filesystem').catch(() => null);
+        const capFo = await import('@capacitor-community/file-opener').catch(() => null);
+
+        if (!capFs || !capFo) {
+          throw new Error('Native plugins not available');
+        }
+
+        const { Filesystem, Directory } = capFs;
+        const { FileOpener } = capFo;
+
+        // Download APK with progress tracking via fetch + ReadableStream
+        const response = await fetch(downloadUrl);
+        if (!response.ok) throw new Error(`Download failed: HTTP ${response.status}`);
+
+        const contentLength = response.headers.get('content-length');
+        const total = contentLength ? parseInt(contentLength, 10) : 0;
+        const reader = response.body?.getReader();
+
+        if (!reader) throw new Error('Download stream unavailable');
+
+        const chunks: Uint8Array[] = [];
+        let received = 0;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          received += value.length;
+          if (total > 0) {
+            setDownloadProgress(Math.round((received / total) * 100));
+          }
+        }
+
+        // Combine chunks into a single Blob and convert to base64
+        const blob = new Blob(chunks, { type: 'application/vnd.android.package-archive' });
+        const base64Data = await blobToBase64(blob);
+
+        const fileName = 'krachtschaak-update.apk';
+
+        // Write the APK to the app's cache directory
+        await Filesystem.writeFile({
+          path: fileName,
+          data: base64Data,
+          directory: Directory.Cache,
+        });
+
+        // Resolve the native file URI for the file opener
+        const fileInfo = await Filesystem.getUri({
+          path: fileName,
+          directory: Directory.Cache,
+        });
+
+        setDownloadProgress(100);
+
+        // Launch the system package installer
+        await FileOpener.open({
+          filePath: fileInfo.uri,
+          contentType: 'application/vnd.android.package-archive',
+          openWithDefault: true,
+        });
+      } catch (err: any) {
+        console.error('Native APK download/install failed:', err);
+        setError(err.message || 'Failed to download update');
+        // Fallback: open URL in system browser
+        try {
+          window.open(downloadUrl, '_system');
+        } catch {
+          window.location.href = downloadUrl;
+        }
+      } finally {
+        setIsDownloading(false);
+      }
+    } else {
+      // Web fallback: trigger browser download
+      if (typeof window !== 'undefined') {
+        try {
+          const a = document.createElement('a');
+          a.href = downloadUrl;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.download = 'krachtschaak.apk';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        } catch {
+          window.open(downloadUrl, '_system') || (window.location.href = downloadUrl);
+        }
       }
     }
-  }, [downloadUrl]);
+  }, [downloadUrl, isNative]);
 
   // Initial check on mount (only for native app)
   useEffect(() => {
@@ -207,7 +311,8 @@ export function useAutoUpdate(): AutoUpdateState {
     dismissUpdate,
     triggerDownload,
     downloadTriggered,
+    isDownloading,
+    downloadProgress,
     openUpdateModal,
   };
 }
-

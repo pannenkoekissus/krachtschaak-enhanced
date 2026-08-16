@@ -8,6 +8,8 @@ interface UpdateModalProps {
   onDownload: () => void;
   onDismiss: () => void;
   downloadTriggered: boolean;
+  isDownloading?: boolean;
+  downloadProgress?: number;
 }
 
 const UpdateModal: React.FC<UpdateModalProps> = ({
@@ -16,6 +18,8 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
   onDownload,
   onDismiss,
   downloadTriggered,
+  isDownloading = false,
+  downloadProgress = 0,
 }) => {
   const publishedDateStr = release?.published_at
     ? new Date(release.published_at).toLocaleString('en-US', {
@@ -92,8 +96,27 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
           )}
         </div>
 
-        {/* Guidance Notice if download clicked */}
-        {downloadTriggered ? (
+        {/* Guidance Notice / Download Progress */}
+        {isDownloading ? (
+          <div className="bg-emerald-950/60 border border-emerald-500/40 rounded-2xl p-4 flex flex-col gap-3 animate-fadeIn">
+            <div className="flex items-center gap-3">
+              <svg className="animate-spin h-5 w-5 text-emerald-400 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <div className="flex flex-col gap-0.5 flex-1">
+                <p className="font-bold text-emerald-300 text-xs">Downloading update...</p>
+                <p className="text-emerald-200/70 text-[10px]">{downloadProgress}% complete</p>
+              </div>
+            </div>
+            <div className="w-full bg-gray-800 rounded-full h-2.5 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-green-500 to-emerald-400 h-full rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${downloadProgress}%` }}
+              />
+            </div>
+          </div>
+        ) : downloadTriggered ? (
           <div className="bg-emerald-950/60 border border-emerald-500/40 rounded-2xl p-4 flex gap-3 items-start animate-fadeIn">
             <span className="text-xl">📥</span>
             <div className="flex flex-col gap-1 text-xs">
@@ -113,7 +136,8 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
         <div className="flex flex-col gap-2.5 pt-1">
           <button
             onClick={onDownload}
-            className="w-full py-3.5 px-4 bg-gradient-to-r from-green-600 via-emerald-600 to-teal-600 hover:from-green-500 hover:via-emerald-500 hover:to-teal-500 text-white rounded-2xl font-black text-base transition-all active:scale-98 shadow-lg shadow-green-600/30 flex items-center justify-center gap-2 group"
+            disabled={isDownloading}
+            className="w-full py-3.5 px-4 bg-gradient-to-r from-green-600 via-emerald-600 to-teal-600 hover:from-green-500 hover:via-emerald-500 hover:to-teal-500 text-white rounded-2xl font-black text-base transition-all active:scale-98 shadow-lg shadow-green-600/30 flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span>🚀</span>
             <span className="tracking-wide">DOWNLOAD & UPDATE</span>

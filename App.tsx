@@ -4560,6 +4560,8 @@ const App: React.FC = () => {
                     onDownload={autoUpdate.triggerDownload}
                     onDismiss={autoUpdate.dismissUpdate}
                     downloadTriggered={autoUpdate.downloadTriggered}
+                    isDownloading={autoUpdate.isDownloading}
+                    downloadProgress={autoUpdate.downloadProgress}
                 />
             )}
         </>
