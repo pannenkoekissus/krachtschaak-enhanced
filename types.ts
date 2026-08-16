@@ -56,6 +56,7 @@ export interface ChatMessage {
   text: string;
   timestamp: number;
   uid: string;
+  color?: string;
 }
 
 export type GameStatus =

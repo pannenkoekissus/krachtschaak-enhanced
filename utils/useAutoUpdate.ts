@@ -199,8 +199,10 @@ export function useAutoUpdate(): AutoUpdateState {
         setDownloadProgress(0);
         setError(null);
 
-        const capFs = await import('@capacitor/filesystem').catch(() => null);
-        const capFo = await import('@capacitor-community/file-opener').catch(() => null);
+        // @ts-ignore
+        const capFs: any = await import(/* @vite-ignore */ '@capacitor/filesystem').catch(() => null);
+        // @ts-ignore
+        const capFo: any = await import(/* @vite-ignore */ '@capacitor-community/file-opener').catch(() => null);
 
         if (!capFs || !capFo) {
           throw new Error('Native plugins not available');

@@ -22,6 +22,7 @@ import SettingsModal from './components/SettingsModal';
 import useOnlineStatus from './utils/useOnlineStatus';
 import { useAutoUpdate } from './utils/useAutoUpdate';
 import UpdateModal from './components/UpdateModal';
+import { getRandomChatColor, getDeterministicChatColor, DEFAULT_CHAT_COLOR } from './utils/chatColors';
 
 var continueGameClicks = -1;
 const formatTime = (totalSeconds: number | null | undefined): string => {
@@ -227,6 +228,21 @@ const App: React.FC = () => {
     const [notifyDirectTimeControls, _setNotifyDirectTimeControls] = useState(() => localStorage.getItem('notifyDirectTimeControls') || '');
     const [notifyOpenChallenges, _setNotifyOpenChallenges] = useState(() => localStorage.getItem('notifyOpenChallenges') === 'true');
     const [notifyOpenTimeControls, _setNotifyOpenTimeControls] = useState(() => localStorage.getItem('notifyOpenTimeControls') || '');
+    const [chatColor, _setChatColor] = useState<string>(() => {
+        const saved = localStorage.getItem('chatColor');
+        if (saved) return saved;
+        const initial = getRandomChatColor();
+        localStorage.setItem('chatColor', initial);
+        return initial;
+    });
+
+    const setChatColor = useCallback((color: string) => {
+        _setChatColor(color);
+        localStorage.setItem('chatColor', color);
+        if (isFirebaseConfigured && auth?.currentUser) {
+            db.ref(`userSettings/${auth.currentUser.uid}/chatColor`).set(color);
+        }
+    }, []);
 
     const setNotificationsEnabled = async (enabled: boolean) => {
         _setNotificationsEnabled(enabled);
@@ -2064,6 +2080,7 @@ const App: React.FC = () => {
                 if (settings.showPowerRings !== undefined) { _setShowPowerRings(settings.showPowerRings); localStorage.setItem('showPowerRings', String(settings.showPowerRings)); }
                 if (settings.showOriginalType !== undefined) { _setShowOriginalType(settings.showOriginalType); localStorage.setItem('showOriginalType', String(settings.showOriginalType)); }
                 if (settings.soundsEnabled !== undefined) { _setSoundsEnabled(settings.soundsEnabled); localStorage.setItem('soundsEnabled', String(settings.soundsEnabled)); }
+                if (settings.chatColor !== undefined) { _setChatColor(settings.chatColor); localStorage.setItem('chatColor', String(settings.chatColor)); }
             }
         };
         settingsRef.on('value', onValue);
@@ -2485,7 +2502,8 @@ const App: React.FC = () => {
             sender: currentUser.displayName || 'Guest',
             text: chatInput.trim(),
             timestamp: Date.now(),
-            uid: currentUser.uid
+            uid: currentUser.uid,
+            color: chatColor,
         };
 
         // Optimistic update not strictly needed as listener is fast, but good for UX
@@ -2508,7 +2526,8 @@ const App: React.FC = () => {
             sender: currentUser.displayName || 'Guest',
             text: spectatorChatInput.trim(),
             timestamp: Date.now(),
-            uid: currentUser.uid
+            uid: currentUser.uid,
+            color: chatColor,
         };
 
         try {
@@ -3802,10 +3821,16 @@ const App: React.FC = () => {
                                     {(showCombinedChat ? combinedChatMessages : chatMessages).map((msg, i) => {
                                         const isMe = currentUser && msg.uid === currentUser.uid;
                                         const isPlayerMsg = (msg as any).type === 'player';
+                                        const msgColor = msg.color || (isMe ? (chatColor || DEFAULT_CHAT_COLOR) : getDeterministicChatColor(msg.uid || msg.sender));
                                         return (
                                             <div key={i} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                                                <span className={`text-xs ${isPlayerMsg ? 'text-yellow-500' : 'text-green-500'} font-bold`}>{isPlayerMsg ? '[Player]' : ''} {msg.sender}</span>
-                                                <span className={`inline-block px-2 py-1 rounded text-sm ${isMe ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white'}`}>
+                                                <span className="text-xs font-bold" style={{ color: msgColor }}>
+                                                    {isPlayerMsg ? '[Player] ' : ''}{msg.sender}
+                                                </span>
+                                                <span
+                                                    className={`inline-block px-2.5 py-1 rounded-xl text-sm ${isMe ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white'}`}
+                                                    style={{ borderLeft: `3px solid ${msgColor}` }}
+                                                >
                                                     {msg.text}
                                                 </span>
                                             </div>
@@ -3981,10 +4006,16 @@ const App: React.FC = () => {
                                 {(showCombinedChat ? combinedChatMessages : chatMessages).map((msg, i) => {
                                     const isMe = currentUser && msg.uid === currentUser.uid;
                                     const isPlayerMsg = (msg as any).type === 'player';
+                                    const msgColor = msg.color || (isMe ? (chatColor || DEFAULT_CHAT_COLOR) : getDeterministicChatColor(msg.uid || msg.sender));
                                     return (
                                         <div key={i} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                                            <span className={`text-xs ${isPlayerMsg ? 'text-yellow-500' : 'text-green-500'} font-bold`}>{isPlayerMsg ? '[Player]' : ''} {msg.sender}</span>
-                                            <span className={`inline-block px-2 py-1 rounded text-sm ${isMe ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white'}`}>
+                                            <span className="text-xs font-bold" style={{ color: msgColor }}>
+                                                {isPlayerMsg ? '[Player] ' : ''}{msg.sender}
+                                            </span>
+                                            <span
+                                                className={`inline-block px-2.5 py-1 rounded-xl text-sm ${isMe ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white'}`}
+                                                style={{ borderLeft: `3px solid ${msgColor}` }}
+                                            >
                                                 {msg.text}
                                             </span>
                                         </div>
@@ -4429,6 +4460,8 @@ const App: React.FC = () => {
                             setNotifyOpenChallenges={setNotifyOpenChallenges}
                             notifyOpenTimeControls={notifyOpenTimeControls}
                             setNotifyOpenTimeControls={setNotifyOpenTimeControls}
+                            chatColor={chatColor}
+                            setChatColor={setChatColor}
                             autoUpdate={autoUpdate}
                         />
                     )}

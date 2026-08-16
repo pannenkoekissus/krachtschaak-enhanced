@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { AutoSetting } from '../types';
+import { CHAT_COLOR_PALETTE, getRandomChatColor } from '../utils/chatColors';
 
 interface SettingsModalProps {
     onClose: () => void;
@@ -38,6 +39,8 @@ interface SettingsModalProps {
     setNotifyOpenChallenges: (enabled: boolean) => void;
     notifyOpenTimeControls: string;
     setNotifyOpenTimeControls: (val: string) => void;
+    chatColor?: string;
+    setChatColor?: (color: string) => void;
     autoUpdate?: {
         currentTag: string;
         currentBuildTime: string;
@@ -86,6 +89,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     setNotifyOpenChallenges,
     notifyOpenTimeControls,
     setNotifyOpenTimeControls,
+    chatColor,
+    setChatColor,
     autoUpdate,
 }) => {
     const renderToggle = (label: string, description: string, value: boolean, onChange: (val: boolean) => void) => (
@@ -181,6 +186,56 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             {renderToggle('Show Original Status', 'Display icon if piece changed type', showOriginalType, setShowOriginalType)}
                         </div>
                     </section>
+
+                    {chatColor && setChatColor && (
+                        <section>
+                            <SectionHeader title="Chat Customization" icon="💬" />
+                            <div className="bg-gray-900/40 rounded-2xl border border-white/5 p-4 flex flex-col gap-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex flex-col gap-0.5">
+                                        <p className="font-bold text-gray-100 uppercase text-sm tracking-wide">Chat Name Color</p>
+                                        <p className="text-xs text-gray-400">Choose your custom color in chat</p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="color"
+                                            value={chatColor}
+                                            onChange={(e) => setChatColor(e.target.value)}
+                                            className="w-8 h-8 rounded-lg border border-gray-600 bg-transparent cursor-pointer p-0.5"
+                                            title="Pick custom color"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setChatColor(getRandomChatColor())}
+                                            className="px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 active:scale-95 text-gray-200 border border-gray-600 rounded-xl font-bold text-xs transition-all shadow-sm"
+                                            title="Randomize Color"
+                                        >
+                                            🎲 Random
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-800/80">
+                                    {CHAT_COLOR_PALETTE.map((c) => (
+                                        <button
+                                            key={c}
+                                            type="button"
+                                            onClick={() => setChatColor(c)}
+                                            className={`w-7 h-7 rounded-full border-2 transition-all active:scale-90 ${chatColor === c ? 'border-white scale-110 shadow-lg shadow-white/10 ring-2 ring-white/30' : 'border-transparent hover:scale-105 opacity-80 hover:opacity-100'}`}
+                                            style={{ backgroundColor: c }}
+                                            title={c}
+                                        />
+                                    ))}
+                                </div>
+                                <div className="bg-gray-950/80 p-3 rounded-xl border border-gray-800 flex items-center justify-between mt-1">
+                                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Preview</span>
+                                    <div className="flex items-center gap-1.5 text-xs font-semibold">
+                                        <span className="font-bold" style={{ color: chatColor }}>PlayerName:</span>
+                                        <span className="text-gray-200">Ready to play! ♟️</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    )}
 
                     <section>
                         <SectionHeader title="Confirmations" icon="🛡️" />
