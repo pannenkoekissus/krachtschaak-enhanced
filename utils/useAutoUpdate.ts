@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { CapacitorHttp } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { FileOpener } from '@capacitor-community/file-opener';
 
@@ -190,69 +191,105 @@ export function useAutoUpdate(): AutoUpdateState {
     setDownloadTriggered(true);
 
     if (isNative) {
-      // Native: download APK to cache directory, then open with system installer
+      // Native: download APK natively using CapacitorHttp / Filesystem to bypass WebView CORS and memory limits
       try {
         setIsDownloading(true);
-        setDownloadProgress(5);
+        setDownloadProgress(10);
         setError(null);
 
-        const response = await fetch(downloadUrl);
-        if (!response.ok) throw new Error(`Download failed: HTTP ${response.status}`);
+        const fileName = 'krachtschaak-update.apk';
+        let fileUri: string = '';
 
-        const contentLength = response.headers.get('content-length');
-        const total = contentLength ? parseInt(contentLength, 10) : 0;
-
-        let base64Data: string;
-
-        if (response.body && typeof response.body.getReader === 'function') {
-          const reader = response.body.getReader();
-          const chunks: Uint8Array[] = [];
-          let received = 0;
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            if (value) {
-              chunks.push(value);
-              received += value.length;
-              if (total > 0) {
-                setDownloadProgress(Math.min(95, Math.round((received / total) * 100)));
-              } else {
-                setDownloadProgress((prev) => Math.min(90, prev + 5));
-              }
+        // Method 1: Filesystem.downloadFile (Native Java HTTP download with progress)
+        try {
+          if (typeof (Filesystem as any).downloadFile === 'function') {
+            let progressListener: any = null;
+            try {
+              progressListener = await (Filesystem as any).addListener('progress', (p: any) => {
+                if (p.contentLength && p.contentLength > 0) {
+                  const pct = Math.min(95, Math.round((p.bytes / p.contentLength) * 100));
+                  setDownloadProgress(pct);
+                }
+              });
+            } catch (e) {
+              console.warn('Progress listener error:', e);
             }
-          }
 
-          const blob = new Blob(chunks, { type: 'application/vnd.android.package-archive' });
-          base64Data = await blobToBase64(blob);
-        } else {
-          setDownloadProgress(50);
-          const blob = await response.blob();
-          base64Data = await blobToBase64(blob);
+            const downloadRes = await (Filesystem as any).downloadFile({
+              url: downloadUrl,
+              path: fileName,
+              directory: Directory.Cache,
+              progress: true,
+            });
+
+            if (progressListener && typeof progressListener.remove === 'function') {
+              try { progressListener.remove(); } catch (e) {}
+            }
+
+            fileUri = downloadRes?.path || downloadRes?.uri || '';
+          }
+        } catch (e1) {
+          console.warn('Filesystem.downloadFile failed, trying CapacitorHttp.downloadFile:', e1);
         }
 
-        setDownloadProgress(95);
+        // Method 2: CapacitorHttp.downloadFile
+        if (!fileUri) {
+          try {
+            setDownloadProgress(30);
+            const httpRes = await CapacitorHttp.downloadFile({
+              url: downloadUrl,
+              filePath: fileName,
+              fileDirectory: Directory.Cache,
+            });
+            fileUri = httpRes?.path || httpRes?.uri || '';
+          } catch (e2) {
+            console.warn('CapacitorHttp.downloadFile failed, trying CapacitorHttp.get:', e2);
+          }
+        }
 
-        const fileName = 'krachtschaak-update.apk';
+        // Method 3: CapacitorHttp.get (ArrayBuffer) -> write to cache
+        if (!fileUri) {
+          try {
+            setDownloadProgress(50);
+            const getRes = await CapacitorHttp.get({
+              url: downloadUrl,
+              responseType: 'arraybuffer',
+            });
+            setDownloadProgress(85);
+            const base64Data = getRes.data;
+            await Filesystem.writeFile({
+              path: fileName,
+              data: base64Data,
+              directory: Directory.Cache,
+            });
+          } catch (e3) {
+            console.warn('CapacitorHttp.get failed, trying fallback fetch:', e3);
+            const response = await fetch(downloadUrl);
+            if (!response.ok) throw new Error(`Download failed: HTTP ${response.status}`);
+            const blob = await response.blob();
+            const base64Data = await blobToBase64(blob);
+            await Filesystem.writeFile({
+              path: fileName,
+              data: base64Data,
+              directory: Directory.Cache,
+            });
+          }
+        }
 
-        // Save the downloaded APK into the native app cache directory
-        await Filesystem.writeFile({
-          path: fileName,
-          data: base64Data,
-          directory: Directory.Cache,
-        });
-
-        // Resolve the local file URI for FileOpener
-        const fileInfo = await Filesystem.getUri({
-          path: fileName,
-          directory: Directory.Cache,
-        });
+        // Get final file URI from Cache directory if needed
+        if (!fileUri) {
+          const fileInfo = await Filesystem.getUri({
+            path: fileName,
+            directory: Directory.Cache,
+          });
+          fileUri = fileInfo.uri;
+        }
 
         setDownloadProgress(100);
 
-        // Open the APK with system package installer
+        // Open the downloaded APK file with system package installer
         await FileOpener.open({
-          filePath: fileInfo.uri,
+          filePath: fileUri,
           contentType: 'application/vnd.android.package-archive',
           openWithDefault: true,
         });
