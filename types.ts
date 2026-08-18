@@ -165,6 +165,8 @@ export interface GameState {
   positionHistory: Record<string, number>;
   ambiguousEnPassantData: { from: Position, to: Position } | null;
   drawOffer: Color | null;
+  takebackOffer?: Color | null;
+  previousState?: GameState | null;
   playerTimes: { white: number; black: number; } | null;
   turnStartTime: number | null;
   moveDeadline: number | null; // For daily games

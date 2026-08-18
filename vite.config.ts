@@ -96,6 +96,16 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': path.resolve(__dirname, '.'),
       }
+    },
+    build: {
+      rollupOptions: {
+        external: [
+          '@capacitor/filesystem',
+          '@capacitor-community/file-opener',
+          '@capacitor/core',
+          '@capacitor/local-notifications'
+        ]
+      }
     }
   };
 });

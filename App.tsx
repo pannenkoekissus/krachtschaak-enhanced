@@ -71,6 +71,8 @@ const App: React.FC = () => {
     const [positionHistory, setPositionHistory] = useState<Record<string, number>>({});
     const [ambiguousEnPassantData, setAmbiguousEnPassantData] = useState<{ from: Position, to: Position } | null>(null);
     const [drawOffer, setDrawOffer] = useState<Color | null>(null);
+    const [takebackOffer, setTakebackOffer] = useState<Color | null>(null);
+    const [previousState, setPreviousState] = useState<GameState | null>(null);
     const [history, setHistory] = useState<GameState[]>([]);
     const [playerTimes, setPlayerTimes] = useState<{ white: number; black: number; } | null>(null);
     const [displayedTime, setDisplayedTime] = useState<{ white: number; black: number; } | null>(null);
@@ -254,7 +256,8 @@ const App: React.FC = () => {
                         await Notification.requestPermission();
                     }
                 }
-                const capLocal = await import('@capacitor/local-notifications').catch(() => null);
+                const notifPkg = '@capacitor/local-notifications';
+                const capLocal = await import(/* @vite-ignore */ notifPkg).catch(() => null);
                 if (capLocal && capLocal.LocalNotifications) {
                     const perm = await capLocal.LocalNotifications.checkPermissions();
                     if (perm.display !== 'granted') {
@@ -282,7 +285,8 @@ const App: React.FC = () => {
                         await Notification.requestPermission();
                     }
                 }
-                const capLocal = await import('@capacitor/local-notifications').catch(() => null);
+                const notifPkg = '@capacitor/local-notifications';
+                const capLocal = await import(/* @vite-ignore */ notifPkg).catch(() => null);
                 if (capLocal && capLocal.LocalNotifications) {
                     const perm = await capLocal.LocalNotifications.checkPermissions();
                     if (perm.display !== 'granted') {
@@ -1058,7 +1062,8 @@ const App: React.FC = () => {
                                 }
 
                                 if (!webNotificationSuccess) {
-                                    import('@capacitor/local-notifications').then((capLocal) => {
+                                    const notifPkg = '@capacitor/local-notifications';
+                                    import(/* @vite-ignore */ notifPkg).then((capLocal) => {
                                         if (capLocal && capLocal.LocalNotifications) {
                                             capLocal.LocalNotifications.schedule({
                                                 notifications: [
@@ -1208,7 +1213,7 @@ const App: React.FC = () => {
     const currentGameState = useMemo((): GameState => ({
         board, turn, status, winner, promotionData, capturedPieces,
         enPassantTarget, halfmoveClock, positionHistory,
-        ambiguousEnPassantData, drawOffer, playerTimes, moveDeadline, timerSettings, ratingCategory, players, playerColors, initialRatings,
+        ambiguousEnPassantData, drawOffer, takebackOffer, previousState, playerTimes, moveDeadline, timerSettings, ratingCategory, players, playerColors, initialRatings,
         isRated, rematchOffer, nextGameId, ratingChange, challengedPlayerInfo, turnStartTime, premoves, lastMove, playersLeft,
         completedAt, moveHistory, chat: chatMessages,
         spectatorChat: spectatorChatMessages,
@@ -1223,7 +1228,7 @@ const App: React.FC = () => {
     }), [
         board, turn, status, winner, promotionData, capturedPieces,
         enPassantTarget, halfmoveClock, positionHistory,
-        ambiguousEnPassantData, drawOffer, playerTimes, moveDeadline, timerSettings, ratingCategory, players, playerColors, initialRatings,
+        ambiguousEnPassantData, drawOffer, takebackOffer, previousState, playerTimes, moveDeadline, timerSettings, ratingCategory, players, playerColors, initialRatings,
         isRated, rematchOffer, nextGameId, ratingChange, challengedPlayerInfo, turnStartTime, premoves, lastMove, playersLeft,
         completedAt, moveHistory, chatMessages, spectatorChatMessages, gameRematchOf,
         gameTournamentId, gameTournamentRound, gameTournamentPairingId,
@@ -1248,10 +1253,12 @@ const App: React.FC = () => {
                     return; // Abort
                 }
 
-                // SECURITY: Prevent overwriting moves with an older history
+                // SECURITY: Prevent overwriting moves with an older history UNLESS it's an accepted takeback
                 const currentMoveCount = currentData.moveHistory?.length || 0;
                 const newMoveCount = newState.moveHistory?.length || 0;
-                if (newMoveCount < currentMoveCount) {
+                const isTakebackAcceptance = currentData.takebackOffer && newMoveCount === currentMoveCount - 1;
+
+                if (newMoveCount < currentMoveCount && !isTakebackAcceptance) {
                     console.log("Transaction aborted: Server has more moves.");
                     return; // Abort
                 }
@@ -1310,6 +1317,8 @@ const App: React.FC = () => {
         setPositionHistory(state.positionHistory || {});
         setAmbiguousEnPassantData(state.ambiguousEnPassantData || null);
         setDrawOffer(state.drawOffer || null);
+        setTakebackOffer(state.takebackOffer || null);
+        setPreviousState(state.previousState || null);
 
         setPlayerTimes(state.playerTimes || null);
         setDisplayedTime(state.playerTimes || null);
@@ -1689,11 +1698,26 @@ const App: React.FC = () => {
             }
         }
 
+        const sanitizeStateForHistory = (state: GameState, depth = 0): GameState => {
+            if (depth >= 15 || !state.previousState) {
+                return { ...state, previousState: null, takebackOffer: null };
+            }
+            return {
+                ...state,
+                takebackOffer: null,
+                previousState: sanitizeStateForHistory(state.previousState, depth + 1)
+            };
+        };
+
+        const sanitizedPreviousState = sanitizeStateForHistory(baseState, 0);
+
         const turnEndState: GameState = {
             board: currentBoard, turn, status: newStatus, winner: newWinner, promotionData: null,
             capturedPieces: newCaptured, enPassantTarget: nextEnPassantTarget, halfmoveClock: newHalfmoveClock,
             positionHistory: newPositionHistory, ambiguousEnPassantData: null,
             drawOffer: (drawOffer && drawOffer === turn) ? drawOffer : null,
+            takebackOffer: null,
+            previousState: sanitizedPreviousState,
             playerTimes: newPlayerTimes,
             turnStartTime: null,
             moveDeadline: newMoveDeadline,
@@ -1868,7 +1892,7 @@ const App: React.FC = () => {
             board: initialBoard, turn: Color.White, status: 'playing', winner: null,
             capturedPieces: { white: [], black: [] }, enPassantTarget: null,
             halfmoveClock: 0, positionHistory: { [initialKey]: 1 }, promotionData: null,
-            ambiguousEnPassantData: null, drawOffer: null, timerSettings: settings,
+            ambiguousEnPassantData: null, drawOffer: null, takebackOffer: null, previousState: null, timerSettings: settings,
             ratingCategory: category,
             playerTimes: initialPlayerTimes,
             turnStartTime: initialTurnStartTime,
@@ -2455,6 +2479,58 @@ const App: React.FC = () => {
         const decliningPlayer = gameMode === 'online_playing' ? myOnlineColor : turn;
         if (drawOffer && drawOffer !== decliningPlayer) {
             const newState: GameState = { ...currentGameState, drawOffer: null };
+            commitNewGameState(newState, false, true);
+        }
+    };
+
+    const handleOfferTakeback = () => {
+        if (status !== 'playing' || takebackOffer) return;
+        if (gameMode === 'local') {
+            handleUndo();
+            return;
+        }
+        const offeringPlayer = myOnlineColor;
+        if (!offeringPlayer) return;
+        const canUndo = !!(currentGameState.previousState || (moveHistory && moveHistory.length > 0));
+        if (!canUndo) return;
+
+        const newState: GameState = { ...currentGameState, takebackOffer: offeringPlayer };
+        commitNewGameState(newState, false, true);
+    };
+
+    const handleAcceptTakeback = () => {
+        const acceptingPlayer = gameMode === 'online_playing' ? myOnlineColor : turn;
+        if (takebackOffer && takebackOffer !== acceptingPlayer) {
+            const prev = previousState || currentGameState.previousState;
+            if (prev) {
+                const isRealtime = prev.timerSettings && 'initialTime' in prev.timerSettings;
+                const restoredState: GameState = {
+                    ...prev,
+                    takebackOffer: null,
+                    previousState: prev.previousState || null,
+                    turnStartTime: isRealtime ? (gameMode === 'local' ? Date.now() : (window.firebase.database.ServerValue.TIMESTAMP as any)) : null,
+                    players: currentGameState.players || prev.players,
+                    chat: currentGameState.chat || prev.chat,
+                    spectatorChat: currentGameState.spectatorChat || prev.spectatorChat,
+                };
+                commitNewGameState(restoredState, false, true);
+            } else if (history.length > 1) {
+                handleUndo();
+            }
+        }
+    };
+
+    const handleDeclineTakeback = () => {
+        const decliningPlayer = gameMode === 'online_playing' ? myOnlineColor : turn;
+        if (takebackOffer && takebackOffer !== decliningPlayer) {
+            const newState: GameState = { ...currentGameState, takebackOffer: null };
+            commitNewGameState(newState, false, true);
+        }
+    };
+
+    const handleCancelTakeback = () => {
+        if (takebackOffer && takebackOffer === myOnlineColor) {
+            const newState: GameState = { ...currentGameState, takebackOffer: null };
             commitNewGameState(newState, false, true);
         }
     };
@@ -3754,12 +3830,36 @@ const App: React.FC = () => {
                                             </div>
                                         )}
 
-                                        <div className="grid grid-cols-2 gap-4">
+                                        {takebackOffer && takebackOffer !== myColor && (
+                                            <div className="text-center bg-gray-800 p-2 rounded">
+                                                <p className="mb-2 text-yellow-400 font-bold">{takebackOffer.charAt(0).toUpperCase() + takebackOffer.slice(1)} requests a takeback</p>
+                                                <div className="flex justify-center gap-2">
+                                                    <button onClick={handleAcceptTakeback} className="px-6 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-semibold transition-colors">Accept</button>
+                                                    <button onClick={handleDeclineTakeback} className="px-6 py-2 bg-gray-600 hover:bg-gray-700 rounded text-sm font-semibold transition-colors">Decline</button>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {takebackOffer && takebackOffer === myColor && (
+                                            <div className="flex items-center justify-between bg-gray-800 p-2 rounded text-sm">
+                                                <span className="text-gray-400">Takeback requested...</span>
+                                                <button onClick={handleCancelTakeback} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-xs font-semibold">Cancel</button>
+                                            </div>
+                                        )}
+
+                                        <div className="grid grid-cols-2 gap-2">
                                             {!drawOffer && (
-                                                <button onClick={handleOfferDraw} className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors">Offer Draw</button>
+                                                <button onClick={handleOfferDraw} className="w-full px-3 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors text-sm">Offer Draw</button>
                                             )}
-                                            {/* Ensure resign button is visible even when draw is offered */}
-                                            <button onClick={handleResign} className={`w-full px-4 py-3 bg-orange-600 hover:bg-orange-700 rounded-lg font-semibold transition-colors ${drawOffer ? 'col-span-2' : ''}`}>
+                                            {!takebackOffer && (
+                                                <button
+                                                    onClick={handleOfferTakeback}
+                                                    disabled={!(currentGameState.previousState || (moveHistory && moveHistory.length > 0) || history.length > 1)}
+                                                    className="w-full px-3 py-2.5 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-semibold transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    Takeback
+                                                </button>
+                                            )}
+                                            <button onClick={handleResign} className={`w-full px-3 py-2.5 bg-orange-600 hover:bg-orange-700 rounded-lg font-semibold transition-colors text-sm ${(drawOffer || takebackOffer) ? 'col-span-2' : ''}`}>
                                                 {moveHistory.length < 2 ? 'Abort' : 'Resign'}
                                             </button>
                                         </div>
@@ -3972,10 +4072,10 @@ const App: React.FC = () => {
                                     </div>
                                 )}
                                 {status === 'playing' && (
-                                    <div className="mt-2 text-center">
+                                    <div className="mt-2 space-y-2 text-center">
                                         {drawOffer && drawOffer !== myColor ? (
-                                            <div>
-                                                <p className="mb-2 text-yellow-400 text-sm">{drawOffer.charAt(0).toUpperCase() + drawOffer.slice(1)} offers draw.</p>
+                                            <div className="bg-gray-700/60 p-2 rounded-lg">
+                                                <p className="mb-2 text-yellow-400 text-sm font-semibold">{drawOffer.charAt(0).toUpperCase() + drawOffer.slice(1)} offers draw.</p>
                                                 <div className="flex justify-center gap-2">
                                                     <button onClick={handleAcceptDraw} className="px-4 py-1 bg-green-600 hover:bg-green-700 rounded text-sm font-semibold transition-colors">Accept</button>
                                                     <button onClick={handleDeclineDraw} className="px-4 py-1 bg-gray-600 hover:bg-gray-700 rounded text-sm font-semibold transition-colors">Decline</button>
@@ -3986,9 +4086,32 @@ const App: React.FC = () => {
                                         ) : (
                                             <button onClick={handleOfferDraw} className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors text-sm">Offer Draw</button>
                                         )}
+
+                                        {takebackOffer && takebackOffer !== myColor ? (
+                                            <div className="bg-gray-700/60 p-2 rounded-lg">
+                                                <p className="mb-2 text-yellow-400 text-sm font-semibold">{takebackOffer.charAt(0).toUpperCase() + takebackOffer.slice(1)} requests takeback.</p>
+                                                <div className="flex justify-center gap-2">
+                                                    <button onClick={handleAcceptTakeback} className="px-4 py-1 bg-green-600 hover:bg-green-700 rounded text-sm font-semibold transition-colors">Accept</button>
+                                                    <button onClick={handleDeclineTakeback} className="px-4 py-1 bg-gray-600 hover:bg-gray-700 rounded text-sm font-semibold transition-colors">Decline</button>
+                                                </div>
+                                            </div>
+                                        ) : takebackOffer && takebackOffer === myColor ? (
+                                            <div className="flex items-center justify-between bg-gray-700/60 p-2 rounded-lg text-sm px-3 py-1">
+                                                <span className="text-gray-400 text-xs">Takeback requested...</span>
+                                                <button onClick={handleCancelTakeback} className="px-2 py-0.5 bg-gray-600 hover:bg-gray-500 rounded text-xs font-semibold">Cancel</button>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                onClick={handleOfferTakeback}
+                                                disabled={!(currentGameState.previousState || (moveHistory && moveHistory.length > 0) || history.length > 1)}
+                                                className="w-full px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-semibold transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                Takeback
+                                            </button>
+                                        )}
                                     </div>
                                 )}
-                                {gameMode === 'local' && (<button onClick={handleUndo} disabled={history.length <= 1} className="w-full mt-4 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-semibold transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed text-sm">Undo Move</button>)}
+                                {gameMode === 'local' && null}
                                 {status === 'playing' && (<button onClick={handleResign} className="w-full mt-4 px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg font-semibold transition-colors text-sm">
                                     {moveHistory.length < 2 ? 'Abort' : 'Resign'}
                                 </button>)}

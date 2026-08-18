@@ -1,7 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { CapacitorHttp } from '@capacitor/core';
-import { Filesystem, Directory } from '@capacitor/filesystem';
-import { FileOpener } from '@capacitor-community/file-opener';
 
 export interface GitHubReleaseAsset {
   name: string;
@@ -196,6 +193,14 @@ export function useAutoUpdate(): AutoUpdateState {
         setIsDownloading(true);
         setDownloadProgress(10);
         setError(null);
+
+        const fsPkg = '@capacitor/filesystem';
+        const openerPkg = '@capacitor-community/file-opener';
+        const corePkg = '@capacitor/core';
+
+        const { Filesystem, Directory } = await import(/* @vite-ignore */ fsPkg).catch(() => ({} as any));
+        const { FileOpener } = await import(/* @vite-ignore */ openerPkg).catch(() => ({} as any));
+        const { CapacitorHttp } = await import(/* @vite-ignore */ corePkg).catch(() => ({} as any));
 
         const fileName = 'krachtschaak-update.apk';
         let fileUri: string = '';
