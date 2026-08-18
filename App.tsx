@@ -256,8 +256,7 @@ const App: React.FC = () => {
                         await Notification.requestPermission();
                     }
                 }
-                const notifPkg = '@capacitor/local-notifications';
-                const capLocal = await import(/* @vite-ignore */ notifPkg).catch(() => null);
+                const capLocal = await import('@capacitor/local-notifications').catch(() => null);
                 if (capLocal && capLocal.LocalNotifications) {
                     const perm = await capLocal.LocalNotifications.checkPermissions();
                     if (perm.display !== 'granted') {
@@ -285,8 +284,7 @@ const App: React.FC = () => {
                         await Notification.requestPermission();
                     }
                 }
-                const notifPkg = '@capacitor/local-notifications';
-                const capLocal = await import(/* @vite-ignore */ notifPkg).catch(() => null);
+                const capLocal = await import('@capacitor/local-notifications').catch(() => null);
                 if (capLocal && capLocal.LocalNotifications) {
                     const perm = await capLocal.LocalNotifications.checkPermissions();
                     if (perm.display !== 'granted') {
@@ -1062,8 +1060,7 @@ const App: React.FC = () => {
                                 }
 
                                 if (!webNotificationSuccess) {
-                                    const notifPkg = '@capacitor/local-notifications';
-                                    import(/* @vite-ignore */ notifPkg).then((capLocal) => {
+                                    import('@capacitor/local-notifications').then((capLocal) => {
                                         if (capLocal && capLocal.LocalNotifications) {
                                             capLocal.LocalNotifications.schedule({
                                                 notifications: [
