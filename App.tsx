@@ -1337,6 +1337,9 @@ const App: React.FC = () => {
         setChatMessages(state.chat || []);
         setSpectatorChatMessages(state.spectatorChat || []);
         setGameTournamentId(state.tournamentId || null);
+        if (state.tournamentId) {
+            setActiveTournamentId(state.tournamentId);
+        }
         setGameTournamentRound(state.tournamentRound ?? null);
         setGameTournamentPairingId(state.tournamentPairingId || null);
         setGameShowPowerPieces(state.showPowerPieces);
@@ -1965,6 +1968,7 @@ const App: React.FC = () => {
         setDraggedPiece(null);
         setActiveTab('controls');
         setReviewingHistoryIndex(null);
+        setReviewingGame(null);
     }, []);
 
     // Background Global Monitor for Low Time "Warping" & Lobby Data Sync
@@ -2012,7 +2016,25 @@ const App: React.FC = () => {
 
                     // WARP LOGIC (if not currently in this game)
                     if (gid !== gameId) {
-                        const myColor = gameData.playerColors?.white === currentUser.uid ? Color.White : Color.Black
+                        const myColor = gameData.playerColors?.white === currentUser.uid ? Color.White : Color.Black;
+
+                        // Tournament Auto-Warp Logic:
+                        // Automatically warp to a tournament game when it starts (status === 'playing' & tournamentId exists),
+                        // provided the user is not currently in an active, un-ended game.
+                        // This allows warping even when the user is on the Game Over screen of the previous game or in lobby/menu.
+                        if (gameData.status === 'playing' && gameData.tournamentId) {
+                            const isCurrentGameOver = statusRef.current !== 'playing' &&
+                                                     statusRef.current !== 'waiting' &&
+                                                     statusRef.current !== 'promotion' &&
+                                                     statusRef.current !== 'ambiguous_en_passant';
+
+                            const canWarpToTournament = gameMode !== 'online_playing' || isCurrentGameOver;
+
+                            if (canWarpToTournament) {
+                                handleOnlineGameStart(gid, myColor);
+                                return;
+                            }
+                        }
 
                         // 2. Warp on Low Time (if playing and it's my turn)
                         if (gameData.status === 'playing' && gameData.turn === myColor) {
@@ -2024,10 +2046,6 @@ const App: React.FC = () => {
                                 const remaining = timeAtTurnStart - elapsed;
 
                                 if (remaining <= 10 && remaining > 0) {
-                                    // Only warp if user hasn't disabled it (by deleting the code previously, maybe they want it back?)
-                                    // I'll keep the logic commented out or omitted if they deleted it.
-                                    // But they asked for the listener to be immediate.
-
                                     if (soundsEnabled && !hasPlayedLowTimeSoundRef.current) {
                                         playLowTimeSound();
                                         hasPlayedLowTimeSoundRef.current = true;
