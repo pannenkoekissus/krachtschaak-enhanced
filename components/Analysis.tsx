@@ -1703,20 +1703,19 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
     return (
         <div className="min-h-screen flex flex-col md:flex-row items-center md:items-start justify-center p-2 md:p-4 gap-4 md:gap-8 bg-gray-900 text-white overflow-x-hidden">
             <div className="w-full max-w-lg md:max-w-md lg:max-w-lg xl:max-w-2xl relative flex-shrink-0">
-                {!overlayDismissed && (
-                    <GameOverlay
-                        status={status}
-                        winner={winner}
-                        onRestart={() => { goToNode('root', false); setLastMove(null); }}
-                        onPromote={handlePromotion}
-                        promotionData={promotionData}
-                        onResolveAmbiguousEnPassant={resolveAmbiguousEnPassant}
-                        gameMode="analysis"
-                        isMyTurnForAction={true}
-                        onDismiss={() => setOverlayDismissed(true)}
-                        currentGameState={getCurrentState()}
-                    />
-                )}
+                <GameOverlay
+                    status={status}
+                    winner={winner}
+                    onRestart={() => { goToNode('root', false); setLastMove(null); }}
+                    onPromote={handlePromotion}
+                    promotionData={promotionData}
+                    onResolveAmbiguousEnPassant={resolveAmbiguousEnPassant}
+                    gameMode="analysis"
+                    isMyTurnForAction={true}
+                    onDismiss={() => setOverlayDismissed(true)}
+                    overlayDismissed={overlayDismissed}
+                    currentGameState={getCurrentState()}
+                />
                 <Board
                     board={board}
                     selectedPiece={selectedPiece}

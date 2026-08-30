@@ -3758,27 +3758,26 @@ const App: React.FC = () => {
                         />
                     </div>
                     <div className="w-full relative">
-                        {!overlayDismissed && (
-                            <GameOverlay
-                                status={effectiveStatus} winner={winner} onRestart={handlePlayAgain}
-                                onPromote={handlePromotion} promotionData={localPromotionState || promotionData}
-                                onResolveAmbiguousEnPassant={resolveAmbiguousEnPassant}
-                                gameMode={gameMode}
-                                isMyTurnForAction={gameMode === 'local' || turn === myOnlineColor}
-                                ratingChange={ratingChange} initialRatings={initialRatings}
-                                players={players} playerColors={playerColors} isRated={isRated}
-                                rematchOffer={rematchOffer} myOnlineColor={myOnlineColor}
-                                onOfferRematch={handleOfferRematch}
-                                onAcceptRematch={handleAcceptRematch}
-                                onDeclineRematch={handleDeclineRematch}
-                                nextGameId={nextGameId}
-                                onCancelRematch={onCancelRematch}
-                                onAnalyse={handleStartAnalysisFromPosition}
-                                onReview={handleReviewGame}
-                                currentGameState={currentGameState}
-                                onDismiss={() => setOverlayDismissed(true)}
-                            />
-                        )}
+                        <GameOverlay
+                            status={effectiveStatus} winner={winner} onRestart={handlePlayAgain}
+                            onPromote={handlePromotion} promotionData={localPromotionState || promotionData}
+                            onResolveAmbiguousEnPassant={resolveAmbiguousEnPassant}
+                            gameMode={gameMode}
+                            isMyTurnForAction={gameMode === 'local' || turn === myOnlineColor}
+                            ratingChange={ratingChange} initialRatings={initialRatings}
+                            players={players} playerColors={playerColors} isRated={isRated}
+                            rematchOffer={rematchOffer} myOnlineColor={myOnlineColor}
+                            onOfferRematch={handleOfferRematch}
+                            onAcceptRematch={handleAcceptRematch}
+                            onDeclineRematch={handleDeclineRematch}
+                            nextGameId={nextGameId}
+                            onCancelRematch={onCancelRematch}
+                            onAnalyse={handleStartAnalysisFromPosition}
+                            onReview={handleReviewGame}
+                            currentGameState={currentGameState}
+                            onDismiss={() => setOverlayDismissed(true)}
+                            overlayDismissed={overlayDismissed}
+                        />
                         <div className="justify-between mt-8">
                             {reviewingHistoryIndex !== null && (
                                 <div className="absolute top-0 left-0 w-full h-full pointer-events-none bg-blue-900/10 border-4 border-blue-500/50 rounded-lg flex items-start justify-center">
