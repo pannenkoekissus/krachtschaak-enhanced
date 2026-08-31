@@ -1347,9 +1347,6 @@ const App: React.FC = () => {
         setGameShowOriginalType(state.showOriginalType);
         setGameKFen(state.kFen || null);
 
-        // This is a transient UI state and should be reset whenever the game state is loaded.
-        setDraggedPiece(null);
-
 
         const rawPlayers = state.players;
         const safePlayers: { [uid: string]: PlayerInfo } = {};
@@ -1927,6 +1924,7 @@ const App: React.FC = () => {
             setSpectatorChatMessages([]);
             setGameRematchOf(null);
             setMoveHistory([]);
+            setDraggedPiece(null);
         }
         return initialGameState;
     }, [loadGameState]);
@@ -3710,7 +3708,7 @@ const App: React.FC = () => {
         const isBottomPlayerTurn = turn === (isFlipped ? Color.Black : Color.White);
 
         const displayedBoard = reviewingHistoryIndex !== null ? historyBoards[reviewingHistoryIndex] : board;
-        const displayedLastMove = reviewingHistoryIndex !== null ? (reviewingHistoryIndex === 0 ? null : { from: moveHistory[reviewingHistoryIndex - 1].from, to: moveHistory[reviewingHistoryIndex - 1].to }) : lastMove;
+        const displayedLastMove = reviewingHistoryIndex !== null && reviewingHistoryIndex > 0 && moveHistory[reviewingHistoryIndex - 1] ? { from: moveHistory[reviewingHistoryIndex - 1].from, to: moveHistory[reviewingHistoryIndex - 1].to } : lastMove;
 
         const PlayerInfoPanel = ({ name, rating, isDisconnected, isOpponent, countdown, time, isTurn, captured }) => {
             const moveCount = moveHistory.length;
