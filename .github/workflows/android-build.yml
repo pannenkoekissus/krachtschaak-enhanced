@@ -14,7 +14,7 @@ jobs:
     steps:
       - name: Check commit messages
         id: analysis
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             // Haal de commit messages op (geeft een lege array bij workflow_dispatch)
@@ -41,7 +41,7 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Genereer een unieke tag op basis van datum/tijd
       - name: Generate Random Tag
@@ -52,13 +52,13 @@ jobs:
           echo "Gegenereerde tag: $TAG_NAME"
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: 'zulu'
           java-version: '21'
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -155,7 +155,7 @@ jobs:
 
       # Maak de release aan met de gegenereerde tag
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.tag_gen.outputs.new_tag }}
           name: ${{ steps.tag_gen.outputs.new_tag }}
