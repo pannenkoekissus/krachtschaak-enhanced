@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, Move } from '../types';
-import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, boardToFen, boardToKrachtschaakFen, fenToBoard, generatePGN, isInsufficientMaterial } from '../utils/game';
+import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, boardToFen, boardToKrachtschaakFen, fenToBoard, generatePGN, isInsufficientMaterial, resolveMove, createMoveRecord } from '../utils/game';
 import { playMoveSound, playCaptureSound, playWinSound, playDrawSound, playLossSound } from '../utils/sounds';
 import { saveAnalysis, loadAnalysis, generateId, AnalysisFolder, SavedAnalysis, listenToAnalysis, updateAnalysisNode, updateCurrentNodeId } from '../utils/analysisFirebase';
 import { getAllFolders } from '../utils/analysisFirebase';
@@ -1372,6 +1372,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         movingPiece: Piece,
         capturedPiece: Piece | null = null,
         promotion?: PieceType | null,
+        moveDetails?: { isForcePower?: boolean },
     ) => {
         const nextTurn = turn === Color.White ? Color.Black : Color.White;
         const newHalfmoveClock = resetClock ? 0 : halfmoveClock + 1;
@@ -1410,8 +1411,17 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
             }
         }
 
-        const notation = getNotation(board, move.from, move.to, movingPiece, capturedPiece, promotion || null, isForcePowerMode);
-        const newMoveHistory = [...moveHistory, { ...move, notation, piece: movingPiece.type, color: turn, captured: capturedPiece?.type, promotion: promotion || undefined }];
+        const moveData = createMoveRecord(
+            board,
+            currentBoard,
+            move.from,
+            move.to,
+            movingPiece,
+            capturedPiece,
+            promotion || null,
+            !!moveDetails?.isForcePower
+        );
+        const newMoveHistory = [...moveHistory, moveData];
 
         const newState: GameState = {
             ...getCurrentState(),
@@ -1443,187 +1453,69 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
             }
         }
 
-        commitNewState(newState, notation);
+        commitNewState(newState, moveData.notation);
     };
 
     const applyEngineMove = (move: Move) => {
         if (!canEditAnalysis) return;
-        const newBoard = board.map(row => [...row]);
-        const pieceToMove = { ...newBoard[move.from.row][move.from.col]! };
-        const capturedPieceOnTarget = newBoard[move.to.row][move.to.col];
-        let resetHalfmoveClock = pieceToMove.type === PieceType.Pawn;
+        const resolution = resolveMove(board, capturedPieces, enPassantTarget, turn, move.from, move.to, {
+            isForcePower: !!move.isForcePower,
+            promotion: move.promotion ?? null,
+        });
 
-        const newCapturedPieces = {
-            white: [...capturedPieces.white],
-            black: [...capturedPieces.black],
-        };
-
-        const isEnPassantCapture = (pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn) && enPassantTarget && move.to.row === enPassantTarget.row && move.to.col === enPassantTarget.col && !capturedPieceOnTarget;
-
-        let actualCapturedPiece = capturedPieceOnTarget;
-        if (isEnPassantCapture) {
-            actualCapturedPiece = newBoard[move.from.row][move.to.col];
-            newBoard[move.from.row][move.to.col] = null;
+        if (resolution.kind === 'promotion') {
+            setBoard(resolution.board);
+            setCapturedPieces(resolution.capturedPieces);
+            setPromotionData(resolution.promotionData);
+            setStatus('promotion');
+            return;
         }
 
-        let acquiredPower: PieceType | null = null;
-        if (actualCapturedPiece) {
-            resetHalfmoveClock = true;
-            newCapturedPieces[actualCapturedPiece.color].push(actualCapturedPiece);
-            if (!(actualCapturedPiece.isKing || actualCapturedPiece.originalType === PieceType.King)) {
-                acquiredPower = actualCapturedPiece.originalType;
-            }
+        if (resolution.kind === 'move') {
+            finalizeTurn(
+                resolution.board,
+                resolution.enPassantTarget,
+                resolution.resetHalfmoveClock,
+                resolution.capturedPieces,
+                { from: move.from, to: move.to },
+                resolution.movingPiece,
+                resolution.capturedPiece,
+                move.promotion ?? null,
+                { isForcePower: resolution.wasForcedPowerMove }
+            );
         }
-
-        let powerAfterMove = pieceToMove.power;
-        if (actualCapturedPiece && acquiredPower) {
-            powerAfterMove = acquiredPower;
-        } else if (move.isForcePower) {
-            powerAfterMove = null;
-        }
-        pieceToMove.power = powerAfterMove;
-
-        if (move.promotion) {
-            pieceToMove.type = move.promotion;
-
-            if (isEnPassantCapture && newBoard[move.from.row][move.to.col] === actualCapturedPiece) {
-                pieceToMove.power = null;
-            } else if (actualCapturedPiece) {
-                pieceToMove.power = actualCapturedPiece.originalType === PieceType.Pawn ? null : actualCapturedPiece.originalType;
-            } else {
-                if (pieceToMove.originalType === PieceType.Pawn && !move.isForcePower) {
-                    pieceToMove.power = pieceToMove.power === PieceType.Pawn ? null : pieceToMove.power;
-                } else {
-                    pieceToMove.power = null;
-                }
-            }
-        }
-
-        pieceToMove.hasMoved = true;
-        newBoard[move.to.row][move.to.col] = pieceToMove;
-        newBoard[move.from.row][move.from.col] = null;
-
-        if (pieceToMove.type === PieceType.King && Math.abs(move.from.col - move.to.col) === 2) {
-            const isKingside = move.to.col > move.from.col;
-            const rookFromCol = isKingside ? 7 : 0;
-            const rookToCol = isKingside ? 5 : 3;
-            const rook = newBoard[move.from.row][rookFromCol];
-            if (rook) {
-                newBoard[move.from.row][rookToCol] = { ...rook, hasMoved: true };
-                newBoard[move.from.row][rookFromCol] = null;
-            }
-        }
-
-        let nextEnPassantTarget: Position | null = null;
-        if (pieceToMove.type === PieceType.Pawn && Math.abs(move.from.row - move.to.row) === 2) {
-            nextEnPassantTarget = { row: (move.from.row + move.to.row) / 2, col: move.from.col };
-        }
-
-        finalizeTurn(newBoard, nextEnPassantTarget, resetHalfmoveClock, newCapturedPieces, { from: move.from, to: move.to }, pieceToMove, actualCapturedPiece, move.promotion);
     };
 
     const movePiece = (from: Position, to: Position) => {
-        const newBoard = board.map(row => [...row]);
-        const pieceToMove = { ...newBoard[from.row][from.col]! };
-        const capturedPieceOnTarget = newBoard[to.row][to.col];
-        let resetHalfmoveClock = pieceToMove.type === PieceType.Pawn;
+        const resolution = resolveMove(board, capturedPieces, enPassantTarget, turn, from, to, {
+            isForcePower: isForcePowerMode,
+        });
 
-        const newCapturedPieces = {
-            white: [...capturedPieces.white],
-            black: [...capturedPieces.black],
-        };
-
-        const wasPowerMove = isPowerMove(board, from, to, enPassantTarget);
-        const isEnPassantCapture = (pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn) && enPassantTarget && to.row === enPassantTarget.row && to.col === enPassantTarget.col && !capturedPieceOnTarget;
-
-        if (isEnPassantCapture && pieceToMove.power === PieceType.Pawn && [PieceType.Queen, PieceType.Bishop, PieceType.King].includes(pieceToMove.originalType) && !isForcePowerMode) {
+        if (resolution.kind === 'ambiguous_en_passant') {
             setAmbiguousEnPassantData({ from, to });
             setStatus('ambiguous_en_passant');
             return;
         }
 
-        let actualCapturedPiece = capturedPieceOnTarget;
-        if (isEnPassantCapture) {
-            actualCapturedPiece = newBoard[from.row][to.col];
-            newBoard[from.row][to.col] = null;
-        }
-
-        let acquiredPower: PieceType | null = null;
-        if (actualCapturedPiece) {
-            resetHalfmoveClock = true;
-            newCapturedPieces[actualCapturedPiece.color].push(actualCapturedPiece);
-            if (actualCapturedPiece.isKing || actualCapturedPiece.originalType === PieceType.King) {
-                // Potential king capture - finalized in finalizeTurn
-            } else {
-                acquiredPower = actualCapturedPiece.originalType;
-            }
-        }
-
-        const promotionRank = turn === Color.White ? 0 : 7;
-        const hasPawnAbility = pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn;
-        const isMovingToPromotionRank = to.row === promotionRank;
-        const isCapturingPawnOnPromotionRank = actualCapturedPiece &&
-            actualCapturedPiece.originalType === PieceType.Pawn &&
-            isMovingToPromotionRank;
-
-        // Update power AFTER saving Pawn ability for promotion check
-        let powerAfterMove = pieceToMove.power;
-        if (actualCapturedPiece && acquiredPower) {
-            powerAfterMove = acquiredPower;
-        } else if (wasPowerMove) {
-            powerAfterMove = null;
-        } else if (isForcePowerMode && isAmbiguousMove(board, from, to, enPassantTarget)) {
-            powerAfterMove = null;
-        }
-        pieceToMove.power = powerAfterMove;
-
-        if ((isMovingToPromotionRank && hasPawnAbility) || isCapturingPawnOnPromotionRank) {
-            // Determine power after promotion, mirroring App.tsx logic
-            let promotionPowerAfterMove: PieceType | null = null;
-            if (isCapturingPawnOnPromotionRank) {
-                promotionPowerAfterMove = null;
-            } else if (actualCapturedPiece) {
-                promotionPowerAfterMove = actualCapturedPiece.originalType === PieceType.Pawn ? null : actualCapturedPiece.originalType;
-            } else {
-                if (pieceToMove.originalType === PieceType.Pawn && !wasPowerMove) {
-                    promotionPowerAfterMove = pieceToMove.power === PieceType.Pawn ? null : pieceToMove.power;
-                } else {
-                    promotionPowerAfterMove = null;
-                }
-            }
-
-            pieceToMove.hasMoved = true;
-            newBoard[to.row][to.col] = pieceToMove;
-            newBoard[from.row][from.col] = null;
-            setBoard(newBoard);
-            setCapturedPieces(newCapturedPieces);
-            setPromotionData({ from, position: to, promotingPiece: pieceToMove, powerAfterPromotion: promotionPowerAfterMove, capturedPiece: actualCapturedPiece });
+        if (resolution.kind === 'promotion') {
+            setBoard(resolution.board);
+            setCapturedPieces(resolution.capturedPieces);
+            setPromotionData(resolution.promotionData);
             setStatus('promotion');
             return;
         }
 
-        pieceToMove.hasMoved = true;
-        newBoard[to.row][to.col] = pieceToMove;
-        newBoard[from.row][from.col] = null;
-
-        // Castling
-        if (pieceToMove.type === PieceType.King && Math.abs(from.col - to.col) === 2) {
-            const isKingside = to.col > from.col;
-            const rookFromCol = isKingside ? 7 : 0;
-            const rookToCol = isKingside ? 5 : 3;
-            const rook = newBoard[from.row][rookFromCol];
-            if (rook) {
-                newBoard[from.row][rookToCol] = { ...rook, hasMoved: true };
-                newBoard[from.row][rookFromCol] = null;
-            }
-        }
-
-        let nextEnPassantTarget: Position | null = null;
-        if (pieceToMove.type === PieceType.Pawn && Math.abs(from.row - to.row) === 2) {
-            nextEnPassantTarget = { row: (from.row + to.row) / 2, col: from.col };
-        }
-
-        finalizeTurn(newBoard, nextEnPassantTarget, resetHalfmoveClock, newCapturedPieces, { from, to }, pieceToMove, actualCapturedPiece);
+        finalizeTurn(
+            resolution.board,
+            resolution.enPassantTarget,
+            resolution.resetHalfmoveClock,
+            resolution.capturedPieces,
+            { from, to },
+            resolution.movingPiece,
+            resolution.capturedPiece,
+            null,
+            { isForcePower: resolution.wasForcedPowerMove }
+        );
     };
 
     const handleSquareClick = useCallback((row: number, col: number) => {
@@ -1680,24 +1572,32 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
     const resolveAmbiguousEnPassant = (choice: 'move' | 'capture') => {
         if (!ambiguousEnPassantData || !canEditAnalysis) return;
         const { from, to } = ambiguousEnPassantData;
-        const newBoard = board.map(r => [...r]);
-        const pieceToMove = { ...newBoard[from.row][from.col]! };
-        const newCaptured = { ...capturedPieces };
+        const resolution = resolveMove(board, capturedPieces, enPassantTarget, turn, from, to, {
+            enPassantChoice: choice,
+            isForcePower: isForcePowerMode,
+        });
 
-        if (choice === 'capture') {
-            const captured = newBoard[from.row][to.col]!;
-            newCaptured[captured.color].push(captured);
-            pieceToMove.power = captured.originalType;
-            newBoard[from.row][to.col] = null;
-        } else {
-            pieceToMove.power = PieceType.Pawn;
+        if (resolution.kind === 'promotion') {
+            setBoard(resolution.board);
+            setCapturedPieces(resolution.capturedPieces);
+            setPromotionData(resolution.promotionData);
+            setStatus('promotion');
+            return;
         }
 
-        pieceToMove.hasMoved = true;
-        newBoard[to.row][to.col] = pieceToMove;
-        newBoard[from.row][from.col] = null;
-
-        finalizeTurn(newBoard, null, true, newCaptured, { from, to }, pieceToMove, choice === 'capture' ? board[from.row][to.col] : null);
+        if (resolution.kind === 'move') {
+            finalizeTurn(
+                resolution.board,
+                resolution.enPassantTarget,
+                resolution.resetHalfmoveClock,
+                resolution.capturedPieces,
+                { from, to },
+                resolution.movingPiece,
+                resolution.capturedPiece,
+                null,
+                { isForcePower: resolution.wasForcedPowerMove }
+            );
+        }
     };
 
     return (

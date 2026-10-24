@@ -1,5 +1,5 @@
 
-import { BoardState, Piece, PieceType, Color, Position, Square, Move } from '../types';
+import { BoardState, Piece, PieceType, Color, Position, Square, Move, PromotionData } from '../types';
 
 const PIECE_ORDER: PieceType[] = [
     PieceType.Rook, PieceType.Knight, PieceType.Bishop, PieceType.Queen,
@@ -356,6 +356,246 @@ export const isAmbiguousMove = (board: BoardState, from: Position, to: Position,
     return isPower; // It's ambiguous if it's both a standard move and a power move.
 };
 
+export interface ResolveMoveOptions {
+    isForcePower?: boolean;
+    enPassantChoice?: 'move' | 'capture' | null;
+    promotion?: PieceType | null;
+}
+
+interface ResolvedMoveBase {
+    board: BoardState;
+    capturedPieces: Record<Color, Piece[]>;
+    resetHalfmoveClock: boolean;
+    movingPiece: Piece;
+    capturedPiece: Piece | null;
+    wasPowerMove: boolean;
+    wasForcedPowerMove: boolean;
+}
+
+export type ResolveMoveResult =
+    | { kind: 'ambiguous_en_passant'; from: Position; to: Position }
+    | (ResolvedMoveBase & {
+        kind: 'promotion';
+        promotionData: PromotionData;
+    })
+    | (ResolvedMoveBase & {
+        kind: 'move';
+        enPassantTarget: Position | null;
+        promotion: PieceType | null;
+        kingCaptured: boolean;
+    });
+
+// Shared move application used by live play, analysis, PGN import and review.
+// Mirrors the rules previously implemented only in App.movePiece: power use,
+// forced power, en passant, promotion, king capture and castling.
+export const resolveMove = (
+    board: BoardState,
+    capturedPieces: Record<Color, Piece[]>,
+    enPassantTarget: Position | null,
+    turn: Color,
+    from: Position,
+    to: Position,
+    options: ResolveMoveOptions = {}
+): ResolveMoveResult => {
+    const newBoard = board.map(row => [...row]);
+    const pieceToMove = { ...newBoard[from.row][from.col]! };
+    const capturedPieceOnTarget = newBoard[to.row][to.col];
+    let resetHalfmoveClock = pieceToMove.type === PieceType.Pawn;
+
+    const newCapturedPieces: Record<Color, Piece[]> = {
+        white: [...(capturedPieces?.white || [])],
+        black: [...(capturedPieces?.black || [])],
+    };
+
+    const wasPowerMove = isPowerMove(board, from, to, enPassantTarget);
+    const wasAmbiguousMove = isAmbiguousMove(board, from, to, enPassantTarget);
+    const useForcePower = !!options.isForcePower;
+    const isEnPassantCapture = (pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn) &&
+        enPassantTarget && to.row === enPassantTarget.row && to.col === enPassantTarget.col && !capturedPieceOnTarget;
+    const isAmbiguousEnPassant = isEnPassantCapture && pieceToMove.power === PieceType.Pawn &&
+        [PieceType.Queen, PieceType.Bishop, PieceType.King].includes(pieceToMove.originalType);
+
+    if (isAmbiguousEnPassant && !useForcePower && !options.enPassantChoice) {
+        return { kind: 'ambiguous_en_passant', from, to };
+    }
+
+    // Resolve the ambiguous en passant as "move without capturing": keep pawn power.
+    if (isAmbiguousEnPassant && options.enPassantChoice === 'move') {
+        pieceToMove.power = PieceType.Pawn;
+        pieceToMove.hasMoved = true;
+        newBoard[to.row][to.col] = pieceToMove;
+        newBoard[from.row][from.col] = null;
+        return {
+            kind: 'move',
+            board: newBoard,
+            capturedPieces: newCapturedPieces,
+            enPassantTarget: null,
+            resetHalfmoveClock: true,
+            movingPiece: pieceToMove,
+            capturedPiece: null,
+            promotion: null,
+            wasPowerMove,
+            wasForcedPowerMove: false,
+            kingCaptured: false,
+        };
+    }
+
+    let actualCapturedPiece: Piece | null = capturedPieceOnTarget;
+    if (isEnPassantCapture) {
+        actualCapturedPiece = newBoard[from.row][to.col];
+        newBoard[from.row][to.col] = null;
+    }
+
+    const wasCapture = !!actualCapturedPiece;
+    let acquiredPower: PieceType | null = null;
+    let kingCaptured = false;
+
+    if (wasCapture && actualCapturedPiece) {
+        resetHalfmoveClock = true;
+        acquiredPower = actualCapturedPiece.originalType;
+        newCapturedPieces[actualCapturedPiece.color].push(actualCapturedPiece);
+
+        if (actualCapturedPiece.isKing || actualCapturedPiece.originalType === PieceType.King) {
+            kingCaptured = true;
+        }
+    }
+
+    const isPotentialCastle = pieceToMove.type === PieceType.King &&
+        from.row === to.row &&
+        Math.abs(to.col - from.col) === 2;
+
+    if (kingCaptured) {
+        pieceToMove.power = acquiredPower;
+        pieceToMove.hasMoved = true;
+        newBoard[to.row][to.col] = pieceToMove;
+        newBoard[from.row][from.col] = null;
+
+        return {
+            kind: 'move',
+            board: newBoard,
+            capturedPieces: newCapturedPieces,
+            enPassantTarget: null,
+            resetHalfmoveClock,
+            movingPiece: pieceToMove,
+            capturedPiece: actualCapturedPiece,
+            promotion: null,
+            wasPowerMove,
+            wasForcedPowerMove: false,
+            kingCaptured: true,
+        };
+    }
+
+    const promotionRank = turn === Color.White ? 0 : 7;
+    const isMovingToPromotionRank = to.row === promotionRank;
+    const hasPawnAbility = pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn;
+    const isCapturingPawnOnPromotionRank = wasCapture &&
+        actualCapturedPiece?.originalType === PieceType.Pawn &&
+        isMovingToPromotionRank;
+
+    if ((isMovingToPromotionRank && hasPawnAbility) || isCapturingPawnOnPromotionRank) {
+        let powerAfterPromotion: PieceType | null = null;
+        if (isCapturingPawnOnPromotionRank) {
+            powerAfterPromotion = null;
+        } else if (wasCapture && actualCapturedPiece) {
+            powerAfterPromotion = actualCapturedPiece.originalType === PieceType.Pawn ? null : actualCapturedPiece.originalType;
+        } else {
+            if (pieceToMove.originalType === PieceType.Pawn && !wasPowerMove) {
+                powerAfterPromotion = pieceToMove.power === PieceType.Pawn ? null : pieceToMove.power;
+            } else {
+                powerAfterPromotion = null;
+            }
+        }
+
+        if (options.promotion) {
+            const promotedPiece: Piece = {
+                ...pieceToMove,
+                type: options.promotion,
+                originalType: pieceToMove.originalType,
+                isKing: pieceToMove.isKing || pieceToMove.originalType === PieceType.King,
+                hasMoved: true,
+                power: powerAfterPromotion,
+            };
+            newBoard[to.row][to.col] = promotedPiece;
+            newBoard[from.row][from.col] = null;
+
+            return {
+                kind: 'move',
+                board: newBoard,
+                capturedPieces: newCapturedPieces,
+                enPassantTarget: null,
+                resetHalfmoveClock: true,
+                movingPiece: pieceToMove,
+                capturedPiece: actualCapturedPiece,
+                promotion: options.promotion,
+                wasPowerMove,
+                wasForcedPowerMove: false,
+                kingCaptured: false,
+            };
+        }
+
+        return {
+            kind: 'promotion',
+            board: newBoard,
+            capturedPieces: newCapturedPieces,
+            resetHalfmoveClock: true,
+            movingPiece: pieceToMove,
+            capturedPiece: actualCapturedPiece,
+            wasPowerMove,
+            wasForcedPowerMove: false,
+            promotionData: {
+                from,
+                position: to,
+                promotingPiece: pieceToMove,
+                powerAfterPromotion,
+                capturedPiece: actualCapturedPiece,
+            },
+        };
+    }
+
+    let powerAfterMove = pieceToMove.power;
+    if (wasCapture) {
+        powerAfterMove = acquiredPower;
+    } else if (useForcePower && wasAmbiguousMove) {
+        powerAfterMove = null;
+    } else if (wasPowerMove) {
+        powerAfterMove = null;
+    }
+
+    const wasForcedPowerMove = useForcePower && wasAmbiguousMove;
+    pieceToMove.power = powerAfterMove;
+    pieceToMove.hasMoved = true;
+    newBoard[to.row][to.col] = pieceToMove;
+    newBoard[from.row][from.col] = null;
+
+    if (isPotentialCastle && !wasCapture && !wasPowerMove && !wasForcedPowerMove) {
+        const rookCol = to.col === 6 ? 7 : 0;
+        const newRookCol = to.col === 6 ? 5 : 3;
+        const rook = newBoard[from.row][rookCol];
+        if (rook?.type === PieceType.Rook && rook.color === pieceToMove.color && !rook.hasMoved) {
+            newBoard[from.row][newRookCol] = { ...rook, hasMoved: true };
+            newBoard[from.row][rookCol] = null;
+        }
+    }
+
+    const nextEnPassantTarget: Position | null = (pieceToMove.type === PieceType.Pawn && Math.abs(to.row - from.row) === 2)
+        ? { row: from.row + (to.row - from.row) / 2, col: from.col }
+        : null;
+
+    return {
+        kind: 'move',
+        board: newBoard,
+        capturedPieces: newCapturedPieces,
+        enPassantTarget: nextEnPassantTarget,
+        resetHalfmoveClock,
+        movingPiece: pieceToMove,
+        capturedPiece: actualCapturedPiece,
+        promotion: null,
+        wasPowerMove,
+        wasForcedPowerMove,
+        kingCaptured: false,
+    };
+};
+
 export const findKingPosition = (board: BoardState, color: Color): Position | null => {
     // Priority 1: Piece with isKing = true
     for (let r = 0; r < 8; r++) {
@@ -584,6 +824,79 @@ export const getNotation = (
     return notation;
 };
 
+// Builds a move-history record from the pre-move and post-move boards.
+// Shared so live play and analysis produce identical notation and metadata.
+export const createMoveRecord = (
+    boardBefore: BoardState,
+    boardAfter: BoardState,
+    from: Position,
+    to: Position,
+    movingPiece: Piece,
+    capturedPiece: Piece | null,
+    promotion: PieceType | null,
+    isForcePower: boolean = false,
+    notationPiece?: Piece
+): Move => {
+    const twoFiles = from.row === to.row && Math.abs(to.col - from.col) === 2;
+    let pieceForNotation = notationPiece || movingPiece;
+
+    if (!notationPiece && movingPiece.originalType === PieceType.King && twoFiles) {
+        if (!movingPiece.power) {
+            pieceForNotation = { ...movingPiece };
+        } else {
+            const kingFromBoard = boardBefore[from.row][from.col];
+            if (kingFromBoard && kingFromBoard.power) {
+                pieceForNotation = { ...movingPiece, power: null };
+            }
+        }
+    }
+
+    const notation = getNotation(boardBefore, from, to, pieceForNotation, capturedPiece, promotion, isForcePower);
+    const pieceOnNewBoard = boardAfter[to.row]?.[to.col];
+    const afterPower = pieceOnNewBoard ? pieceOnNewBoard.power : null;
+    const powerConsumed = !!(movingPiece.power && !afterPower);
+
+    const isEnPassant = !!capturedPiece && !boardBefore[to.row][to.col];
+
+    let isCastle = false;
+    if (movingPiece.originalType === PieceType.King && twoFiles && !capturedPiece) {
+        const rookFromCol = to.col > from.col ? 7 : 0;
+        const rookToCol = to.col > from.col ? 5 : 3;
+        const beforeRook = boardBefore[from.row][rookFromCol];
+        const afterRook = boardAfter[from.row]?.[rookToCol];
+        isCastle = !!beforeRook &&
+            beforeRook.type === PieceType.Rook &&
+            beforeRook.color === movingPiece.color &&
+            !boardBefore[from.row][rookToCol] &&
+            !!afterRook &&
+            afterRook.type === PieceType.Rook &&
+            afterRook.color === movingPiece.color &&
+            !boardAfter[from.row]?.[rookFromCol];
+    }
+
+    const move: Move = {
+        from,
+        to,
+        piece: movingPiece.type || PieceType.Pawn,
+        notation,
+        color: movingPiece.color,
+        afterPower: afterPower || null,
+        isForcePower: !!isForcePower,
+        powerConsumed,
+        isCastle,
+        isEnPassant,
+    };
+
+    if (capturedPiece) {
+        move.captured = capturedPiece.type;
+    }
+    if (promotion) {
+        move.promotion = promotion;
+    }
+
+    return move;
+};
+
 // A simple move applicator for the review system that doesn't require full validation
 export const applyMoveToBoard = (board: BoardState, move: Move): BoardState => {
     const newBoard = sanitizeBoard(board);
@@ -596,11 +909,9 @@ export const applyMoveToBoard = (board: BoardState, move: Move): BoardState => {
         piece.type = move.promotion;
     }
 
-    // Handle Capture Logic for Board Update (removing captured piece)
-    // Standard capture is overwriting target. 
-    // En Passant: target is empty but capture happens.
-    if (move.piece === PieceType.Pawn && move.captured && !newBoard[move.to.row][move.to.col]) {
-        // En Passant capture
+    // En passant: a recorded capture on an empty target square can only be en passant.
+    const isEnPassant = move.isEnPassant ?? (!!move.captured && !newBoard[move.to.row]?.[move.to.col]);
+    if (isEnPassant) {
         newBoard[move.from.row][move.to.col] = null;
     }
 
@@ -622,16 +933,24 @@ export const applyMoveToBoard = (board: BoardState, move: Move): BoardState => {
         piece.power = null;
     }
 
-    // Castling: Move the rook
-    if (move.piece === PieceType.King && Math.abs(move.from.col - move.to.col) === 2) {
-        const row = move.from.row;
+    // Castling: only when this was actually a castle, never for a King power move.
+    const seenAsCastle = move.isCastle ?? (
+        move.piece === PieceType.King &&
+        move.from.row === move.to.row &&
+        Math.abs(move.from.col - move.to.col) === 2 &&
+        !move.captured &&
+        !move.powerConsumed &&
+        (!move.notation || /^O-O/.test(move.notation.trim()))
+    );
+
+    if (seenAsCastle) {
         const isKingside = move.to.col > move.from.col;
         const rookFromCol = isKingside ? 7 : 0;
         const rookToCol = isKingside ? 5 : 3;
-        const rook = newBoard[row][rookFromCol];
-        if (rook) {
-            newBoard[row][rookToCol] = { ...rook, hasMoved: true };
-            newBoard[row][rookFromCol] = null;
+        const rook = newBoard[move.from.row][rookFromCol];
+        if (rook && rook.type === PieceType.Rook && rook.color === piece.color) {
+            newBoard[move.from.row][rookToCol] = { ...rook, hasMoved: true };
+            newBoard[move.from.row][rookFromCol] = null;
         }
     }
 

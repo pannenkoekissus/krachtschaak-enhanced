@@ -49,6 +49,8 @@ export interface Move {
   afterPower?: PieceType | null;
   isForcePower?: boolean;
   powerConsumed?: boolean;
+  isCastle?: boolean;
+  isEnPassant?: boolean;
 }
 
 export interface ChatMessage {
