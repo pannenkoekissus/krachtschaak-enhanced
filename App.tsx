@@ -1692,7 +1692,16 @@ const App: React.FC = () => {
             const piece = movingPiece || baseState.board[move.from.row][move.from.col];
 
             if (piece) {
-                const notation = getNotation(baseState.board, move.from, move.to, piece, capturedPiece || null, promotion || null, moveDetails?.isForcePower);
+                let pieceForNotation = piece;
+                if (piece.originalType === PieceType.King && !piece.power && Math.abs(move.to.col - move.from.col) === 2) {
+                    pieceForNotation = { ...piece };
+                } else if (piece.originalType === PieceType.King && Math.abs(move.to.col - move.from.col) === 2) {
+                    const kingFromBoard = baseState.board[move.from.row][move.from.col];
+                    if (kingFromBoard && kingFromBoard.power) {
+                        pieceForNotation = { ...piece, power: null };
+                    }
+                }
+                const notation = getNotation(baseState.board, move.from, move.to, pieceForNotation, capturedPiece || null, promotion || null, moveDetails?.isForcePower);
 
                 const pieceOnNewBoard = currentBoard[move.to.row][move.to.col];
                 const afterPower = pieceOnNewBoard ? pieceOnNewBoard.power : null;
@@ -2827,7 +2836,8 @@ const App: React.FC = () => {
                 newBoard[from.row][from.col] = null;
 
                 // Build the move history entry for this king capture
-                const notation = getNotation(currentState.board, from, to, pieceToMove, actualCapturedPiece, null, isForcePowerMode);
+                const kingPieceForNotation = { ...pieceToMove, power: null };
+                const notation = getNotation(currentState.board, from, to, kingPieceForNotation, actualCapturedPiece, null, isForcePowerMode);
                 const pieceOnNewBoard = newBoard[to.row][to.col];
                 const afterPower = pieceOnNewBoard ? pieceOnNewBoard.power : null;
                 const powerConsumed = !!(pieceToMove.power && !afterPower);
