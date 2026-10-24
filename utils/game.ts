@@ -536,6 +536,24 @@ export const getNotation = (
     const fromSquare = `${cols[from.col]}${rows[from.row]}`;
     const toSquare = `${cols[to.col]}${rows[to.row]}`;
 
+    // Castling notation. A king can also move two squares horizontally without
+    // castling when it has rook/queen power, so only treat it as castling when
+    // the king is unmoved, has no power, and starts on its home square.
+    if (
+        piece.originalType === PieceType.King &&
+        !piece.power &&
+        !piece.hasMoved &&
+        from.row === to.row &&
+        from.col === 4 &&
+        Math.abs(to.col - from.col) === 2
+    ) {
+        let notation = to.col > from.col ? 'O-O' : 'O-O-O';
+        if (isForcePower) {
+            notation += '^';
+        }
+        return notation;
+    }
+
     let pieceChar = '';
     switch (piece.originalType) { // Use original type for notation
         case PieceType.King: pieceChar = 'K'; break;
