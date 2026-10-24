@@ -2021,7 +2021,10 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
                     <div className="bg-gray-700 p-3 rounded-lg flex flex-col gap-2">
                         <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-gray-400">ANALYSIS LINES</span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-gray-400">ANALYSIS LINES</span>
+                                <span className="text-[9px] font-bold text-amber-400 bg-amber-900/30 border border-amber-500/30 px-1.5 py-0.5 rounded uppercase tracking-wider">Beta</span>
+                            </div>
                             <div className="flex items-center gap-3">
                                 <label className="flex items-center gap-1 cursor-pointer" title="Toggle engine best move arrow">
                                     <input

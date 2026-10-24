@@ -276,7 +276,10 @@ const GameReview: React.FC<GameReviewProps> = ({ game, onBack, onAnalyze }) => {
                 <div className="bg-gray-700 p-3 rounded-lg mb-4">
                     <div className="flex flex-col gap-2">
                         <div className="flex items-center justify-between">
-                            <label htmlFor="engine-depth-review" className="text-sm text-gray-300 font-semibold">Engine Depth</label>
+                            <div className="flex items-center gap-2">
+                                <label htmlFor="engine-depth-review" className="text-sm text-gray-300 font-semibold">Engine Depth</label>
+                                <span className="text-[9px] font-bold text-amber-400 bg-amber-900/30 border border-amber-500/30 px-1.5 py-0.5 rounded uppercase tracking-wider">Beta</span>
+                            </div>
                             <input
                                 id="engine-depth-review"
                                 type="number"
