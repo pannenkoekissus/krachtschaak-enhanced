@@ -533,6 +533,10 @@ export const resolveMove = (
             };
         }
 
+        pieceToMove.hasMoved = true;
+        newBoard[to.row][to.col] = pieceToMove;
+        newBoard[from.row][from.col] = null;
+
         return {
             kind: 'promotion',
             board: newBoard,
@@ -854,7 +858,9 @@ export const createMoveRecord = (
     const notation = getNotation(boardBefore, from, to, pieceForNotation, capturedPiece, promotion, isForcePower);
     const pieceOnNewBoard = boardAfter[to.row]?.[to.col];
     const afterPower = pieceOnNewBoard ? pieceOnNewBoard.power : null;
-    const powerConsumed = !!(movingPiece.power && !afterPower);
+    const pieceBefore = boardBefore[from.row]?.[from.col];
+    const powerBefore = pieceBefore ? pieceBefore.power : movingPiece.power;
+    const powerConsumed = !!(powerBefore && !afterPower);
 
     const isEnPassant = !!capturedPiece && !boardBefore[to.row][to.col];
 
@@ -902,6 +908,7 @@ export const applyMoveToBoard = (board: BoardState, move: Move): BoardState => {
     const newBoard = sanitizeBoard(board);
     if (!newBoard[move.from.row] || !newBoard[move.from.row][move.from.col]) return newBoard;
     const piece = { ...newBoard[move.from.row][move.from.col]! };
+    const powerBefore = piece.power;
 
     // Update piece state
     piece.hasMoved = true;
@@ -934,13 +941,17 @@ export const applyMoveToBoard = (board: BoardState, move: Move): BoardState => {
     }
 
     // Castling: only when this was actually a castle, never for a King power move.
+    // Legacy records have no isCastle flag and used notation like "Ke1-g1", so fall
+    // back to the old behaviour unless the record shows a King power move was used.
+    const legacyKingPowerMove = move.afterPower === null && !!powerBefore;
     const seenAsCastle = move.isCastle ?? (
         move.piece === PieceType.King &&
         move.from.row === move.to.row &&
         Math.abs(move.from.col - move.to.col) === 2 &&
         !move.captured &&
         !move.powerConsumed &&
-        (!move.notation || /^O-O/.test(move.notation.trim()))
+        !move.isForcePower &&
+        !legacyKingPowerMove
     );
 
     if (seenAsCastle) {

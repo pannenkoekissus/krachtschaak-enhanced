@@ -3006,6 +3006,16 @@ const App: React.FC = () => {
         if (!currentState || !data) return;
 
         const { from, to } = data;
+        const sourcePiece = currentState.board[from.row]?.[from.col];
+        if (!sourcePiece || sourcePiece.color !== currentState.turn) {
+            // The board changed under the dialog (e.g. a remote move/reconnect).
+            // Never resolve against a missing piece; just discard the stale prompt.
+            if (gameMode === 'online_playing') {
+                setLocalAmbiguousEnPassantState(null);
+            }
+            return;
+        }
+
         const resolution = resolveMove(
             currentState.board,
             currentState.capturedPieces,

@@ -48,6 +48,7 @@ export interface Move {
   color: Color;
   afterPower?: PieceType | null;
   isForcePower?: boolean;
+  // True only when the move ends with no power, not when a power move was used.
   powerConsumed?: boolean;
   isCastle?: boolean;
   isEnPassant?: boolean;
