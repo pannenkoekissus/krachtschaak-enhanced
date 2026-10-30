@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, Move } from '../types';
-import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, boardToFen, boardToKrachtschaakFen, fenToBoard, generatePGN, isInsufficientMaterial, resolveMove, createMoveRecord } from '../utils/game';
+import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, boardToFen, boardToKrachtschaakFen, fenToBoard, generatePGN, isInsufficientMaterial, resolveMove, createMoveRecord, getBoardBeforePromotion } from '../utils/game';
 import { playMoveSound, playCaptureSound, playWinSound, playDrawSound, playLossSound } from '../utils/sounds';
 import { saveAnalysis, loadAnalysis, generateId, AnalysisFolder, SavedAnalysis, listenToAnalysis, updateAnalysisNode, updateCurrentNodeId } from '../utils/analysisFirebase';
 import { getAllFolders } from '../utils/analysisFirebase';
@@ -42,6 +42,31 @@ interface AnalysisTreeNode {
     lastVisited?: boolean;
     comment?: string;
 }
+
+const movesAreEquivalent = (a: Move, b: Move): boolean => {
+    if (a.from.row !== b.from.row || a.from.col !== b.from.col || a.to.row !== b.to.row || a.to.col !== b.to.col) return false;
+    if (a.piece !== b.piece) return false;
+    if ((a.captured ?? null) !== (b.captured ?? null)) return false;
+    if ((a.promotion ?? null) !== (b.promotion ?? null)) return false;
+
+    const hasExplicitMetadata = (move: Move) =>
+        move.isForcePower !== undefined &&
+        move.powerConsumed !== undefined &&
+        move.afterPower !== undefined &&
+        move.isCastle !== undefined &&
+        move.isEnPassant !== undefined;
+
+    if (!hasExplicitMetadata(a) || !hasExplicitMetadata(b)) {
+        if (a.notation !== b.notation) return false;
+    }
+
+    const optionalEqual = (x: unknown, y: unknown) => x === undefined || y === undefined || x === y;
+    return optionalEqual(a.isForcePower, b.isForcePower) &&
+        optionalEqual(a.powerConsumed, b.powerConsumed) &&
+        optionalEqual(a.afterPower, b.afterPower) &&
+        optionalEqual(a.isCastle, b.isCastle) &&
+        optionalEqual(a.isEnPassant, b.isEnPassant);
+};
 
 const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, analysisOwnerUserId, analysisFolderId, canEditAnalysis = true, analysisSourceFolderType, analysisSharedFolders, analysisPublicFolders, currentUser, onBackToAnalysisManager, onBackToMenu, onBackToWhereIcameFrom }) => {
 
@@ -946,7 +971,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                         for (const to of validMoves) {
                             // Determine captured piece for notation
                             let capturedPiece: Piece | null = tempBoard[to.row][to.col];
-                            if (!capturedPiece && piece.type === PieceType.Pawn && tempEp && to.row === tempEp.row && to.col === tempEp.col) {
+                            if (!capturedPiece && (piece.type === PieceType.Pawn || piece.power === PieceType.Pawn) && tempEp && to.row === tempEp.row && to.col === tempEp.col) {
                                 capturedPiece = tempBoard[from.row][to.col];
                             }
 
@@ -979,6 +1004,14 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                                     }
                                 }
 
+                                const isCastle = piece.originalType === PieceType.King &&
+                                    from.row === to.row &&
+                                    Math.abs(to.col - from.col) === 2 &&
+                                    !capturedPiece &&
+                                    !wasPowerMove &&
+                                    !(isForcePowerFlag && wasAmbiguousMove);
+                                const isEnPassant = !!capturedPiece && !tempBoard[to.row]?.[to.col];
+
                                 return {
                                     from,
                                     to,
@@ -989,7 +1022,9 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                                     promotion: prom,
                                     isForcePower: isForcePowerFlag,
                                     afterPower: powerAfterMove,
-                                    powerConsumed
+                                    powerConsumed,
+                                    isCastle,
+                                    isEnPassant
                                 } as Move;
                             };
 
@@ -1147,8 +1182,11 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
         // Check if this move already exists as a child of the current node
         const currentNode = nodes[currentNodeId];
+        const newMove = newState.moveHistory?.[newState.moveHistory.length - 1];
         const existingChildId = currentNode.children.find(childId => {
             const child = nodes[childId];
+            const childMove = child.gameState.moveHistory?.[child.gameState.moveHistory.length - 1];
+            if (newMove && childMove) return movesAreEquivalent(newMove, childMove);
             return child.notation === notation;
         });
 
@@ -1373,11 +1411,12 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         capturedPiece: Piece | null = null,
         promotion?: PieceType | null,
         moveDetails?: { isForcePower?: boolean },
+        boardBefore?: BoardState,
     ) => {
         const nextTurn = turn === Color.White ? Color.Black : Color.White;
         const newHalfmoveClock = resetClock ? 0 : halfmoveClock + 1;
         const key = generateBoardKey(currentBoard, nextTurn, nextEnPassantTarget);
-        const isIrreversible = !!capturedPiece || movingPiece.type === PieceType.Pawn;
+        const isIrreversible = !!capturedPiece || movingPiece.type === PieceType.Pawn || !!promotion;
         const newCount = isIrreversible ? 1 : (positionHistory[key] || 0) + 1;
         const newPositionHistory = isIrreversible ? { [key]: 1 } : { ...positionHistory, [key]: newCount };
         let newStatus: GameStatus = 'playing';
@@ -1412,7 +1451,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         }
 
         const moveData = createMoveRecord(
-            board,
+            boardBefore || board,
             currentBoard,
             move.from,
             move.to,
@@ -1461,7 +1500,10 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         const resolution = resolveMove(board, capturedPieces, enPassantTarget, turn, move.from, move.to, {
             isForcePower: !!move.isForcePower,
             promotion: move.promotion ?? null,
+            enPassantChoice: 'capture',
         });
+
+        if (resolution.kind === 'invalid') return;
 
         if (resolution.kind === 'promotion') {
             setBoard(resolution.board);
@@ -1480,7 +1522,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                 { from: move.from, to: move.to },
                 resolution.movingPiece,
                 resolution.capturedPiece,
-                move.promotion ?? null,
+                resolution.promotion,
                 { isForcePower: resolution.wasForcedPowerMove }
             );
         }
@@ -1490,6 +1532,8 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         const resolution = resolveMove(board, capturedPieces, enPassantTarget, turn, from, to, {
             isForcePower: isForcePowerMode,
         });
+
+        if (resolution.kind === 'invalid') return;
 
         if (resolution.kind === 'ambiguous_en_passant') {
             setAmbiguousEnPassantData({ from, to });
@@ -1555,6 +1599,17 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
         if (!promotionData || !canEditAnalysis) return;
         const { from, position, promotingPiece, powerAfterPromotion, capturedPiece } = promotionData;
         const newBoard = board.map(r => [...r]);
+        const boardBeforePromotion = getBoardBeforePromotion(board, promotionData);
+        const sourceSquare = board[from.row]?.[from.col];
+        const promotionAlreadyCommitted = !sourceSquare ||
+            sourceSquare.type !== promotingPiece.type ||
+            sourceSquare.color !== promotingPiece.color;
+        const newCaptured = capturedPiece && !promotionAlreadyCommitted
+            ? {
+                ...capturedPieces,
+                [capturedPiece.color]: [...capturedPieces[capturedPiece.color], capturedPiece],
+            }
+            : capturedPieces;
         const promotedPiece: Piece = {
             ...promotingPiece,
             type: type,
@@ -1566,16 +1621,31 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
 
         newBoard[position.row][position.col] = promotedPiece;
         newBoard[from.row][from.col] = null;
-        finalizeTurn(newBoard, null, true, capturedPieces, { from, to: position }, promotingPiece, capturedPiece, type);
+        finalizeTurn(newBoard, null, true, newCaptured, { from, to: position }, promotingPiece, capturedPiece, type, undefined, boardBeforePromotion);
     };
 
     const resolveAmbiguousEnPassant = (choice: 'move' | 'capture') => {
         if (!ambiguousEnPassantData || !canEditAnalysis) return;
         const { from, to } = ambiguousEnPassantData;
+        const sourcePiece = board[from.row]?.[from.col];
+        if (!sourcePiece || sourcePiece.color !== turn) {
+            setAmbiguousEnPassantData(null);
+            if (status === 'ambiguous_en_passant') setStatus('playing');
+            return;
+        }
+
         const resolution = resolveMove(board, capturedPieces, enPassantTarget, turn, from, to, {
             enPassantChoice: choice,
             isForcePower: isForcePowerMode,
         });
+
+        if (resolution.kind === 'invalid') {
+            setAmbiguousEnPassantData(null);
+            if (status === 'ambiguous_en_passant') setStatus('playing');
+            return;
+        }
+
+        setAmbiguousEnPassantData(null);
 
         if (resolution.kind === 'promotion') {
             setBoard(resolution.board);

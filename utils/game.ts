@@ -373,6 +373,7 @@ interface ResolvedMoveBase {
 }
 
 export type ResolveMoveResult =
+    | { kind: 'invalid' }
     | { kind: 'ambiguous_en_passant'; from: Position; to: Position }
     | (ResolvedMoveBase & {
         kind: 'promotion';
@@ -397,8 +398,15 @@ export const resolveMove = (
     to: Position,
     options: ResolveMoveOptions = {}
 ): ResolveMoveResult => {
+    const inBounds = (position: Position) =>
+        position.row >= 0 && position.row < 8 && position.col >= 0 && position.col < 8;
+    if (!inBounds(from) || !inBounds(to)) return { kind: 'invalid' };
+
+    const sourcePiece = board[from.row]?.[from.col];
+    if (!sourcePiece || sourcePiece.color !== turn) return { kind: 'invalid' };
+
     const newBoard = board.map(row => [...row]);
-    const pieceToMove = { ...newBoard[from.row][from.col]! };
+    const pieceToMove = { ...sourcePiece };
     const capturedPieceOnTarget = newBoard[to.row][to.col];
     let resetHalfmoveClock = pieceToMove.type === PieceType.Pawn;
 
@@ -772,7 +780,8 @@ export const getNotation = (
     piece: Piece,
     captured: Piece | null,
     promotion: PieceType | null,
-    isForcePower: boolean = false
+    isForcePower: boolean = false,
+    isCastle?: boolean
 ): string => {
     const cols = 'abcdefgh';
     const rows = '87654321';
@@ -783,10 +792,12 @@ export const getNotation = (
     if (
         piece.originalType === PieceType.King &&
         from.row === to.row &&
-        Math.abs(to.col - from.col) === 2
+        Math.abs(to.col - from.col) === 2 &&
+        !captured
     ) {
         const kingFromBoard = board[from.row][from.col];
-        if (!piece.power && !(kingFromBoard && kingFromBoard.power)) {
+        const castleMove = isCastle ?? (!piece.power && !(kingFromBoard && kingFromBoard.power));
+        if (castleMove) {
             let notation = to.col > from.col ? 'O-O' : 'O-O-O';
             if (isForcePower) {
                 notation += '^';
@@ -838,47 +849,36 @@ export const createMoveRecord = (
     movingPiece: Piece,
     capturedPiece: Piece | null,
     promotion: PieceType | null,
-    isForcePower: boolean = false,
-    notationPiece?: Piece
+    isForcePower: boolean = false
 ): Move => {
     const twoFiles = from.row === to.row && Math.abs(to.col - from.col) === 2;
-    let pieceForNotation = notationPiece || movingPiece;
 
-    if (!notationPiece && movingPiece.originalType === PieceType.King && twoFiles) {
-        if (!movingPiece.power) {
-            pieceForNotation = { ...movingPiece };
-        } else {
-            const kingFromBoard = boardBefore[from.row][from.col];
-            if (kingFromBoard && kingFromBoard.power) {
-                pieceForNotation = { ...movingPiece, power: null };
-            }
-        }
+    let isCastle = false;
+    if (movingPiece.originalType === PieceType.King && twoFiles && !capturedPiece) {
+        const rookFromCol = to.col > from.col ? 7 : 0;
+        const rookToCol = to.col > from.col ? 5 : 3;
+        const beforeRook = boardBefore[from.row]?.[rookFromCol];
+        const afterRook = boardAfter[from.row]?.[rookToCol];
+        isCastle = !!beforeRook &&
+            beforeRook.type === PieceType.Rook &&
+            beforeRook.color === movingPiece.color &&
+            !boardBefore[from.row]?.[rookToCol] &&
+            !!afterRook &&
+            afterRook.type === PieceType.Rook &&
+            afterRook.color === movingPiece.color &&
+            !boardAfter[from.row]?.[rookFromCol];
     }
 
-    const notation = getNotation(boardBefore, from, to, pieceForNotation, capturedPiece, promotion, isForcePower);
+    const notation = getNotation(boardBefore, from, to, movingPiece, capturedPiece, promotion, isForcePower, isCastle);
     const pieceOnNewBoard = boardAfter[to.row]?.[to.col];
     const afterPower = pieceOnNewBoard ? pieceOnNewBoard.power : null;
     const pieceBefore = boardBefore[from.row]?.[from.col];
     const powerBefore = pieceBefore ? pieceBefore.power : movingPiece.power;
     const powerConsumed = !!(powerBefore && !afterPower);
 
-    const isEnPassant = !!capturedPiece && !boardBefore[to.row][to.col];
-
-    let isCastle = false;
-    if (movingPiece.originalType === PieceType.King && twoFiles && !capturedPiece) {
-        const rookFromCol = to.col > from.col ? 7 : 0;
-        const rookToCol = to.col > from.col ? 5 : 3;
-        const beforeRook = boardBefore[from.row][rookFromCol];
-        const afterRook = boardAfter[from.row]?.[rookToCol];
-        isCastle = !!beforeRook &&
-            beforeRook.type === PieceType.Rook &&
-            beforeRook.color === movingPiece.color &&
-            !boardBefore[from.row][rookToCol] &&
-            !!afterRook &&
-            afterRook.type === PieceType.Rook &&
-            afterRook.color === movingPiece.color &&
-            !boardAfter[from.row]?.[rookFromCol];
-    }
+    const isEnPassant = !!capturedPiece &&
+        !boardBefore[to.row]?.[to.col] &&
+        (movingPiece.type === PieceType.Pawn || movingPiece.power === PieceType.Pawn);
 
     const move: Move = {
         from,
@@ -901,6 +901,13 @@ export const createMoveRecord = (
     }
 
     return move;
+};
+
+export const getBoardBeforePromotion = (boardAfter: BoardState, promotionData: PromotionData): BoardState => {
+    const boardBefore = boardAfter.map(row => [...row]);
+    boardBefore[promotionData.position.row][promotionData.position.col] = promotionData.capturedPiece || null;
+    boardBefore[promotionData.from.row][promotionData.from.col] = promotionData.promotingPiece;
+    return boardBefore;
 };
 
 // A simple move applicator for the review system that doesn't require full validation
@@ -943,15 +950,18 @@ export const applyMoveToBoard = (board: BoardState, move: Move): BoardState => {
     // Castling: only when this was actually a castle, never for a King power move.
     // Legacy records have no isCastle flag and used notation like "Ke1-g1", so fall
     // back to the old behaviour unless the record shows a King power move was used.
+    const notationIsCastle = /^O-O(?:-O)?\^?$/.test(move.notation || '');
     const legacyKingPowerMove = move.afterPower === null && !!powerBefore;
     const seenAsCastle = move.isCastle ?? (
-        move.piece === PieceType.King &&
-        move.from.row === move.to.row &&
-        Math.abs(move.from.col - move.to.col) === 2 &&
-        !move.captured &&
-        !move.powerConsumed &&
-        !move.isForcePower &&
-        !legacyKingPowerMove
+        notationIsCastle || (
+            move.piece === PieceType.King &&
+            move.from.row === move.to.row &&
+            Math.abs(move.from.col - move.to.col) === 2 &&
+            !move.captured &&
+            !move.powerConsumed &&
+            !move.isForcePower &&
+            !legacyKingPowerMove
+        )
     );
 
     if (seenAsCastle) {

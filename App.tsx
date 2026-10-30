@@ -14,7 +14,7 @@ import AnalysisManager from './components/AnalysisManager';
 import Tournament from './components/Tournament';
 import ConfirmationModal from './components/ConfirmationModal';
 import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, GameMode, TimerSettings, PlayerInfo, SentChallenge, Move, ChatMessage, LobbyGame, IncomingChallenge, AutoSetting } from './types';
-import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, sanitizePiece, isInsufficientMaterial, fenToBoard, boardToKrachtschaakFen, resolveMove, createMoveRecord } from './utils/game';
+import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, sanitizePiece, isInsufficientMaterial, fenToBoard, boardToKrachtschaakFen, resolveMove, createMoveRecord, getBoardBeforePromotion } from './utils/game';
 import { getRatingCategory, RatingCategory, RATING_CATEGORIES } from './utils/ratings';
 import { getSharedFolders, getPublicFolders } from './utils/analysisFirebase';
 import { updatePairing, updatePlayerScore, recalculateTiebreaks } from './utils/tournamentFirebase';
@@ -1430,6 +1430,7 @@ const App: React.FC = () => {
                 return;
             }
 
+            preInteractionStateRef.current = null;
             loadGameState(newState);
             setSelectedPiece(null);
             setValidMoves([]);
@@ -1638,7 +1639,8 @@ const App: React.FC = () => {
         movingPiece?: Piece | null,
         capturedPiece?: Piece | null,
         promotion?: PieceType | null,
-        moveDetails?: { isForcePower?: boolean }
+        moveDetails?: { isForcePower?: boolean },
+        boardBefore?: BoardState
     ) => {
         const { turn, halfmoveClock, positionHistory, drawOffer, timerSettings, players, playerColors, initialRatings, isRated, ratingCategory, challengedPlayerInfo, playersLeft, moveHistory, tournamentId, tournamentRound, tournamentPairingId, showPowerPieces, showPowerRings, showOriginalType } = baseState;
 
@@ -1647,7 +1649,7 @@ const App: React.FC = () => {
         const nextTurn = turn === Color.White ? Color.Black : Color.White;
         const newHalfmoveClock = resetClock ? 0 : halfmoveClock + 1;
         const key = generateBoardKey(currentBoard, nextTurn, nextEnPassantTarget);
-        const isIrreversible = !!capturedPiece || movingPiece?.type === PieceType.Pawn;
+        const isIrreversible = !!capturedPiece || movingPiece?.type === PieceType.Pawn || !!promotion;
         const newCount = isIrreversible ? 1 : (positionHistory[key] || 0) + 1;
         const newPositionHistory = isIrreversible ? { [key]: 1 } : { ...positionHistory, [key]: newCount };
         let newStatus: GameStatus = 'playing';
@@ -1693,7 +1695,7 @@ const App: React.FC = () => {
 
             if (piece) {
                 const moveData = createMoveRecord(
-                    baseState.board,
+                    boardBefore || baseState.board,
                     currentBoard,
                     move.from,
                     move.to,
@@ -2741,6 +2743,8 @@ const App: React.FC = () => {
 
         const resolution = resolveMove(board, capturedPieces, enPassantTarget, turn, from, to, { isForcePower: useForcePower });
 
+        if (resolution.kind === 'invalid') return;
+
         if (resolution.kind === 'ambiguous_en_passant') {
             if (shouldAutoApply(autoEnPassant, currentState.timerSettings)) {
                 // Auto-apply capture choice
@@ -2804,7 +2808,6 @@ const App: React.FC = () => {
 
         if (resolution.kingCaptured) {
             const pieceToMove = resolution.movingPiece;
-            const kingPieceForNotation = { ...pieceToMove, power: null };
             const moveData = createMoveRecord(
                 currentState.board,
                 resolution.board,
@@ -2813,8 +2816,7 @@ const App: React.FC = () => {
                 pieceToMove,
                 resolution.capturedPiece,
                 null,
-                isForcePowerMode,
-                kingPieceForNotation
+                resolution.wasForcedPowerMove
             );
 
             const newMoveHistory = [...(currentState.moveHistory || []), moveData];
@@ -3005,14 +3007,19 @@ const App: React.FC = () => {
 
         if (!currentState || !data) return;
 
+        const discardAmbiguousPrompt = () => {
+            preInteractionStateRef.current = null;
+            if (gameMode === 'online_playing') {
+                setLocalAmbiguousEnPassantState(null);
+            } else if (currentState.status === 'ambiguous_en_passant' || currentState.ambiguousEnPassantData) {
+                loadGameState({ ...currentState, status: 'playing', ambiguousEnPassantData: null });
+            }
+        };
+
         const { from, to } = data;
         const sourcePiece = currentState.board[from.row]?.[from.col];
         if (!sourcePiece || sourcePiece.color !== currentState.turn) {
-            // The board changed under the dialog (e.g. a remote move/reconnect).
-            // Never resolve against a missing piece; just discard the stale prompt.
-            if (gameMode === 'online_playing') {
-                setLocalAmbiguousEnPassantState(null);
-            }
+            discardAmbiguousPrompt();
             return;
         }
 
@@ -3025,6 +3032,11 @@ const App: React.FC = () => {
             to,
             { enPassantChoice: choice }
         );
+
+        if (resolution.kind === 'invalid') {
+            discardAmbiguousPrompt();
+            return;
+        }
 
         if (gameMode === 'online_playing') {
             setLocalAmbiguousEnPassantState(null);
@@ -3049,7 +3061,7 @@ const App: React.FC = () => {
         if (resolution.kind === 'move') {
             finalizeTurn(currentState, resolution.board, resolution.enPassantTarget, resolution.resetHalfmoveClock, resolution.capturedPieces, { from, to }, resolution.movingPiece, resolution.capturedPiece, null, { isForcePower: resolution.wasForcedPowerMove });
         }
-    }, [commitNewGameState, finalizeTurn, gameMode, localAmbiguousEnPassantState]);
+    }, [commitNewGameState, finalizeTurn, gameMode, loadGameState, localAmbiguousEnPassantState]);
 
     const handlePromotion = useCallback((chosenPieceType: PieceType) => {
         // Use localPromotionState for online games
@@ -3060,6 +3072,17 @@ const App: React.FC = () => {
 
         const { from, position, promotingPiece, powerAfterPromotion, capturedPiece } = promotionInfo;
         const newBoard = currentState.board.map(r => [...r]);
+        const boardBeforePromotion = getBoardBeforePromotion(currentState.board, promotionInfo);
+        const sourceSquare = currentState.board[from.row]?.[from.col];
+        const promotionAlreadyCommitted = !sourceSquare ||
+            sourceSquare.type !== promotingPiece.type ||
+            sourceSquare.color !== promotingPiece.color;
+        const newCaptured = capturedPiece && !promotionAlreadyCommitted
+            ? {
+                ...currentState.capturedPieces,
+                [capturedPiece.color]: [...currentState.capturedPieces[capturedPiece.color], capturedPiece],
+            }
+            : currentState.capturedPieces;
 
         const promotedPiece: Piece = {
             ...promotingPiece,
@@ -3077,7 +3100,7 @@ const App: React.FC = () => {
             setLocalPromotionState(null);
         }
 
-        finalizeTurn(currentState, newBoard, null, true, currentState.capturedPieces, { from, to: position }, promotingPiece, capturedPiece, chosenPieceType);
+        finalizeTurn(currentState, newBoard, null, true, newCaptured, { from, to: position }, promotingPiece, capturedPiece, chosenPieceType, undefined, boardBeforePromotion);
     }, [finalizeTurn, gameMode, localPromotionState]);
 
     const handleUndo = () => {
