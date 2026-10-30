@@ -4651,7 +4651,16 @@ const App: React.FC = () => {
         return renderGame();
     };
 
-    const moveNotation = pendingCommitState?.moveHistory?.[pendingCommitState.moveHistory.length - 1]?.notation || (pendingPremove ? getNotation(board, pendingPremove.from, pendingPremove.to, board[pendingPremove.from.row][pendingPremove.from.col]!, null, null, pendingPremove.isForcePower) : '');
+    const pendingPremovePiece = pendingPremove ? board[pendingPremove.from.row]?.[pendingPremove.from.col] : null;
+    const pendingPremovePowerMove = !!pendingPremove && isPowerMove(board, pendingPremove.from, pendingPremove.to, enPassantTarget);
+    const pendingPremoveForcedPower = !!pendingPremove && pendingPremove.isForcePower && isAmbiguousMove(board, pendingPremove.from, pendingPremove.to, enPassantTarget);
+    const pendingPremoveIsCastle = !!pendingPremove && !!pendingPremovePiece &&
+        pendingPremovePiece.originalType === PieceType.King &&
+        pendingPremove.from.row === pendingPremove.to.row &&
+        Math.abs(pendingPremove.to.col - pendingPremove.from.col) === 2 &&
+        !pendingPremovePowerMove &&
+        !pendingPremoveForcedPower;
+    const moveNotation = pendingCommitState?.moveHistory?.[pendingCommitState.moveHistory.length - 1]?.notation || (pendingPremove && pendingPremovePiece ? getNotation(board, pendingPremove.from, pendingPremove.to, pendingPremovePiece, null, null, pendingPremoveForcedPower, pendingPremoveIsCastle) : '');
 
     return (
         <>

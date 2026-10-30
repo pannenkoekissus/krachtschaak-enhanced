@@ -57,7 +57,11 @@ const movesAreEquivalent = (a: Move, b: Move): boolean => {
         move.isEnPassant !== undefined;
 
     if (!hasExplicitMetadata(a) || !hasExplicitMetadata(b)) {
-        if (a.notation !== b.notation) return false;
+        if (a.notation !== b.notation) {
+            const isCastleMove = a.piece === PieceType.King && a.from.row === a.to.row && Math.abs(a.to.col - a.from.col) === 2;
+            const isCastleNotation = /^O-O(?:-O)?\^?$/.test(a.notation || '') || /^O-O(?:-O)?\^?$/.test(b.notation || '');
+            if (!(isCastleMove && isCastleNotation)) return false;
+        }
     }
 
     const optionalEqual = (x: unknown, y: unknown) => x === undefined || y === undefined || x === y;
@@ -971,15 +975,21 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                         for (const to of validMoves) {
                             // Determine captured piece for notation
                             let capturedPiece: Piece | null = tempBoard[to.row][to.col];
-                            if (!capturedPiece && (piece.type === PieceType.Pawn || piece.power === PieceType.Pawn) && tempEp && to.row === tempEp.row && to.col === tempEp.col) {
+                            if (!capturedPiece && tempEp && to.row === tempEp.row && to.col === tempEp.col && (piece.type === PieceType.Pawn || notation.includes('x'))) {
                                 capturedPiece = tempBoard[from.row][to.col];
                             }
 
                             const isForcePowerFlag = notation.includes('^');
+                            const wasPowerMove = isPowerMove(tempBoard, from, to, tempEp);
+                            const wasAmbiguousMove = isAmbiguousMove(tempBoard, from, to, tempEp);
+                            const isCastle = piece.originalType === PieceType.King &&
+                                from.row === to.row &&
+                                Math.abs(to.col - from.col) === 2 &&
+                                !capturedPiece &&
+                                !wasPowerMove &&
+                                !(isForcePowerFlag && wasAmbiguousMove);
 
                             const buildMoveData = (n: string, prom: PieceType | null) => {
-                                const wasPowerMove = isPowerMove(tempBoard, from, to, tempEp);
-                                const wasAmbiguousMove = isAmbiguousMove(tempBoard, from, to, tempEp);
                                 let powerAfterMove = piece.power;
                                 let powerConsumed = false;
 
@@ -1004,12 +1014,6 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                                     }
                                 }
 
-                                const isCastle = piece.originalType === PieceType.King &&
-                                    from.row === to.row &&
-                                    Math.abs(to.col - from.col) === 2 &&
-                                    !capturedPiece &&
-                                    !wasPowerMove &&
-                                    !(isForcePowerFlag && wasAmbiguousMove);
                                 const isEnPassant = !!capturedPiece && !tempBoard[to.row]?.[to.col];
 
                                 return {
@@ -1029,7 +1033,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                             };
 
                             // Check standard move
-                            const n = getNotation(tempBoard, from, to, piece, capturedPiece, null, isForcePowerFlag);
+                            const n = getNotation(tempBoard, from, to, piece, capturedPiece, null, isForcePowerFlag, isCastle);
                             if (n === notation || doesMoveMatchSAN(from, to, piece, capturedPiece, null, notation)) {
                                 foundMove = buildMoveData(n, null);
                                 break;
@@ -1037,7 +1041,7 @@ const Analysis: React.FC<AnalysisProps> = ({ initialState, onBack, analysisId, a
                             // Check for possible promotion
                             if (piece.type === PieceType.Pawn && (to.row === 0 || to.row === 7)) {
                                 for (const prom of [PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight]) {
-                                    const nProm = getNotation(tempBoard, from, to, piece, capturedPiece, prom, isForcePowerFlag);
+                                    const nProm = getNotation(tempBoard, from, to, piece, capturedPiece, prom, isForcePowerFlag, isCastle);
                                     if (nProm === notation || doesMoveMatchSAN(from, to, piece, capturedPiece, prom, notation)) {
                                         foundMove = buildMoveData(nProm, prom);
                                         break;

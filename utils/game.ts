@@ -418,6 +418,7 @@ export const resolveMove = (
     const wasPowerMove = isPowerMove(board, from, to, enPassantTarget);
     const wasAmbiguousMove = isAmbiguousMove(board, from, to, enPassantTarget);
     const useForcePower = !!options.isForcePower;
+    const wasForcedPowerMove = useForcePower && wasAmbiguousMove;
     const isEnPassantCapture = (pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn) &&
         enPassantTarget && to.row === enPassantTarget.row && to.col === enPassantTarget.col && !capturedPieceOnTarget;
     const isAmbiguousEnPassant = isEnPassantCapture && pieceToMove.power === PieceType.Pawn &&
@@ -488,7 +489,7 @@ export const resolveMove = (
             capturedPiece: actualCapturedPiece,
             promotion: null,
             wasPowerMove,
-            wasForcedPowerMove: false,
+            wasForcedPowerMove,
             kingCaptured: true,
         };
     }
@@ -502,7 +503,9 @@ export const resolveMove = (
 
     if ((isMovingToPromotionRank && hasPawnAbility) || isCapturingPawnOnPromotionRank) {
         let powerAfterPromotion: PieceType | null = null;
-        if (isCapturingPawnOnPromotionRank) {
+        if (wasForcedPowerMove) {
+            powerAfterPromotion = null;
+        } else if (isCapturingPawnOnPromotionRank) {
             powerAfterPromotion = null;
         } else if (wasCapture && actualCapturedPiece) {
             powerAfterPromotion = actualCapturedPiece.originalType === PieceType.Pawn ? null : actualCapturedPiece.originalType;
@@ -536,7 +539,7 @@ export const resolveMove = (
                 capturedPiece: actualCapturedPiece,
                 promotion: options.promotion,
                 wasPowerMove,
-                wasForcedPowerMove: false,
+                wasForcedPowerMove,
                 kingCaptured: false,
             };
         }
@@ -553,7 +556,7 @@ export const resolveMove = (
             movingPiece: pieceToMove,
             capturedPiece: actualCapturedPiece,
             wasPowerMove,
-            wasForcedPowerMove: false,
+            wasForcedPowerMove,
             promotionData: {
                 from,
                 position: to,
@@ -573,7 +576,6 @@ export const resolveMove = (
         powerAfterMove = null;
     }
 
-    const wasForcedPowerMove = useForcePower && wasAmbiguousMove;
     pieceToMove.power = powerAfterMove;
     pieceToMove.hasMoved = true;
     newBoard[to.row][to.col] = pieceToMove;
