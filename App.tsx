@@ -14,7 +14,7 @@ import AnalysisManager from './components/AnalysisManager';
 import Tournament from './components/Tournament';
 import ConfirmationModal from './components/ConfirmationModal';
 import { BoardState, Color, GameStatus, PieceType, Position, GameState, PromotionData, Piece, GameMode, TimerSettings, PlayerInfo, SentChallenge, Move, ChatMessage, LobbyGame, IncomingChallenge, AutoSetting } from './types';
-import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, sanitizePiece, isInsufficientMaterial, fenToBoard, boardToKrachtschaakFen } from './utils/game';
+import { createInitialBoard, getValidMoves, isPowerMove, hasLegalMoves, isKingInCheck, generateBoardKey, canCaptureKing, isAmbiguousMove, getNotation, applyMoveToBoard, sanitizeBoard, sanitizePiece, isInsufficientMaterial, fenToBoard, boardToKrachtschaakFen, resolveMove, createMoveRecord, getBoardBeforePromotion } from './utils/game';
 import { getRatingCategory, RatingCategory, RATING_CATEGORIES } from './utils/ratings';
 import { getSharedFolders, getPublicFolders } from './utils/analysisFirebase';
 import { updatePairing, updatePlayerScore, recalculateTiebreaks } from './utils/tournamentFirebase';
@@ -1430,6 +1430,7 @@ const App: React.FC = () => {
                 return;
             }
 
+            preInteractionStateRef.current = null;
             loadGameState(newState);
             setSelectedPiece(null);
             setValidMoves([]);
@@ -1638,7 +1639,8 @@ const App: React.FC = () => {
         movingPiece?: Piece | null,
         capturedPiece?: Piece | null,
         promotion?: PieceType | null,
-        moveDetails?: { isForcePower?: boolean }
+        moveDetails?: { isForcePower?: boolean },
+        boardBefore?: BoardState
     ) => {
         const { turn, halfmoveClock, positionHistory, drawOffer, timerSettings, players, playerColors, initialRatings, isRated, ratingCategory, challengedPlayerInfo, playersLeft, moveHistory, tournamentId, tournamentRound, tournamentPairingId, showPowerPieces, showPowerRings, showOriginalType } = baseState;
 
@@ -1647,7 +1649,7 @@ const App: React.FC = () => {
         const nextTurn = turn === Color.White ? Color.Black : Color.White;
         const newHalfmoveClock = resetClock ? 0 : halfmoveClock + 1;
         const key = generateBoardKey(currentBoard, nextTurn, nextEnPassantTarget);
-        const isIrreversible = !!capturedPiece || movingPiece?.type === PieceType.Pawn;
+        const isIrreversible = !!capturedPiece || movingPiece?.type === PieceType.Pawn || !!promotion;
         const newCount = isIrreversible ? 1 : (positionHistory[key] || 0) + 1;
         const newPositionHistory = isIrreversible ? { [key]: 1 } : { ...positionHistory, [key]: newCount };
         let newStatus: GameStatus = 'playing';
@@ -1692,40 +1694,16 @@ const App: React.FC = () => {
             const piece = movingPiece || baseState.board[move.from.row][move.from.col];
 
             if (piece) {
-                let pieceForNotation = piece;
-                if (piece.originalType === PieceType.King && !piece.power && Math.abs(move.to.col - move.from.col) === 2) {
-                    pieceForNotation = { ...piece };
-                } else if (piece.originalType === PieceType.King && Math.abs(move.to.col - move.from.col) === 2) {
-                    const kingFromBoard = baseState.board[move.from.row][move.from.col];
-                    if (kingFromBoard && kingFromBoard.power) {
-                        pieceForNotation = { ...piece, power: null };
-                    }
-                }
-                const notation = getNotation(baseState.board, move.from, move.to, pieceForNotation, capturedPiece || null, promotion || null, moveDetails?.isForcePower);
-
-                const pieceOnNewBoard = currentBoard[move.to.row][move.to.col];
-                const afterPower = pieceOnNewBoard ? pieceOnNewBoard.power : null;
-                const powerConsumed = !!(piece.power && !afterPower);
-
-                const moveData: Move = {
-                    from: move.from,
-                    to: move.to,
-                    piece: piece.type || PieceType.Pawn,
-                    notation: notation,
-                    color: turn,
-                    afterPower: afterPower || null,
-                    isForcePower: !!moveDetails?.isForcePower,
-                    powerConsumed: powerConsumed
-                };
-
-                const capturedPieceType = capturedPiece ? capturedPiece.type : undefined;
-                if (capturedPieceType) {
-                    moveData.captured = capturedPieceType;
-                }
-                if (promotion) {
-                    moveData.promotion = promotion;
-                }
-
+                const moveData = createMoveRecord(
+                    boardBefore || baseState.board,
+                    currentBoard,
+                    move.from,
+                    move.to,
+                    piece,
+                    capturedPiece || null,
+                    promotion || null,
+                    !!moveDetails?.isForcePower
+                );
                 newMoveHistory.push(moveData);
             }
         }
@@ -2737,23 +2715,8 @@ const App: React.FC = () => {
 
         const { board, capturedPieces, enPassantTarget, turn } = currentState;
 
-        const newBoard = board.map(row => [...row]);
-        const pieceToMove = { ...newBoard[from.row][from.col]! };
-        const capturedPieceOnTarget = newBoard[to.row][to.col];
-        let resetHalfmoveClock = pieceToMove.type === PieceType.Pawn;
-
-        const newCapturedPieces: Record<Color, Piece[]> = {
-            white: [...(capturedPieces.white || [])],
-            black: [...(capturedPieces.black || [])],
-        };
-
-        const wasPowerMove = isPowerMove(board, from, to, enPassantTarget);
-        const wasAmbiguousMove = isAmbiguousMove(board, from, to, enPassantTarget);
-        const isEnPassantCapture = (pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn) && enPassantTarget && to.row === enPassantTarget.row && to.col === enPassantTarget.col && !capturedPieceOnTarget;
-
         const forcePowerFromPremove = premoveOptions.isPremove && premoveOptions.forcePower;
         const useForcePower = isForcePowerMode || forcePowerFromPremove;
-        const isAmbiguousEnPassant = isEnPassantCapture && pieceToMove.power === PieceType.Pawn && [PieceType.Queen, PieceType.Bishop, PieceType.King].includes(pieceToMove.originalType);
 
         if (premoveOptions.isPremove) {
             // DIRECTLY set the premove without confirmation dialog, per latest request
@@ -2778,29 +2741,21 @@ const App: React.FC = () => {
             return false;
         };
 
-        if (isAmbiguousEnPassant && !useForcePower) {
+        const resolution = resolveMove(board, capturedPieces, enPassantTarget, turn, from, to, { isForcePower: useForcePower });
+
+        if (resolution.kind === 'invalid') return;
+
+        if (resolution.kind === 'ambiguous_en_passant') {
             if (shouldAutoApply(autoEnPassant, currentState.timerSettings)) {
                 // Auto-apply capture choice
-                const choice: 'capture' = 'capture';
-                let actualCapturedPiece = newBoard[from.row][to.col] as Piece;
-                newBoard[from.row][to.col] = null;
-                const wasCapture = true;
-                let acquiredPower = actualCapturedPiece.originalType;
-                newCapturedPieces[actualCapturedPiece.color].push(actualCapturedPiece);
+                const resolved = resolveMove(board, capturedPieces, enPassantTarget, turn, from, to, {
+                    isForcePower: useForcePower,
+                    enPassantChoice: 'capture',
+                });
 
-                pieceToMove.power = acquiredPower;
-                pieceToMove.hasMoved = true;
-                newBoard[to.row][to.col] = pieceToMove;
-                newBoard[from.row][from.col] = null;
-
-                const promotionRank = turn === Color.White ? 0 : 7;
-                if (to.row === promotionRank) {
-                    // Still need to handle promotion if en passant leads to last rank
-                    // But usually en passant happens on ranks 3/6 (0-indexed 2/5 or 3/4)
-                    // In Krachtschaak, pawns can move multiple squares, but en passant only happens on specific ranks.
+                if (resolved.kind === 'move') {
+                    finalizeTurn(currentState, resolved.board, resolved.enPassantTarget, resolved.resetHalfmoveClock, resolved.capturedPieces, { from, to }, resolved.movingPiece, resolved.capturedPiece, null, { isForcePower: resolved.wasForcedPowerMove });
                 }
-
-                finalizeTurn(currentState, newBoard, null, true, newCapturedPieces, { from, to }, pieceToMove, actualCapturedPiece, null);
                 return;
             }
 
@@ -2814,104 +2769,21 @@ const App: React.FC = () => {
             return;
         }
 
-        let actualCapturedPiece: Piece | null = capturedPieceOnTarget;
-        if (isEnPassantCapture) {
-            actualCapturedPiece = newBoard[from.row][to.col] as Piece;
-            newBoard[from.row][to.col] = null;
-        }
-
-        const wasCapture = !!actualCapturedPiece;
-        let acquiredPower: PieceType | null = null;
-
-        if (wasCapture && actualCapturedPiece) {
-            resetHalfmoveClock = true;
-            acquiredPower = actualCapturedPiece.originalType;
-            const capturedColor = actualCapturedPiece.color;
-            newCapturedPieces[capturedColor].push(actualCapturedPiece);
-
-            if (actualCapturedPiece.isKing || actualCapturedPiece.originalType === PieceType.King) {
-                pieceToMove.power = acquiredPower;
-                pieceToMove.hasMoved = true;
-                newBoard[to.row][to.col] = pieceToMove;
-                newBoard[from.row][from.col] = null;
-
-                // Build the move history entry for this king capture
-                const kingPieceForNotation = { ...pieceToMove, power: null };
-                const notation = getNotation(currentState.board, from, to, kingPieceForNotation, actualCapturedPiece, null, isForcePowerMode);
-                const pieceOnNewBoard = newBoard[to.row][to.col];
-                const afterPower = pieceOnNewBoard ? pieceOnNewBoard.power : null;
-                const powerConsumed = !!(pieceToMove.power && !afterPower);
-
-                const moveData: Move = {
-                    from,
-                    to,
-                    piece: pieceToMove.type || PieceType.Pawn,
-                    notation,
-                    color: turn,
-                    captured: actualCapturedPiece.type,
-                    afterPower: afterPower || null,
-                    isForcePower: !!isForcePowerMode,
-                    powerConsumed,
-                };
-
-                const newMoveHistory = [...(currentState.moveHistory || []), moveData];
-
-                const finalState: GameState = {
-                    ...currentState,
-                    board: newBoard,
-                    capturedPieces: newCapturedPieces,
-                    lastMove: { from, to },
-                    moveHistory: newMoveHistory,
-                };
-                handleGameOver(finalState, 'kingCaptured', turn.charAt(0).toUpperCase() + turn.slice(1));
-                return;
-            }
-        }
-
-        const promotionRank = turn === Color.White ? 0 : 7;
-        const isMovingToPromotionRank = to.row === promotionRank;
-        const hasPawnAbility = pieceToMove.type === PieceType.Pawn || pieceToMove.power === PieceType.Pawn;
-        const isCapturingPawnOnPromotionRank = wasCapture &&
-            actualCapturedPiece?.originalType === PieceType.Pawn &&
-            isMovingToPromotionRank;
-
-        if ((isMovingToPromotionRank && hasPawnAbility) || isCapturingPawnOnPromotionRank) {
-            let powerAfterPromotion: PieceType | null = null;
-            if (isCapturingPawnOnPromotionRank) {
-                powerAfterPromotion = null;
-            } else if (wasCapture && actualCapturedPiece) {
-                powerAfterPromotion = actualCapturedPiece.originalType === PieceType.Pawn ? null : actualCapturedPiece.originalType;
-            } else {
-                if (pieceToMove.originalType === PieceType.Pawn && !wasPowerMove) {
-                    powerAfterPromotion = pieceToMove.power === PieceType.Pawn ? null : pieceToMove.power;
-                } else {
-                    powerAfterPromotion = null;
-                }
-            }
-
+        if (resolution.kind === 'promotion') {
             if (shouldAutoApply(autoQueen, currentState.timerSettings)) {
                 // Auto Queen promotion
-                const promotedPiece: Piece = {
-                    ...pieceToMove,
-                    type: PieceType.Queen,
-                    originalType: pieceToMove.originalType,
-                    isKing: pieceToMove.isKing || pieceToMove.originalType === PieceType.King,
-                    hasMoved: true,
-                    power: powerAfterPromotion
-                };
-                newBoard[to.row][to.col] = promotedPiece;
-                newBoard[from.row][from.col] = null;
-                finalizeTurn(currentState, newBoard, null, true, newCapturedPieces, { from, to }, pieceToMove, actualCapturedPiece, PieceType.Queen);
+                const resolved = resolveMove(board, capturedPieces, enPassantTarget, turn, from, to, {
+                    isForcePower: useForcePower,
+                    promotion: PieceType.Queen,
+                });
+
+                if (resolved.kind === 'move') {
+                    finalizeTurn(currentState, resolved.board, resolved.enPassantTarget, true, resolved.capturedPieces, { from, to }, resolved.movingPiece, resolved.capturedPiece, PieceType.Queen, { isForcePower: resolved.wasForcedPowerMove });
+                }
                 return;
             }
 
-            const promotionInfo: PromotionData = {
-                from,
-                position: to,
-                promotingPiece: pieceToMove,
-                powerAfterPromotion: powerAfterPromotion,
-                capturedPiece: actualCapturedPiece
-            };
+            const promotionInfo: PromotionData = resolution.promotionData;
 
             // For online games, don't commit state yet. Show promotion UI locally first.
             if (gameMode === 'online_playing') {
@@ -2922,8 +2794,8 @@ const App: React.FC = () => {
 
             const newState: GameState = {
                 ...currentState,
-                board: newBoard,
-                capturedPieces: newCapturedPieces,
+                board: resolution.board,
+                capturedPieces: resolution.capturedPieces,
                 status: 'promotion',
                 promotionData: promotionInfo,
                 enPassantTarget: null,
@@ -2934,43 +2806,31 @@ const App: React.FC = () => {
             return;
         }
 
-        let powerAfterMove = pieceToMove.power;
-        if (wasCapture) {
-            powerAfterMove = acquiredPower;
-        } else if (useForcePower && wasAmbiguousMove) {
-            powerAfterMove = null;
-        } else if (wasPowerMove) {
-            powerAfterMove = null;
+        if (resolution.kingCaptured) {
+            const pieceToMove = resolution.movingPiece;
+            const moveData = createMoveRecord(
+                currentState.board,
+                resolution.board,
+                from,
+                to,
+                pieceToMove,
+                resolution.capturedPiece,
+                null,
+                resolution.wasForcedPowerMove
+            );
+
+            const newMoveHistory = [...(currentState.moveHistory || []), moveData];
+
+            const finalState: GameState = {
+                ...currentState,
+                board: resolution.board,
+                capturedPieces: resolution.capturedPieces,
+                lastMove: { from, to },
+                moveHistory: newMoveHistory,
+            };
+            handleGameOver(finalState, 'kingCaptured', turn.charAt(0).toUpperCase() + turn.slice(1));
+            return;
         }
-
-        const wasForcedPowerMove = useForcePower && wasAmbiguousMove;
-
-        pieceToMove.power = powerAfterMove;
-        pieceToMove.hasMoved = true;
-        newBoard[to.row][to.col] = pieceToMove;
-        newBoard[from.row][from.col] = null;
-
-        // Handle castling: move the rook. This is a special move type and should not
-        // be triggered if the move was a power move or a forced power move.
-        const isPotentialCastle = pieceToMove.type === PieceType.King &&
-            Math.abs(to.col - from.col) === 2 &&
-            from.row === to.row &&
-            !wasCapture;
-
-
-        if (isPotentialCastle && !wasPowerMove && !wasForcedPowerMove) {
-            const rookCol = to.col === 6 ? 7 : 0;
-            const newRookCol = to.col === 6 ? 5 : 3;
-            // The rook is still on the board at its original position in the `newBoard` copy
-            const rook = newBoard[from.row][rookCol];
-            // Check if rook exists and has not moved (double-checking legality from getValidMoves)
-            if (rook?.type === PieceType.Rook && !rook.hasMoved) {
-                newBoard[from.row][newRookCol] = { ...rook, hasMoved: true };
-                newBoard[from.row][rookCol] = null;
-            }
-        }
-
-        let nextEnPassantTarget: Position | null = (pieceToMove.type === PieceType.Pawn && Math.abs(to.row - from.row) === 2) ? { row: from.row + (to.row - from.row) / 2, col: from.col } : null;
 
         let newPlayerTimes = currentState.playerTimes;
         if (currentState.playerTimes && currentState.turnStartTime && currentState.timerSettings && 'initialTime' in currentState.timerSettings) {
@@ -2986,7 +2846,7 @@ const App: React.FC = () => {
         }
         const stateWithCurrentTime = { ...currentState, playerTimes: newPlayerTimes };
 
-        finalizeTurn(stateWithCurrentTime, newBoard, nextEnPassantTarget, resetHalfmoveClock, newCapturedPieces, { from, to }, pieceToMove, actualCapturedPiece, null, { isForcePower: wasForcedPowerMove });
+        finalizeTurn(stateWithCurrentTime, resolution.board, resolution.enPassantTarget, resolution.resetHalfmoveClock, resolution.capturedPieces, { from, to }, resolution.movingPiece, resolution.capturedPiece, null, { isForcePower: resolution.wasForcedPowerMove });
     }, [commitNewGameState, finalizeTurn, handleGameOver, isForcePowerMode, gameMode, moveConfirmationEnabled]);
 
     // Premove execution logic
@@ -3147,55 +3007,48 @@ const App: React.FC = () => {
 
         if (!currentState || !data) return;
 
-        const { from, to } = data;
-        let newBoard = currentState.board.map(row => [...row]);
-
-        // Fix for online ambiguous en passant where piece is already visually at 'to'
-        const isOnlineAmbiguous = gameMode === 'online_playing' && localAmbiguousEnPassantState;
-        const sourcePos = from; // piece is logically at 'from' in baseState
-
-        // Piece should exist at sourcePos
-        if (!newBoard[sourcePos.row][sourcePos.col]) return;
-
-        const pieceToMove = { ...newBoard[sourcePos.row][sourcePos.col]! };
-        let acquiredPower: PieceType | null = null;
-        let newCapturedPieces = currentState.capturedPieces;
-
-        let capturedPieceResult: Piece | null = null;
-        if (choice === 'capture') {
-            capturedPieceResult = newBoard[from.row][to.col] as Piece;
-            newBoard[from.row][to.col] = null;
-            if (capturedPieceResult) {
-                acquiredPower = capturedPieceResult.originalType;
-                pieceToMove.power = acquiredPower;
-                newCapturedPieces = {
-                    ...currentState.capturedPieces,
-                    [capturedPieceResult.color]: [...(currentState.capturedPieces[capturedPieceResult.color] || []), capturedPieceResult]
-                };
+        const discardAmbiguousPrompt = () => {
+            preInteractionStateRef.current = null;
+            if (gameMode === 'online_playing') {
+                setLocalAmbiguousEnPassantState(null);
+            } else if (currentState.status === 'ambiguous_en_passant' || currentState.ambiguousEnPassantData) {
+                loadGameState({ ...currentState, status: 'playing', ambiguousEnPassantData: null });
             }
-        } else {
-            pieceToMove.power = PieceType.Pawn;
+        };
+
+        const { from, to } = data;
+        const sourcePiece = currentState.board[from.row]?.[from.col];
+        if (!sourcePiece || sourcePiece.color !== currentState.turn) {
+            discardAmbiguousPrompt();
+            return;
         }
 
-        pieceToMove.hasMoved = true;
-        newBoard[to.row][to.col] = pieceToMove;
+        const resolution = resolveMove(
+            currentState.board,
+            currentState.capturedPieces,
+            currentState.enPassantTarget,
+            currentState.turn,
+            from,
+            to,
+            { enPassantChoice: choice }
+        );
 
-        // Ensure 'from' is cleared
-        newBoard[from.row][from.col] = null;
+        if (resolution.kind === 'invalid') {
+            discardAmbiguousPrompt();
+            return;
+        }
 
         if (gameMode === 'online_playing') {
             setLocalAmbiguousEnPassantState(null);
         }
 
-        const promotionRank = currentState.turn === Color.White ? 0 : 7;
-        if (to.row === promotionRank) {
-            let powerAfterPromotion: PieceType | null = choice === 'capture' ? PieceType.Pawn : null;
+        if (resolution.kind === 'promotion') {
             const newState: GameState = {
                 ...currentState,
-                board: newBoard,
+                board: resolution.board,
                 status: 'promotion',
-                promotionData: { from, position: to, promotingPiece: newBoard[to.row][to.col]!, powerAfterPromotion, capturedPiece: capturedPieceResult },
-                capturedPieces: newCapturedPieces,
+                promotionData: resolution.promotionData,
+                capturedPieces: resolution.capturedPieces,
                 enPassantTarget: null,
                 halfmoveClock: 0,
                 ambiguousEnPassantData: null,
@@ -3205,8 +3058,10 @@ const App: React.FC = () => {
             return;
         }
 
-        finalizeTurn(currentState, newBoard, null, true, newCapturedPieces, { from, to }, pieceToMove, capturedPieceResult, null);
-    }, [commitNewGameState, finalizeTurn, gameMode, localAmbiguousEnPassantState]);
+        if (resolution.kind === 'move') {
+            finalizeTurn(currentState, resolution.board, resolution.enPassantTarget, resolution.resetHalfmoveClock, resolution.capturedPieces, { from, to }, resolution.movingPiece, resolution.capturedPiece, null, { isForcePower: resolution.wasForcedPowerMove });
+        }
+    }, [commitNewGameState, finalizeTurn, gameMode, loadGameState, localAmbiguousEnPassantState]);
 
     const handlePromotion = useCallback((chosenPieceType: PieceType) => {
         // Use localPromotionState for online games
@@ -3217,6 +3072,17 @@ const App: React.FC = () => {
 
         const { from, position, promotingPiece, powerAfterPromotion, capturedPiece } = promotionInfo;
         const newBoard = currentState.board.map(r => [...r]);
+        const boardBeforePromotion = getBoardBeforePromotion(currentState.board, promotionInfo);
+        const sourceSquare = currentState.board[from.row]?.[from.col];
+        const promotionAlreadyCommitted = !sourceSquare ||
+            sourceSquare.type !== promotingPiece.type ||
+            sourceSquare.color !== promotingPiece.color;
+        const newCaptured = capturedPiece && !promotionAlreadyCommitted
+            ? {
+                ...currentState.capturedPieces,
+                [capturedPiece.color]: [...currentState.capturedPieces[capturedPiece.color], capturedPiece],
+            }
+            : currentState.capturedPieces;
 
         const promotedPiece: Piece = {
             ...promotingPiece,
@@ -3234,7 +3100,7 @@ const App: React.FC = () => {
             setLocalPromotionState(null);
         }
 
-        finalizeTurn(currentState, newBoard, null, true, currentState.capturedPieces, { from, to: position }, promotingPiece, capturedPiece, chosenPieceType);
+        finalizeTurn(currentState, newBoard, null, true, newCaptured, { from, to: position }, promotingPiece, capturedPiece, chosenPieceType, undefined, boardBeforePromotion);
     }, [finalizeTurn, gameMode, localPromotionState]);
 
     const handleUndo = () => {
@@ -4785,7 +4651,16 @@ const App: React.FC = () => {
         return renderGame();
     };
 
-    const moveNotation = pendingCommitState?.moveHistory?.[pendingCommitState.moveHistory.length - 1]?.notation || (pendingPremove ? getNotation(board, pendingPremove.from, pendingPremove.to, board[pendingPremove.from.row][pendingPremove.from.col]!, null, null, pendingPremove.isForcePower) : '');
+    const pendingPremovePiece = pendingPremove ? board[pendingPremove.from.row]?.[pendingPremove.from.col] : null;
+    const pendingPremovePowerMove = !!pendingPremove && isPowerMove(board, pendingPremove.from, pendingPremove.to, enPassantTarget);
+    const pendingPremoveForcedPower = !!pendingPremove && pendingPremove.isForcePower && isAmbiguousMove(board, pendingPremove.from, pendingPremove.to, enPassantTarget);
+    const pendingPremoveIsCastle = !!pendingPremove && !!pendingPremovePiece &&
+        pendingPremovePiece.originalType === PieceType.King &&
+        pendingPremove.from.row === pendingPremove.to.row &&
+        Math.abs(pendingPremove.to.col - pendingPremove.from.col) === 2 &&
+        !pendingPremovePowerMove &&
+        !pendingPremoveForcedPower;
+    const moveNotation = pendingCommitState?.moveHistory?.[pendingCommitState.moveHistory.length - 1]?.notation || (pendingPremove && pendingPremovePiece ? getNotation(board, pendingPremove.from, pendingPremove.to, pendingPremovePiece, null, null, pendingPremoveForcedPower, pendingPremoveIsCastle) : '');
 
     return (
         <>
